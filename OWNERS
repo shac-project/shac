@@ -1,0 +1,11 @@
+# Remove the `*` from this file and add specific owners to this file and to
+# subdirectories where appropriate to enforce OWNERS approval in this
+# repository.
+#
+# More details about OWNERS in Fuchsia can be found at:
+# https://fuchsia.dev/fuchsia-src/development/source_code/owners
+#
+# Syntax for OWNERS files can be found at:
+# https://fuchsia-review.googlesource.com/plugins/code-owners/Documentation/backend-find-owners.html#syntax
+
+*
