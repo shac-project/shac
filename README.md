@@ -1,5 +1,5 @@
-Fuchsia Open Source Template Repository
-=======================================
+# shac
 
-This repository is a template that we will use when creating new open source
-repositories for Fuchsia.
+Scalable Checks.
+
+More to come soon!
