@@ -6,8 +6,14 @@ package main
 
 import (
 	"fmt"
+	"os"
+
+	"go.fuchsia.dev/shac-project/shac/internal/cli"
 )
 
 func main() {
-	fmt.Println("hello world!")
+	if err := cli.Main(); err != nil {
+		fmt.Fprintf(os.Stderr, "shac: %s\n", err)
+		os.Exit(1)
+	}
 }
