@@ -5,5 +5,19 @@
 
 set -eu -o pipefail
 
-# TODO(olivernewman): Actually run tests once there are tests to run.
-echo "No tests run."
+REPO_ROOT="$(dirname "$(dirname "${BASH_SOURCE[0]}")")"
+
+GO=go
+
+# Install Go using CIPD if it's not on $PATH.
+if ! command -v "$GO" > /dev/null; then
+  CIPD_ROOT="$REPO_ROOT/.tools"
+  if [ ! -d "$CIPD_ROOT" ]; then
+    echo "Installing Go from CIPD..."
+    cipd init -force "$CIPD_ROOT"
+    cipd install -log-level error -root "$CIPD_ROOT" 'infra/3pp/tools/go/${platform}'
+  fi
+  GO="$CIPD_ROOT/bin/go"
+fi
+
+"$GO" test "$REPO_ROOT/..."
