@@ -7,7 +7,6 @@ package cli
 import (
 	"context"
 	"fmt"
-	"os"
 
 	flag "github.com/spf13/pflag"
 )
@@ -24,10 +23,11 @@ type subcommand interface {
 	Execute(context.Context, *flag.FlagSet) error
 }
 
-func Main() error {
+func Main(args []string) error {
 	ctx := context.Background()
 
-	if len(os.Args) < 2 {
+	if len(args) < 2 {
+		// TODO(maruel): Print help.
 		return fmt.Errorf("subcommand required")
 	}
 
@@ -35,14 +35,14 @@ func Main() error {
 		&checkCmd{},
 	}
 
-	name := os.Args[1]
+	name := args[1]
 	for _, s := range subcommands {
 		if s.Name() != name {
 			continue
 		}
 		fs := flag.NewFlagSet(s.Name(), flag.ContinueOnError)
 		s.SetFlags(fs)
-		if err := fs.Parse(os.Args[2:]); err != nil {
+		if err := fs.Parse(args[2:]); err != nil {
 			return err
 		}
 		return s.Execute(ctx, fs)
