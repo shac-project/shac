@@ -6,6 +6,9 @@ package engine
 
 import (
 	"context"
+	"os"
+	"path"
+	"strings"
 
 	"go.chromium.org/luci/common/errors"
 	"go.chromium.org/luci/starlark/builtins"
@@ -55,7 +58,7 @@ func getShac() starlark.Value {
 	return toValue("shac", starlark.StringDict{
 		"exec": builtins.Fail,
 		"io": toValue("io", starlark.StringDict{
-			"read_file": builtins.Fail,
+			"read_file": starlark.NewBuiltin("read_file", readFile),
 		}),
 		"result": toValue("result", starlark.StringDict{
 			"emit_comment":  builtins.Fail,
@@ -70,7 +73,8 @@ func toValue(name string, d starlark.StringDict) starlark.Value {
 	return starlarkstruct.FromStringDict(starlark.String(name), d)
 }
 
-var registerCheck = starlark.NewBuiltin("register_check", func(th *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+// registerCheck implements native function register_check().
+func registerCheck(th *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	var cb starlark.Callable
 	if err := starlark.UnpackPositionalArgs(fn.Name(), args, kwargs, 1, &cb); err != nil {
 		return nil, err
@@ -85,4 +89,39 @@ var registerCheck = starlark.NewBuiltin("register_check", func(th *starlark.Thre
 		return nil, errors.New("can't register checks after done loading")
 	}
 	return starlark.None, s.checks.add(cb)
-})
+}
+
+// readFile implements native function shac.io.read_file().
+//
+// Use POSIX style relative path. "..", "\" and absolute paths are denied.
+func readFile(th *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+	var argname starlark.String
+	if err := starlark.UnpackPositionalArgs(fn.Name(), args, kwargs, 1, &argname); err != nil {
+		return nil, err
+	}
+	p := string(argname)
+	if strings.Contains(p, "\\") {
+		return starlark.None, errors.New("use POSIX style path")
+	}
+	// Package path use POSIX style even on Windows, unlike path/filepath.
+	if path.IsAbs(p) {
+		return starlark.None, errors.New("do not use absolute path")
+	}
+	// This is overly zealous. Revisit if it is too much.
+	// TODO(maruel): Make it work on Windows.
+	ctx := interpreter.Context(th)
+	s := ctxState(ctx)
+	if path.Clean(p) != p {
+		return starlark.None, errors.New("pass cleaned path")
+	}
+	dst := path.Join(s.inputs.root, p)
+	if !strings.HasPrefix(dst, s.inputs.root) {
+		return starlark.None, errors.New("cannot escape root")
+	}
+	b, err := os.ReadFile(dst)
+	if err != nil {
+		return starlark.None, err
+	}
+	// TODO(maruel): Use unsafe conversion to save a memory copy.
+	return starlark.Bytes(b), nil
+}

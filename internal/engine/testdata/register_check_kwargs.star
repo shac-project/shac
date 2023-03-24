@@ -2,8 +2,7 @@
 # Use of this source code is governed by a BSD-style
 # license that can be found in the LICENSE file.
 
-def cb(shac):
-  d = json.decode(str(shac.io.read_file("content.json")))
-  print(d)
+def cb():
+  pass
 
-register_check(cb)
+register_check(callback=cb)

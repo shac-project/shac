@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"path/filepath"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -53,9 +54,69 @@ func TestLoad_Empty(t *testing.T) {
 }
 
 func TestLoad_IO_Read_File(t *testing.T) {
-	if err := Load(context.Background(), "testdata", "io_read_file.star"); err == nil {
+	b := getErrPrint(t)
+	if err := Load(context.Background(), "testdata", "io_read_file.star"); err != nil {
+		t.Fatal(err)
+	}
+	if s := b.String(); s != "[//io_read_file.star:7] {\"key\": \"value\"}\n" {
+		t.Fatal(s)
+	}
+}
+
+func TestLoad_IO_Read_File_Abs(t *testing.T) {
+	if err := Load(context.Background(), "testdata", "io_read_file_abs.star"); err == nil {
 		t.Fatal("expected a failure")
-	} else if s := err.Error(); s != "implement me" {
+		// TODO(maruel): Fix the error to include the call site.
+	} else if s := err.Error(); s != "do not use absolute path" {
+		t.Fatal(s)
+	}
+}
+
+func TestLoad_IO_Read_File_Escape(t *testing.T) {
+	if err := Load(context.Background(), "testdata", "io_read_file_escape.star"); err == nil {
+		t.Fatal("expected a failure")
+		// TODO(maruel): Fix the error to include the call site.
+	} else if s := err.Error(); s != "cannot escape root" {
+		t.Fatal(s)
+	}
+}
+
+func TestLoad_IO_Read_File_Inexistant(t *testing.T) {
+	p, err := filepath.Abs(filepath.Join("testdata", "inexistant"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = Load(context.Background(), "testdata", "io_read_file_inexistant.star"); err == nil {
+		t.Fatal("expected a failure")
+		// TODO(maruel): Fix the error to include the call site.
+	} else if s := err.Error(); s != "open "+p+": no such file or directory" {
+		t.Fatal(s)
+	}
+}
+
+func TestLoad_IO_Read_File_Missing_Arg(t *testing.T) {
+	if err := Load(context.Background(), "testdata", "io_read_file_missing_arg.star"); err == nil {
+		t.Fatal("expected a failure")
+		// TODO(maruel): Fix the error to include the call site.
+	} else if s := err.Error(); s != "read_file: got 0 arguments, want 1" {
+		t.Fatal(s)
+	}
+}
+
+func TestLoad_IO_Read_File_Unclean(t *testing.T) {
+	if err := Load(context.Background(), "testdata", "io_read_file_unclean.star"); err == nil {
+		t.Fatal("expected a failure")
+		// TODO(maruel): Fix the error to include the call site.
+	} else if s := err.Error(); s != "pass cleaned path" {
+		t.Fatal(s)
+	}
+}
+
+func TestLoad_IO_Read_File_Windows(t *testing.T) {
+	if err := Load(context.Background(), "testdata", "io_read_file_windows.star"); err == nil {
+		t.Fatal("expected a failure")
+		// TODO(maruel): Fix the error to include the call site.
+	} else if s := err.Error(); s != "use POSIX style path" {
 		t.Fatal(s)
 	}
 }
@@ -101,6 +162,14 @@ func TestLoad_Register_Check_Recursive(t *testing.T) {
 	if err := Load(context.Background(), "testdata", "register_check_recursive.star"); err == nil {
 		t.Fatal("expected error")
 	} else if s := err.Error(); s != "can't register checks after done loading" {
+		t.Fatal(s)
+	}
+}
+
+func TestLoad_Register_Check_Kwargs(t *testing.T) {
+	if err := Load(context.Background(), "testdata", "register_check_kwargs.star"); err == nil {
+		t.Fatal("expected error")
+	} else if s := err.Error(); s != "register_check: unexpected keyword arguments" {
 		t.Fatal(s)
 	}
 }

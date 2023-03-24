@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"runtime/debug"
 
 	"go.chromium.org/luci/common/data/stringset"
@@ -23,8 +24,16 @@ import (
 //
 // main is normally shac.star.
 func Load(ctx context.Context, root, main string) error {
+	if filepath.IsAbs(main) {
+		return errors.New("main file must not be an absolute path")
+	}
+	var err error
+	if root, err = filepath.Abs(root); err != nil {
+		return err
+	}
 	s, err := parse(ctx, &inputs{
 		code: interpreter.FileSystemLoader(root),
+		root: root,
 		main: main,
 	})
 	if err != nil {
@@ -43,6 +52,7 @@ func Load(ctx context.Context, root, main string) error {
 // inputs represents a starlark package.
 type inputs struct {
 	code interpreter.Loader
+	root string
 	main string
 }
 
@@ -141,7 +151,7 @@ func getPredeclared() starlark.StringDict {
 	return starlark.StringDict{
 		// register_check is the only function that is exposed by the runtime that
 		// is specific to shac. The rest is hidden inside the __native__ struct.
-		"register_check": registerCheck,
+		"register_check": starlark.NewBuiltin("register_check", registerCheck),
 		"__native__":     toValue("__native__", native),
 
 		// Add https://bazel.build/rules/lib/json so it feels more natural to bazel
