@@ -2,10 +2,10 @@
 # Use of this source code is governed by a BSD-style
 # license that can be found in the LICENSE file.
 
-def cb2(shac):
-  pass
+def fn2():
+  fail("inner")
 
-def cb1(shac):
-  register_check(cb2)
+def fn1():
+  fn2()
 
-register_check(cb1)
+fn1()

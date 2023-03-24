@@ -9,12 +9,53 @@ import (
 	"context"
 	"fmt"
 	"testing"
+
+	"github.com/google/go-cmp/cmp"
+	"go.chromium.org/luci/common/errors"
 )
+
+func TestLoad_Backtrace(t *testing.T) {
+	err := Load(context.Background(), "testdata", "backtrace.star")
+	if err == nil {
+		t.Fatal("expected a failure")
+	}
+	if s := err.Error(); s != "inner" {
+		t.Fatal(s)
+	}
+	var errs errors.MultiError
+	if !errors.As(err, &errs) {
+		t.Fatal("not a MultiError")
+	}
+	if len(errs) != 1 {
+		t.Fatal("expected one wrapped error")
+	}
+	var err2 BacktracableError
+	if !errors.As(errs[0], &err2) {
+		t.Fatal("not a backtracable error")
+	}
+	want := `Traceback (most recent call last):
+  //backtrace.star:11:4: in <toplevel>
+  //backtrace.star:9:6: in fn1
+  //backtrace.star:6:7: in fn2
+  <builtin>: in fail
+Error: inner`
+	if diff := cmp.Diff(want, err2.Backtrace()); diff != "" {
+		t.Fatalf("mismatch (+want -got):\n%s", diff)
+	}
+}
 
 func TestLoad_Empty(t *testing.T) {
 	if err := Load(context.Background(), "testdata", "empty.star"); err == nil {
 		t.Fatal("expected a failure")
 	} else if s := err.Error(); s != "did you forget to call register_check?" {
+		t.Fatal(s)
+	}
+}
+
+func TestLoad_IO_Read_File(t *testing.T) {
+	if err := Load(context.Background(), "testdata", "io_read_file.star"); err == nil {
+		t.Fatal("expected a failure")
+	} else if s := err.Error(); s != "implement me" {
 		t.Fatal(s)
 	}
 }

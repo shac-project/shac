@@ -17,7 +17,6 @@ import (
 	"go.chromium.org/luci/starlark/interpreter"
 	"go.starlark.net/lib/json"
 	"go.starlark.net/starlark"
-	"go.starlark.net/starlarkstruct"
 )
 
 // Load loads a main shac.star file from a root directory.
@@ -36,7 +35,7 @@ func Load(ctx context.Context, root, main string) error {
 	}
 	ctx = context.WithValue(ctx, stateCtxKey, s)
 	if errs := s.checks.callAll(ctx, s.intr.Thread(ctx)); len(errs) != 0 {
-		return mergeErrs(errs)
+		return dedupeErrs(errs)
 	}
 	return nil
 }
@@ -63,13 +62,16 @@ func ctxState(ctx context.Context) *state {
 	return ctx.Value(stateCtxKey).(*state)
 }
 
-// mergeErrs returns a list of merged errors as a MultiError, deduplicating
+// dedupeErrs returns a list of merged errors as a MultiError, deduplicating
 // errors with the same backtrace.
-func mergeErrs(err ...error) error {
+func dedupeErrs(err ...error) error {
+	// TODO(maruel): Require go1.20 and use the new stdlib native multierror
+	// support.
 	var errs errors.MultiError
 	seenErrs := stringset.New(len(err))
 	for _, e := range err {
-		if bt, _ := e.(BacktracableError); bt == nil || seenErrs.Add(bt.Backtrace()) {
+		var bt BacktracableError
+		if !errors.As(e, &bt) || seenErrs.Add(bt.Backtrace()) {
 			errs = append(errs, e)
 		}
 	}
@@ -116,7 +118,7 @@ func parse(ctx context.Context, inputs *inputs) (*state, error) {
 			// Prefer the collected error if any, it will have a collected trace.
 			err = f
 		}
-		return nil, mergeErrs(err)
+		return nil, dedupeErrs(err)
 	}
 	// TODO(maruel): Error if there are unconsumed variables once variables are
 	// added.
@@ -133,13 +135,24 @@ func getPredeclared() starlark.StringDict {
 			starlark.MakeInt(version[0]), starlark.MakeInt(version[1]), starlark.MakeInt(version[2]),
 		},
 	}
+	// The upstream starlark interpreter includes all the symbols described at
+	// https://github.com/google/starlark-go/blob/HEAD/doc/spec.md#built-in-constants-and-functions
+	// See https://pkg.go.dev/go.starlark.net/starlark#Universe for the default list.
 	return starlark.StringDict{
-		"fail":           builtins.Fail,
-		"json":           json.Module,
+		// register_check is the only function that is exposed by the runtime that
+		// is specific to shac. The rest is hidden inside the __native__ struct.
 		"register_check": registerCheck,
-		"stacktrace":     builtins.Stacktrace,
-		"struct":         builtins.Struct,
-		"__native__":     starlarkstruct.FromStringDict(starlark.String("__native__"), native),
+		"__native__":     toValue("__native__", native),
+
+		// Add https://bazel.build/rules/lib/json so it feels more natural to bazel
+		// users.
+		"json": json.Module,
+
+		// luci-go's starlark additional features.
+		// Override fail to include additional functionality.
+		"fail":       builtins.Fail,
+		"stacktrace": builtins.Stacktrace,
+		"struct":     builtins.Struct,
 	}
 }
 

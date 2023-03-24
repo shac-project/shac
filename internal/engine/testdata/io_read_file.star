@@ -2,10 +2,7 @@
 # Use of this source code is governed by a BSD-style
 # license that can be found in the LICENSE file.
 
-def cb2(shac):
-  pass
+def cb(shac):
+  shac.io.read_file("implement me")
 
-def cb1(shac):
-  register_check(cb2)
-
-register_check(cb1)
+register_check(cb)
