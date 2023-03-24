@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -45,86 +46,12 @@ Error: inner`
 	}
 }
 
-func TestLoad_Empty(t *testing.T) {
-	if err := Load(context.Background(), "testdata", "empty.star"); err == nil {
-		t.Fatal("expected a failure")
-	} else if s := err.Error(); s != "did you forget to call register_check?" {
-		t.Fatal(s)
-	}
-}
-
 func TestLoad_IO_Read_File(t *testing.T) {
 	b := getErrPrint(t)
 	if err := Load(context.Background(), "testdata", "io_read_file.star"); err != nil {
 		t.Fatal(err)
 	}
 	if s := b.String(); s != "[//io_read_file.star:7] {\"key\": \"value\"}\n" {
-		t.Fatal(s)
-	}
-}
-
-func TestLoad_IO_Read_File_Abs(t *testing.T) {
-	if err := Load(context.Background(), "testdata", "io_read_file_abs.star"); err == nil {
-		t.Fatal("expected a failure")
-		// TODO(maruel): Fix the error to include the call site.
-	} else if s := err.Error(); s != "do not use absolute path" {
-		t.Fatal(s)
-	}
-}
-
-func TestLoad_IO_Read_File_Escape(t *testing.T) {
-	if err := Load(context.Background(), "testdata", "io_read_file_escape.star"); err == nil {
-		t.Fatal("expected a failure")
-		// TODO(maruel): Fix the error to include the call site.
-	} else if s := err.Error(); s != "cannot escape root" {
-		t.Fatal(s)
-	}
-}
-
-func TestLoad_IO_Read_File_Inexistant(t *testing.T) {
-	p, err := filepath.Abs(filepath.Join("testdata", "inexistant"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err = Load(context.Background(), "testdata", "io_read_file_inexistant.star"); err == nil {
-		t.Fatal("expected a failure")
-		// TODO(maruel): Fix the error to include the call site.
-	} else if s := err.Error(); s != "open "+p+": no such file or directory" {
-		t.Fatal(s)
-	}
-}
-
-func TestLoad_IO_Read_File_Missing_Arg(t *testing.T) {
-	if err := Load(context.Background(), "testdata", "io_read_file_missing_arg.star"); err == nil {
-		t.Fatal("expected a failure")
-		// TODO(maruel): Fix the error to include the call site.
-	} else if s := err.Error(); s != "read_file: got 0 arguments, want 1" {
-		t.Fatal(s)
-	}
-}
-
-func TestLoad_IO_Read_File_Unclean(t *testing.T) {
-	if err := Load(context.Background(), "testdata", "io_read_file_unclean.star"); err == nil {
-		t.Fatal("expected a failure")
-		// TODO(maruel): Fix the error to include the call site.
-	} else if s := err.Error(); s != "pass cleaned path" {
-		t.Fatal(s)
-	}
-}
-
-func TestLoad_IO_Read_File_Windows(t *testing.T) {
-	if err := Load(context.Background(), "testdata", "io_read_file_windows.star"); err == nil {
-		t.Fatal("expected a failure")
-		// TODO(maruel): Fix the error to include the call site.
-	} else if s := err.Error(); s != "use POSIX style path" {
-		t.Fatal(s)
-	}
-}
-
-func TestLoad_Fail(t *testing.T) {
-	if err := Load(context.Background(), "testdata", "fail.star"); err == nil {
-		t.Fatal("expected a failure")
-	} else if s := err.Error(); s != "expected failure" {
 		t.Fatal(s)
 	}
 }
@@ -150,14 +77,6 @@ func TestLoad_Register_Check(t *testing.T) {
 	}
 }
 
-func TestLoad_Register_Check_No_Arg(t *testing.T) {
-	if err := Load(context.Background(), "testdata", "register_check_no_arg.star"); err == nil {
-		t.Fatal("expected error")
-	} else if s := err.Error(); s != "register_check: got 0 arguments, want 1" {
-		t.Fatal(s)
-	}
-}
-
 func TestLoad_Register_Check_Recursive(t *testing.T) {
 	if err := Load(context.Background(), "testdata", "register_check_recursive.star"); err == nil {
 		t.Fatal("expected error")
@@ -166,28 +85,105 @@ func TestLoad_Register_Check_Recursive(t *testing.T) {
 	}
 }
 
-func TestLoad_Register_Check_Kwargs(t *testing.T) {
-	if err := Load(context.Background(), "testdata", "register_check_kwargs.star"); err == nil {
-		t.Fatal("expected error")
-	} else if s := err.Error(); s != "register_check: unexpected keyword arguments" {
-		t.Fatal(s)
+// TestTestDataFail runs all the files under testdata/fail/.
+func TestTestDataFail(t *testing.T) {
+	p := filepath.Join("testdata", "fail")
+	d, err := os.ReadDir(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := make([]string, len(d))
+	for i := range d {
+		if !d[i].IsDir() {
+			got[i] = d[i].Name()
+		}
+	}
+	inexistant, err := filepath.Abs(filepath.Join("testdata", "fail", "inexistant"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	data := []struct {
+		name string
+		err  error
+	}{
+		{
+			"empty.star",
+			errors.New("did you forget to call register_check?"),
+		},
+		{
+			"fail.star",
+			errors.New("an expected failure"),
+		},
+		{
+			"io_read_file_abs.star",
+			// TODO(maruel): Fix the error to include the call site.
+			errors.New("do not use absolute path"),
+		},
+		{
+			"io_read_file_escape.star",
+			// TODO(maruel): Fix the error to include the call site.
+			errors.New("cannot escape root"),
+		},
+		{
+			"io_read_file_inexistant.star",
+			// TODO(maruel): Fix the error to include the call site.
+			errors.New("open " + inexistant + ": no such file or directory"),
+		},
+		{
+			"io_read_file_missing_arg.star",
+			// TODO(maruel): Fix the error to include the call site.
+			errors.New("read_file: got 0 arguments, want 1"),
+		},
+		{
+			"io_read_file_unclean.star",
+			// TODO(maruel): Fix the error to include the call site.
+			errors.New("pass cleaned path"),
+		},
+		{
+			"io_read_file_windows.star",
+			// TODO(maruel): Fix the error to include the call site.
+			errors.New("use POSIX style path"),
+		},
+		{
+			"register_check_kwargs.star",
+			// TODO(maruel): Fix the error to include the call site.
+			errors.New("register_check: unexpected keyword arguments"),
+		},
+		{
+			"register_check_no_arg.star",
+			// TODO(maruel): Fix the error to include the call site.
+			errors.New("register_check: got 0 arguments, want 1"),
+		},
+		{
+			"syntax_error.star",
+			errors.New("//syntax_error.star:5:3: got '//', want primary expression"),
+		},
+		{
+			"undefined_symbol.star",
+			errors.New("//undefined_symbol.star:5:1: undefined: undefined_symbol"),
+		},
+	}
+	want := make([]string, len(data))
+	for i := range data {
+		want[i] = data[i].name
+	}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Fatalf("mismatch (+want -got):\n%s", diff)
+	}
+	for i := range data {
+		t.Run(data[i].name, func(t *testing.T) {
+			err := Load(context.Background(), p, data[i].name)
+			if !equalError(data[i].err, err) {
+				if diff := cmp.Diff(data[i].err, err); diff != "" {
+					t.Fatalf("mismatch (+want -got):\n%s", diff)
+				}
+			}
+		})
 	}
 }
 
-func TestLoad_Syntax_Error(t *testing.T) {
-	if err := Load(context.Background(), "testdata", "syntax_error.star"); err == nil {
-		t.Fatal("expected error")
-	} else if s := err.Error(); s != "//syntax_error.star:5:3: got '//', want primary expression" {
-		t.Fatal(s)
-	}
-}
-
-func TestLoad_Undefined_Symbol(t *testing.T) {
-	if err := Load(context.Background(), "testdata", "undefined_symbol.star"); err == nil {
-		t.Fatal("expected error")
-	} else if s := err.Error(); s != "//undefined_symbol.star:5:1: undefined: undefined_symbol" {
-		t.Fatal(s)
-	}
+func equalError(a, b error) bool {
+	return a == nil && b == nil || a != nil && b != nil && a.Error() == b.Error()
 }
 
 func getErrPrint(t *testing.T) *bytes.Buffer {
