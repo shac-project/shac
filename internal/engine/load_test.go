@@ -20,108 +20,109 @@ import (
 	"go.chromium.org/luci/common/errors"
 )
 
-func TestLoad_SCM_Affected_Files_Raw(t *testing.T) {
+func TestLoad_SCM_Raw(t *testing.T) {
 	root := t.TempDir()
 	writeFile(t, root, "file1.txt", "First file")
-	copyFile(t, root, "scm_affected_files.star")
-	b := getErrPrint(t)
-	if err := Load(context.Background(), root, "scm_affected_files.star", false); err != nil {
-		t.Fatal(err)
-	}
-	want := "[//scm_affected_files.star:7] {\"file1.txt\": file(action = \"\"), \"scm_affected_files.star\": file(action = \"\")}\n"
-	if diff := cmp.Diff(want, b.String()); diff != "" {
-		t.Fatalf("mismatch (+want -got):\n%s", diff)
-	}
+	copySCM(t, root)
+	t.Run("affected", func(t *testing.T) {
+		want := "[//scm_affected_files.star:9] \n" +
+			"file1.txt: \n" +
+			"scm_affected_files.star: \n" +
+			"scm_all_files.star: \n" +
+			"\n"
+		testStarlark(t, root, "scm_affected_files.star", false, want)
+	})
+	t.Run("all", func(t *testing.T) {
+		want := "[//scm_all_files.star:9] \n" +
+			"file1.txt: \n" +
+			"scm_affected_files.star: \n" +
+			"scm_all_files.star: \n" +
+			"\n"
+		testStarlark(t, root, "scm_all_files.star", false, want)
+	})
 }
 
-func TestLoad_SCM_All_Files_Raw(t *testing.T) {
-	root := t.TempDir()
-	writeFile(t, root, "file1.txt", "First file")
-	copyFile(t, root, "scm_all_files.star")
-	b := getErrPrint(t)
-	if err := Load(context.Background(), root, "scm_all_files.star", false); err != nil {
-		t.Fatal(err)
-	}
-	want := "[//scm_all_files.star:7] {\"file1.txt\": file(action = \"\"), \"scm_all_files.star\": file(action = \"\")}\n"
-	if diff := cmp.Diff(want, b.String()); diff != "" {
-		t.Fatalf("mismatch (+want -got):\n%s", diff)
-	}
-}
-
-func TestLoad_SCM_Affected_Files_Git_All(t *testing.T) {
+func TestLoad_SCM_Git_NoUpstream_Pristine(t *testing.T) {
+	// No upstream branch set, pristine checkout.
 	root := makeGit(t)
-	copyFile(t, root, "scm_affected_files.star")
-	runGit(t, root, "add", "scm_affected_files.star")
+	copySCM(t, root)
+	runGit(t, root, "add", "scm_*.star")
 	runGit(t, root, "commit", "-m", "Third commit")
-	b := getErrPrint(t)
-	if err := Load(context.Background(), root, "scm_affected_files.star", true); err != nil {
-		t.Fatal(err)
-	}
-	want := "[//scm_affected_files.star:7] {\"file1.txt\": file(action = \"\"), \"file2.txt\": file(action = \"\"), \"scm_affected_files.star\": file(action = \"\")}\n"
-	if diff := cmp.Diff(want, b.String()); diff != "" {
-		t.Fatalf("mismatch (+want -got):\n%s", diff)
-	}
+	t.Run("affected", func(t *testing.T) {
+		want := "[//scm_affected_files.star:9] \n" +
+			"scm_affected_files.star: A\n" +
+			"scm_all_files.star: A\n" +
+			"\n"
+		testStarlark(t, root, "scm_affected_files.star", false, want)
+	})
+	t.Run("affected/all", func(t *testing.T) {
+		want := "[//scm_affected_files.star:9] \n" +
+			"file1.txt: \n" +
+			"file2.txt: \n" +
+			"scm_affected_files.star: \n" +
+			"scm_all_files.star: \n" +
+			"\n"
+		testStarlark(t, root, "scm_affected_files.star", true, want)
+	})
+	t.Run("all", func(t *testing.T) {
+		want := "[//scm_all_files.star:9] \n" +
+			"file1.txt: \n" +
+			"file2.txt: \n" +
+			"scm_affected_files.star: \n" +
+			"scm_all_files.star: \n" +
+			"\n"
+		testStarlark(t, root, "scm_all_files.star", false, want)
+	})
 }
 
-func TestLoad_SCM_Affected_Files_Git_Upstream_Tainted(t *testing.T) {
+func TestLoad_SCM_Git_NoUpstream_Staged(t *testing.T) {
+	// No upstream branch set, staged changes.
 	root := makeGit(t)
-	// Setup an upstream being the root commit.
+	copySCM(t, root)
+	runGit(t, root, "add", "scm_*.star")
+	t.Run("affected", func(t *testing.T) {
+		want := "[//scm_affected_files.star:9] \n" +
+			"scm_affected_files.star: A\n" +
+			"scm_all_files.star: A\n" +
+			"\n"
+		testStarlark(t, root, "scm_affected_files.star", false, want)
+	})
+	t.Run("all", func(t *testing.T) {
+		want := "[//scm_all_files.star:9] \n" +
+			"file1.txt: \n" +
+			"file2.txt: \n" +
+			"scm_affected_files.star: \n" +
+			"scm_all_files.star: \n" +
+			"\n"
+		testStarlark(t, root, "scm_all_files.star", false, want)
+	})
+}
+
+func TestLoad_SCM_Git_Upstream_Staged(t *testing.T) {
+	// Upstream set, staged changes.
+	root := makeGit(t)
 	runGit(t, root, "checkout", "-b", "up", "HEAD~1")
 	runGit(t, root, "checkout", "master")
 	runGit(t, root, "branch", "--set-upstream-to", "up")
-	copyFile(t, root, "scm_affected_files.star")
-	runGit(t, root, "add", "scm_affected_files.star")
-	b := getErrPrint(t)
-	if err := Load(context.Background(), root, "scm_affected_files.star", false); err != nil {
-		t.Fatal(err)
-	}
-	want := "[//scm_affected_files.star:7] {\"file2.txt\": file(action = \"A\"), \"scm_affected_files.star\": file(action = \"A\")}\n"
-	if diff := cmp.Diff(want, b.String()); diff != "" {
-		t.Fatalf("mismatch (+want -got):\n%s", diff)
-	}
-}
-
-func TestLoad_SCM_Affected_Files_Git_NoUpstream_Tainted(t *testing.T) {
-	root := makeGit(t)
-	copyFile(t, root, "scm_affected_files.star")
-	runGit(t, root, "add", "scm_affected_files.star")
-	b := getErrPrint(t)
-	if err := Load(context.Background(), root, "scm_affected_files.star", false); err != nil {
-		t.Fatal(err)
-	}
-	want := "[//scm_affected_files.star:7] {\"scm_affected_files.star\": file(action = \"A\")}\n"
-	if diff := cmp.Diff(want, b.String()); diff != "" {
-		t.Fatalf("mismatch (+want -got):\n%s", diff)
-	}
-}
-
-func TestLoad_SCM_Affected_Files_Git_NoUpstream_Pristine(t *testing.T) {
-	root := makeGit(t)
-	copyFile(t, root, "scm_affected_files.star")
-	runGit(t, root, "add", "scm_affected_files.star")
-	runGit(t, root, "commit", "-m", "Third commit")
-	b := getErrPrint(t)
-	if err := Load(context.Background(), root, "scm_affected_files.star", false); err != nil {
-		t.Fatal(err)
-	}
-	want := "[//scm_affected_files.star:7] {\"scm_affected_files.star\": file(action = \"A\")}\n"
-	if diff := cmp.Diff(want, b.String()); diff != "" {
-		t.Fatalf("mismatch (+want -got):\n%s", diff)
-	}
-}
-
-func TestLoad_SCM_All_Files_Git(t *testing.T) {
-	root := makeGit(t)
-	copyFile(t, root, "scm_all_files.star")
-	runGit(t, root, "add", "scm_all_files.star")
-	b := getErrPrint(t)
-	if err := Load(context.Background(), root, "scm_all_files.star", false); err != nil {
-		t.Fatal(err)
-	}
-	want := "[//scm_all_files.star:7] {\"file1.txt\": file(action = \"\"), \"file2.txt\": file(action = \"\"), \"scm_all_files.star\": file(action = \"\")}\n"
-	if diff := cmp.Diff(want, b.String()); diff != "" {
-		t.Fatalf("mismatch (+want -got):\n%s", diff)
-	}
+	copySCM(t, root)
+	runGit(t, root, "add", "scm_*.star")
+	t.Run("affected", func(t *testing.T) {
+		want := "[//scm_affected_files.star:9] \n" +
+			"file2.txt: A\n" +
+			"scm_affected_files.star: A\n" +
+			"scm_all_files.star: A\n" +
+			"\n"
+		testStarlark(t, root, "scm_affected_files.star", false, want)
+	})
+	t.Run("all", func(t *testing.T) {
+		want := "[//scm_all_files.star:9] \n" +
+			"file1.txt: \n" +
+			"file2.txt: \n" +
+			"scm_affected_files.star: \n" +
+			"scm_all_files.star: \n" +
+			"\n"
+		testStarlark(t, root, "scm_all_files.star", false, want)
+	})
 }
 
 // TestTestDataFail runs all the files under testdata/fail/.
@@ -141,11 +142,11 @@ func TestTestDataFail(t *testing.T) {
 		{
 			"backtrace.star",
 			"inner",
-			`  //backtrace.star:11:4: in <toplevel>
-  //backtrace.star:9:6: in fn1
-  //backtrace.star:6:7: in fn2
-  <builtin>: in fail
-Error: inner`,
+			`  //backtrace.star:11:4: in <toplevel>` + "\n" +
+				`  //backtrace.star:9:6: in fn1` + "\n" +
+				`  //backtrace.star:6:7: in fn2` + "\n" +
+				`  <builtin>: in fail` + "\n" +
+				`Error: inner`,
 		},
 		{
 			"empty.star",
@@ -155,9 +156,9 @@ Error: inner`,
 		{
 			"fail.star",
 			"an expected failure",
-			`  //fail.star:5:5: in <toplevel>
-  <builtin>: in fail
-Error: an expected failure`,
+			`  //fail.star:5:5: in <toplevel>` + "\n" +
+				`  <builtin>: in fail` + "\n" +
+				`Error: an expected failure`,
 		},
 		{
 			"io_read_file_abs.star",
@@ -207,14 +208,14 @@ Error: an expected failure`,
 		{
 			"register_check_kwargs.star",
 			"register_check: unexpected keyword arguments",
-			`  //register_check_kwargs.star:8:15: in <toplevel>
-Error in register_check: register_check: unexpected keyword arguments`,
+			`  //register_check_kwargs.star:8:15: in <toplevel>` + "\n" +
+				`Error in register_check: register_check: unexpected keyword arguments`,
 		},
 		{
 			"register_check_no_arg.star",
 			"register_check: got 0 arguments, want 1",
-			`  //register_check_no_arg.star:5:15: in <toplevel>
-Error in register_check: register_check: got 0 arguments, want 1`,
+			`  //register_check_no_arg.star:5:15: in <toplevel>` + "\n" +
+				`Error in register_check: register_check: got 0 arguments, want 1`,
 		},
 		{
 			"register_check_recursive.star",
@@ -315,17 +316,15 @@ func TestTestDataSimple(t *testing.T) {
 		},
 		{
 			"re_allmatches.star",
-			`[//re_allmatches.star:7] ()
-[//re_allmatches.star:9] (match(groups = ("TODO(foo)",), offset = 4), match(groups = ("TODO(bar)",), offset = 14))
-[//re_allmatches.star:11] (match(groups = ("anc", "n", "c"), offset = 0),)
-`,
+			`[//re_allmatches.star:7] ()` + "\n" +
+				`[//re_allmatches.star:9] (match(groups = ("TODO(foo)",), offset = 4), match(groups = ("TODO(bar)",), offset = 14))` + "\n" +
+				`[//re_allmatches.star:11] (match(groups = ("anc", "n", "c"), offset = 0),)` + "\n",
 		},
 		{
 			"re_match.star",
-			`[//re_match.star:7] None
-[//re_match.star:9] match(groups = ("TODO(foo)",), offset = 4)
-[//re_match.star:11] match(groups = ("anc", "n", "c"), offset = 0)
-`,
+			`[//re_match.star:7] None` + "\n" +
+				`[//re_match.star:9] match(groups = ("TODO(foo)",), offset = 4)` + "\n" +
+				`[//re_match.star:11] match(groups = ("anc", "n", "c"), offset = 0)` + "\n",
 		},
 		{
 			"register_check.star",
@@ -342,18 +341,24 @@ func TestTestDataSimple(t *testing.T) {
 	for i := range data {
 		i := i
 		t.Run(data[i].name, func(t *testing.T) {
-			b := getErrPrint(t)
-			if err := Load(context.Background(), p, data[i].name, false); err != nil {
-				t.Fatal(err)
-			}
-			if diff := cmp.Diff(data[i].want, b.String()); diff != "" {
-				t.Fatalf("mismatch (+want -got):\n%s", diff)
-			}
+			testStarlark(t, p, data[i].name, false, data[i].want)
 		})
 	}
 }
 
 // Utilities
+
+func testStarlark(t *testing.T, root, name string, all bool, want string) {
+	b := getErrPrint(t)
+	if err := Load(context.Background(), root, name, all); err != nil {
+		t.Helper()
+		t.Fatal(err)
+	}
+	if diff := cmp.Diff(want, b.String()); diff != "" {
+		t.Helper()
+		t.Fatalf("mismatch (+want -got):\n%s", diff)
+	}
+}
 
 func unwrapMultiError(t *testing.T, err error) error {
 	// TODO(maruel): Use go 1.20 unwrap.
@@ -397,12 +402,18 @@ func makeGit(t *testing.T) string {
 	return root
 }
 
-func copyFile(t *testing.T, dst, path string) {
-	d, err := os.ReadFile(filepath.Join("testdata", path))
+func copySCM(t *testing.T, dst string) {
+	m, err := filepath.Glob(filepath.Join("testdata", "scm_*.star"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	writeFile(t, dst, path, string(d))
+	for _, src := range m {
+		d, err := os.ReadFile(src)
+		if err != nil {
+			t.Fatal(err)
+		}
+		writeFile(t, dst, filepath.Base(src), string(d))
+	}
 }
 
 func writeFile(t *testing.T, root, path, content string) {

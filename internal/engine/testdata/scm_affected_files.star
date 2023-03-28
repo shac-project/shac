@@ -3,7 +3,9 @@
 # license that can be found in the LICENSE file.
 
 def cb(shac):
-  d = shac.scm.affected_files()
-  print(d)
+  out = "\n"
+  for path, meta in shac.scm.affected_files().items():
+    out += path + ": " + meta.action + "\n"
+  print(out)
 
 register_check(cb)
