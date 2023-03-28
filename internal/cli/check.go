@@ -6,12 +6,15 @@ package cli
 
 import (
 	"context"
-	"fmt"
 
 	flag "github.com/spf13/pflag"
+	"go.fuchsia.dev/shac-project/shac/internal/engine"
 )
 
-type checkCmd struct{}
+type checkCmd struct {
+	root string
+	main string
+}
 
 func (*checkCmd) Name() string {
 	return "check"
@@ -21,10 +24,11 @@ func (*checkCmd) Description() string {
 	return "Run checks in a file."
 }
 
-func (*checkCmd) SetFlags(*flag.FlagSet) {
+func (c *checkCmd) SetFlags(f *flag.FlagSet) {
+	f.StringVar(&c.root, "root", ".", "path to the root of the tree to analyse")
+	f.StringVar(&c.main, "main", "shac.star", "main of the main shac.star")
 }
 
-func (*checkCmd) Execute(context.Context, *flag.FlagSet) error {
-	fmt.Println("hello world")
-	return nil
+func (c *checkCmd) Execute(ctx context.Context, f *flag.FlagSet) error {
+	return engine.Load(ctx, c.root, c.main)
 }

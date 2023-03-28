@@ -1,2 +1,5 @@
 # Tools installed from CIPD.
 /.tools
+
+/shac
+/shac.exe

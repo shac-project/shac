@@ -6,14 +6,16 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
 
+	flag "github.com/spf13/pflag"
 	"go.fuchsia.dev/shac-project/shac/internal/cli"
 )
 
 func main() {
-	if err := cli.Main(os.Args); err != nil {
+	if err := cli.Main(os.Args); err != nil && !errors.Is(err, flag.ErrHelp) {
 		fmt.Fprintf(os.Stderr, "shac: %s\n", err)
 		os.Exit(1)
 	}

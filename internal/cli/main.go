@@ -7,6 +7,7 @@ package cli
 import (
 	"context"
 	"fmt"
+	"os"
 
 	flag "github.com/spf13/pflag"
 )
@@ -41,6 +42,11 @@ func Main(args []string) error {
 			continue
 		}
 		fs := flag.NewFlagSet(s.Name(), flag.ContinueOnError)
+		fs.Usage = func() {
+			// fs.out() is inaccessible.
+			fmt.Fprintf(os.Stderr, "Usage of shac %s:\n", s.Name())
+			fs.PrintDefaults()
+		}
 		s.SetFlags(fs)
 		if err := fs.Parse(args[2:]); err != nil {
 			return err
