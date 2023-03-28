@@ -28,14 +28,21 @@ func TestLoad_SCM_Raw(t *testing.T) {
 		want := "[//scm_affected_files.star:9] \n" +
 			"file1.txt: \n" +
 			"scm_affected_files.star: \n" +
+			"scm_affected_files_new_lines.star: \n" +
 			"scm_all_files.star: \n" +
 			"\n"
 		testStarlark(t, root, "scm_affected_files.star", false, want)
+	})
+	t.Run("affected_new_lines", func(t *testing.T) {
+		want := "[//scm_affected_files_new_lines.star:15] file1.txt\n" +
+			"1: First file\n"
+		testStarlark(t, root, "scm_affected_files_new_lines.star", false, want)
 	})
 	t.Run("all", func(t *testing.T) {
 		want := "[//scm_all_files.star:9] \n" +
 			"file1.txt: \n" +
 			"scm_affected_files.star: \n" +
+			"scm_affected_files_new_lines.star: \n" +
 			"scm_all_files.star: \n" +
 			"\n"
 		testStarlark(t, root, "scm_all_files.star", false, want)
@@ -51,25 +58,28 @@ func TestLoad_SCM_Git_NoUpstream_Pristine(t *testing.T) {
 	t.Run("affected", func(t *testing.T) {
 		want := "[//scm_affected_files.star:9] \n" +
 			"scm_affected_files.star: A\n" +
+			"scm_affected_files_new_lines.star: A\n" +
 			"scm_all_files.star: A\n" +
 			"\n"
 		testStarlark(t, root, "scm_affected_files.star", false, want)
 	})
 	t.Run("affected/all", func(t *testing.T) {
 		want := "[//scm_affected_files.star:9] \n" +
-			"file1.txt: \n" +
-			"file2.txt: \n" +
-			"scm_affected_files.star: \n" +
-			"scm_all_files.star: \n" +
+			"file1.txt: A\n" +
+			"file2.txt: A\n" +
+			"scm_affected_files.star: A\n" +
+			"scm_affected_files_new_lines.star: A\n" +
+			"scm_all_files.star: A\n" +
 			"\n"
 		testStarlark(t, root, "scm_affected_files.star", true, want)
 	})
 	t.Run("all", func(t *testing.T) {
 		want := "[//scm_all_files.star:9] \n" +
-			"file1.txt: \n" +
-			"file2.txt: \n" +
-			"scm_affected_files.star: \n" +
-			"scm_all_files.star: \n" +
+			"file1.txt: A\n" +
+			"file2.txt: A\n" +
+			"scm_affected_files.star: A\n" +
+			"scm_affected_files_new_lines.star: A\n" +
+			"scm_all_files.star: A\n" +
 			"\n"
 		testStarlark(t, root, "scm_all_files.star", false, want)
 	})
@@ -83,16 +93,28 @@ func TestLoad_SCM_Git_NoUpstream_Staged(t *testing.T) {
 	t.Run("affected", func(t *testing.T) {
 		want := "[//scm_affected_files.star:9] \n" +
 			"scm_affected_files.star: A\n" +
+			"scm_affected_files_new_lines.star: A\n" +
 			"scm_all_files.star: A\n" +
 			"\n"
 		testStarlark(t, root, "scm_affected_files.star", false, want)
 	})
+	t.Run("affected_new_lines", func(t *testing.T) {
+		want := "[//scm_affected_files_new_lines.star:15] scm_affected_files.star\n" +
+			"1: # Copyright 2023 The Fuchsia Authors. All rights reserved.\n"
+		testStarlark(t, root, "scm_affected_files_new_lines.star", false, want)
+	})
+	t.Run("affected_new_lines/all", func(t *testing.T) {
+		want := "[//scm_affected_files_new_lines.star:15] file1.txt\n" +
+			"1: First file\n"
+		testStarlark(t, root, "scm_affected_files_new_lines.star", true, want)
+	})
 	t.Run("all", func(t *testing.T) {
 		want := "[//scm_all_files.star:9] \n" +
-			"file1.txt: \n" +
-			"file2.txt: \n" +
-			"scm_affected_files.star: \n" +
-			"scm_all_files.star: \n" +
+			"file1.txt: A\n" +
+			"file2.txt: A\n" +
+			"scm_affected_files.star: A\n" +
+			"scm_affected_files_new_lines.star: A\n" +
+			"scm_all_files.star: A\n" +
 			"\n"
 		testStarlark(t, root, "scm_all_files.star", false, want)
 	})
@@ -110,16 +132,18 @@ func TestLoad_SCM_Git_Upstream_Staged(t *testing.T) {
 		want := "[//scm_affected_files.star:9] \n" +
 			"file2.txt: A\n" +
 			"scm_affected_files.star: A\n" +
+			"scm_affected_files_new_lines.star: A\n" +
 			"scm_all_files.star: A\n" +
 			"\n"
 		testStarlark(t, root, "scm_affected_files.star", false, want)
 	})
 	t.Run("all", func(t *testing.T) {
 		want := "[//scm_all_files.star:9] \n" +
-			"file1.txt: \n" +
-			"file2.txt: \n" +
-			"scm_affected_files.star: \n" +
-			"scm_all_files.star: \n" +
+			"file1.txt: A\n" +
+			"file2.txt: A\n" +
+			"scm_affected_files.star: A\n" +
+			"scm_affected_files_new_lines.star: A\n" +
+			"scm_all_files.star: A\n" +
 			"\n"
 		testStarlark(t, root, "scm_all_files.star", false, want)
 	})

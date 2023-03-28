@@ -38,6 +38,7 @@ func (c *checks) callAll(ctx context.Context, th *starlark.Thread) errors.MultiE
 	var errs errors.MultiError
 	fc := builtins.GetFailureCollector(th)
 	args := starlark.Tuple{getShac()}
+	args.Freeze()
 	for _, cb := range c.c {
 		if fc != nil {
 			fc.Clear()

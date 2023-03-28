@@ -13,6 +13,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -38,10 +39,13 @@ type file struct {
 	action string
 }
 
+type starlarkFunc func(th *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error)
+
 // scmCheckout is the generic interface for version controlled sources.
 type scmCheckout interface {
 	affectedFiles(ctx context.Context) ([]file, error)
 	allFiles(ctx context.Context) ([]file, error)
+	newLines(path string) starlarkFunc
 }
 
 // Git support.
@@ -159,7 +163,8 @@ func (g *gitCheckout) allFiles(ctx context.Context) ([]file, error) {
 			items := strings.Split(o[:len(o)-1], "\x00")
 			g.all = make([]file, 0, len(items))
 			for i := 0; i < len(items); i++ {
-				g.all = append(g.all, file{path: items[i]})
+				// TODO(maruel): Still include action from affectedFiles()?
+				g.all = append(g.all, file{action: "A", path: items[i]})
 			}
 			sort.Slice(g.all, func(i, j int) bool { return g.all[i].path < g.all[j].path })
 		} else {
@@ -167,6 +172,76 @@ func (g *gitCheckout) allFiles(ctx context.Context) ([]file, error) {
 		}
 	}
 	return g.all, g.err
+}
+
+func (g *gitCheckout) newLines(path string) starlarkFunc {
+	// TODO(maruel): Revisit the design, it is likely not performance efficient
+	// to use a stack context.
+	return func(th *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+		if len(args) > 0 {
+			return starlark.None, fmt.Errorf("%s: unexpected arguments", fn.Name())
+		}
+		if len(kwargs) > 0 {
+			return starlark.None, fmt.Errorf("%s: unexpected keyword arguments", fn.Name())
+		}
+		ctx := interpreter.Context(th)
+		s := ctxState(ctx)
+		if s.inputs.allFiles {
+			// Include all lines when processing all files independent if the file
+			// was modified or not.
+			return newLinesWhole(s.inputs.root, path)
+		}
+		o := g.run(ctx, "diff", "--no-prefix", "-C", "-U0", g.upstream.ref, "--", path)
+		if o == "" {
+			// TODO(maruel): This is not normal. For now fallback to the whole file.
+			return newLinesWhole(s.inputs.root, path)
+		}
+		// Skip the header.
+		for len(o) != 0 {
+			done := strings.HasPrefix(o, "+++ ")
+			if i := strings.Index(o, "\n"); i >= 0 {
+				o = o[i+1:]
+			}
+			if done {
+				break
+			}
+		}
+		// TODO(maruel): Perf-optimize by using Index() and going on the fly
+		// without creating a []string.
+		items := strings.Split(o, "\n")
+		c := 0
+		for _, l := range items {
+			if strings.HasPrefix(l, "+") {
+				c++
+			}
+		}
+		t := make(starlark.Tuple, 0, c)
+		curr := 0
+		for _, l := range items {
+			if strings.HasPrefix(l, "@@ ") {
+				// TODO(maruel): This code can panic at multiple places. Odds of this
+				// happening is relatively low unless git diff goes off track.
+				// @@ -171,0 +176,28 @@
+				l = l[3+strings.Index(l[3:], " "):][1:]
+				l = l[:strings.Index(l, " ")][1:]
+				if i := strings.Index(l, ","); i > 0 {
+					l = l[:i]
+				}
+				var err error
+				if curr, err = strconv.Atoi(l); err != nil {
+					panic(fmt.Sprintf("%q: %v", l, err))
+				}
+			} else if strings.HasPrefix(l, "+") {
+				// Track the current line number.
+				t = append(t, starlark.Tuple{starlark.MakeInt(curr), starlark.String(l[1:])})
+				curr++
+			} else if !strings.HasPrefix(l, "-") {
+				panic(fmt.Sprintf("unexpected line %q", l))
+			}
+		}
+		t.Freeze()
+		return t, nil
+	}
 }
 
 // Generic support.
@@ -200,6 +275,21 @@ func (r *rawTree) allFiles(ctx context.Context) ([]file, error) {
 	return r.all, nil
 }
 
+func (r *rawTree) newLines(path string) starlarkFunc {
+	// TODO(maruel): Revisit the design, it is likely not performance efficient.
+	return func(th *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+		if len(args) > 0 {
+			return starlark.None, fmt.Errorf("%s: unexpected arguments", fn.Name())
+		}
+		if len(kwargs) > 0 {
+			return starlark.None, fmt.Errorf("%s: unexpected keyword arguments", fn.Name())
+		}
+		ctx := interpreter.Context(th)
+		s := ctxState(ctx)
+		return newLinesWhole(s.inputs.root, path)
+	}
+}
+
 // Starlark adapter code.
 
 func scmFilesCommon(th *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple, all bool) (starlark.Value, error) {
@@ -225,10 +315,11 @@ func scmFilesCommon(th *starlark.Thread, fn *starlark.Builtin, args starlark.Tup
 	out := starlark.NewDict(len(files))
 	for _, f := range files {
 		out.SetKey(starlark.String(f.path), toValue("file", starlark.StringDict{
-			// TODO(maruel): Add new_lines() function to get the new lines from this file.
-			"action": starlark.String(f.action),
+			"action":    starlark.String(f.action),
+			"new_lines": starlark.NewBuiltin("new_lines", s.scm.newLines(f.path)),
 		}))
 	}
+	out.Freeze()
 	return out, nil
 }
 
@@ -244,4 +335,20 @@ func scmAffectedFiles(th *starlark.Thread, fn *starlark.Builtin, args starlark.T
 // It returns a dictionary.
 func scmAllFiles(th *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	return scmFilesCommon(th, fn, args, kwargs, true)
+}
+
+// newLinesWhole returns the whole file as new lines.
+func newLinesWhole(root, path string) (starlark.Value, error) {
+	b, err := os.ReadFile(filepath.Join(root, path))
+	if err != nil {
+		return starlark.None, err
+	}
+	// TODO(maruel): unsafeString()
+	items := strings.Split(string(b), "\n")
+	t := make(starlark.Tuple, len(items))
+	for i := range items {
+		t[i] = starlark.Tuple{starlark.MakeInt(i + 1), starlark.String(items[i])}
+	}
+	t.Freeze()
+	return t, nil
 }

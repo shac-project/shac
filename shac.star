@@ -3,13 +3,15 @@
 # license that can be found in the LICENSE file.
 
 def cb(shac):
+  """Prints the added TODOs."""
+  out = ""
   for name, meta in shac.scm.affected_files().items():
-    todos = shac.re.allmatches("TODO\\(([^)]+)\\).*", str(shac.io.read_file(name)))
-    if todos:
-      out = name + "\n"
-      for m in todos:
+    for num, line in meta.new_lines():
+      m = shac.re.match("TODO\\(([^)]+)\\).*", line)
+      if m:
         # TODO(maruel): Validate m.groups[1] once we can emit results (errors).
-        out += str(m.offset) + ": " + m.groups[0] + "\n"
-      print(out)
+        out += "\n" + name + "(" + str(num) + "): " + m.groups[0]
+  if out:
+    print(out)
 
 register_check(cb)
