@@ -193,7 +193,7 @@ func scmFilesCommon(th *starlark.Thread, fn *starlark.Builtin, args starlark.Tup
 	s := ctxState(ctx)
 	var files []string
 	var err error
-	if s.allFiles || all {
+	if s.inputs.allFiles || all {
 		files, err = s.scm.allFiles(ctx)
 	} else {
 		files, err = s.scm.affectedFiles(ctx)

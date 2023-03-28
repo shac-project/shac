@@ -25,7 +25,7 @@ func TestLoad_SCM_Affected_Files_Raw(t *testing.T) {
 	writeFile(t, root, "file1.txt", "First file")
 	copyFile(t, root, "scm_affected_files.star")
 	b := getErrPrint(t)
-	if err := Load(context.Background(), root, "scm_affected_files.star"); err != nil {
+	if err := Load(context.Background(), root, "scm_affected_files.star", false); err != nil {
 		t.Fatal(err)
 	}
 	if s := b.String(); s != "[//scm_affected_files.star:7] {\"file1.txt\": {}, \"scm_affected_files.star\": {}}\n" {
@@ -38,10 +38,24 @@ func TestLoad_SCM_All_Files_Raw(t *testing.T) {
 	writeFile(t, root, "file1.txt", "First file")
 	copyFile(t, root, "scm_all_files.star")
 	b := getErrPrint(t)
-	if err := Load(context.Background(), root, "scm_all_files.star"); err != nil {
+	if err := Load(context.Background(), root, "scm_all_files.star", false); err != nil {
 		t.Fatal(err)
 	}
 	if s := b.String(); s != "[//scm_all_files.star:7] {\"file1.txt\": {}, \"scm_all_files.star\": {}}\n" {
+		t.Fatal(s)
+	}
+}
+
+func TestLoad_SCM_Affected_Files_Git_All(t *testing.T) {
+	root := makeGit(t)
+	copyFile(t, root, "scm_affected_files.star")
+	runGit(t, root, "add", "scm_affected_files.star")
+	runGit(t, root, "commit", "-m", "Third commit")
+	b := getErrPrint(t)
+	if err := Load(context.Background(), root, "scm_affected_files.star", true); err != nil {
+		t.Fatal(err)
+	}
+	if s := b.String(); s != "[//scm_affected_files.star:7] {\"file1.txt\": {}, \"file2.txt\": {}, \"scm_affected_files.star\": {}}\n" {
 		t.Fatal(s)
 	}
 }
@@ -55,7 +69,7 @@ func TestLoad_SCM_Affected_Files_Git_Upstream_Tainted(t *testing.T) {
 	copyFile(t, root, "scm_affected_files.star")
 	runGit(t, root, "add", "scm_affected_files.star")
 	b := getErrPrint(t)
-	if err := Load(context.Background(), root, "scm_affected_files.star"); err != nil {
+	if err := Load(context.Background(), root, "scm_affected_files.star", false); err != nil {
 		t.Fatal(err)
 	}
 	if s := b.String(); s != "[//scm_affected_files.star:7] {\"file2.txt\": {}, \"scm_affected_files.star\": {}}\n" {
@@ -68,7 +82,7 @@ func TestLoad_SCM_Affected_Files_Git_NoUpstream_Tainted(t *testing.T) {
 	copyFile(t, root, "scm_affected_files.star")
 	runGit(t, root, "add", "scm_affected_files.star")
 	b := getErrPrint(t)
-	if err := Load(context.Background(), root, "scm_affected_files.star"); err != nil {
+	if err := Load(context.Background(), root, "scm_affected_files.star", false); err != nil {
 		t.Fatal(err)
 	}
 	if s := b.String(); s != "[//scm_affected_files.star:7] {\"scm_affected_files.star\": {}}\n" {
@@ -82,7 +96,7 @@ func TestLoad_SCM_Affected_Files_Git_NoUpstream_Pristine(t *testing.T) {
 	runGit(t, root, "add", "scm_affected_files.star")
 	runGit(t, root, "commit", "-m", "Third commit")
 	b := getErrPrint(t)
-	if err := Load(context.Background(), root, "scm_affected_files.star"); err != nil {
+	if err := Load(context.Background(), root, "scm_affected_files.star", false); err != nil {
 		t.Fatal(err)
 	}
 	if s := b.String(); s != "[//scm_affected_files.star:7] {\"scm_affected_files.star\": {}}\n" {
@@ -95,7 +109,7 @@ func TestLoad_SCM_All_Files_Git(t *testing.T) {
 	copyFile(t, root, "scm_all_files.star")
 	runGit(t, root, "add", "scm_all_files.star")
 	b := getErrPrint(t)
-	if err := Load(context.Background(), root, "scm_all_files.star"); err != nil {
+	if err := Load(context.Background(), root, "scm_all_files.star", false); err != nil {
 		t.Fatal(err)
 	}
 	if s := b.String(); s != "[//scm_all_files.star:7] {\"file1.txt\": {}, \"file2.txt\": {}, \"scm_all_files.star\": {}}\n" {
@@ -242,7 +256,7 @@ Error in register_check: register_check: got 0 arguments, want 1`,
 		i := i
 		t.Run(data[i].name, func(t *testing.T) {
 			t.Parallel()
-			err := Load(context.Background(), p, data[i].name)
+			err := Load(context.Background(), p, data[i].name, false)
 			if err == nil {
 				t.Fatal("expecting an error")
 			}
@@ -322,7 +336,7 @@ func TestTestDataSimple(t *testing.T) {
 		i := i
 		t.Run(data[i].name, func(t *testing.T) {
 			b := getErrPrint(t)
-			if err := Load(context.Background(), p, data[i].name); err != nil {
+			if err := Load(context.Background(), p, data[i].name, false); err != nil {
 				t.Fatal(err)
 			}
 			if diff := cmp.Diff(data[i].want, b.String()); diff != "" {

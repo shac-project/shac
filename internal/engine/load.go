@@ -24,7 +24,7 @@ import (
 // Load loads a main shac.star file from a root directory.
 //
 // main is normally shac.star.
-func Load(ctx context.Context, root, main string) error {
+func Load(ctx context.Context, root, main string, allFiles bool) error {
 	if filepath.IsAbs(main) {
 		return errors.New("main file must not be an absolute path")
 	}
@@ -33,9 +33,10 @@ func Load(ctx context.Context, root, main string) error {
 		return err
 	}
 	s, err := parse(ctx, &inputs{
-		code: interpreter.FileSystemLoader(root),
-		root: root,
-		main: main,
+		code:     interpreter.FileSystemLoader(root),
+		root:     root,
+		main:     main,
+		allFiles: allFiles,
 	})
 	if err != nil {
 		return err
@@ -52,17 +53,17 @@ func Load(ctx context.Context, root, main string) error {
 
 // inputs represents a starlark package.
 type inputs struct {
-	code interpreter.Loader
-	root string
-	main string
+	code     interpreter.Loader
+	root     string
+	main     string
+	allFiles bool
 }
 
 // state represents a parsing state of the main starlark tree.
 type state struct {
-	intr     *interpreter.Interpreter
-	inputs   *inputs
-	allFiles bool
-	scm      scmCheckout
+	intr   *interpreter.Interpreter
+	inputs *inputs
+	scm    scmCheckout
 
 	checks      checks
 	doneLoading bool
