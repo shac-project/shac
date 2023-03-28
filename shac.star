@@ -3,6 +3,7 @@
 # license that can be found in the LICENSE file.
 
 def cb(shac):
-  print("implement me")
+  for name, meta in shac.scm.affected_files().items():
+    print(name)
 
 register_check(cb)

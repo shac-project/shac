@@ -7,6 +7,8 @@ package cli
 import (
 	"context"
 	"fmt"
+	"io"
+	"log"
 	"os"
 
 	flag "github.com/spf13/pflag"
@@ -47,9 +49,13 @@ func Main(args []string) error {
 			fmt.Fprintf(os.Stderr, "Usage of shac %s:\n", s.Name())
 			fs.PrintDefaults()
 		}
+		verbose := fs.BoolP("verbose", "v", false, "Verbose output")
 		s.SetFlags(fs)
 		if err := fs.Parse(args[2:]); err != nil {
 			return err
+		}
+		if !*verbose {
+			log.SetOutput(io.Discard)
 		}
 		return s.Execute(ctx, fs)
 	}

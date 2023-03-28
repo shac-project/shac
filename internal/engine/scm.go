@@ -8,6 +8,7 @@ import (
 	"context"
 	"fmt"
 	"io/fs"
+	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -40,11 +41,12 @@ type scmCheckout interface {
 
 func getSCM(ctx context.Context, root string) scmCheckout {
 	g := &gitCheckout{}
-	if err := g.init(ctx, root); err == nil {
+	err := g.init(ctx, root)
+	if err == nil {
 		return g
 	}
+	log.Printf("git not detected: %s", err)
 	// TODO(maruel): Add the scm of your choice.
-	// TODO(maruel): Surface the failure to detect git somewhere for diagnostics?
 	return &rawTree{root: root}
 }
 
@@ -67,16 +69,28 @@ func (g *gitCheckout) init(ctx context.Context, root string) error {
 	g.root = g.run(ctx, "rev-parse", "--show-toplevel")
 	g.head.hash = g.run(ctx, "rev-parse", "HEAD")
 	g.head.ref = g.run(ctx, "rev-parse", "--abbrev-ref=strict", "--symbolic-full-name", "HEAD")
-	// TODO(maruel): Handle non-pristine checkouts. In this case, upstream is HEAD.
-	// TODO(maruel): Handle very first commit. Probably not a big deal to require
-	// at least one parent commit.
-	err := g.err
+	if g.err != nil {
+		// Not worth continuing.
+		return g.err
+	}
+	// Determine pristine status but ignoring untracked files. We do not
+	// distinguish between indexed or not.
+	isPristine := "" == g.run(ctx, "status", "--porcelain", "--untracked-files=no")
 	g.upstream.hash = g.run(ctx, "rev-parse", "@{u}")
 	g.upstream.ref = g.run(ctx, "rev-parse", "--abbrev-ref=strict", "--symbolic-full-name", "@{u}")
-	if err == nil && g.err != nil && strings.Contains(g.err.Error(), "no upstream configured for branch") {
-		// TODO(maruel): If @{u} is undefined, silently default to use HEAD~1.
-		g.err = nil
-		g.upstream.ref = "HEAD"
+	if g.err != nil {
+		const noUpstream = "no upstream configured for branch"
+		const noBranch = "HEAD does not point to a branch"
+		if s := g.err.Error(); strings.Contains(s, noUpstream) || strings.Contains(s, noBranch) {
+			// If @{u} is undefined, silently default to use HEAD~1 if pristine, HEAD otherwise.
+			g.err = nil
+			if isPristine {
+				// If HEAD~1 doesn't exist, this will fail.
+				g.upstream.ref = "HEAD~1"
+			} else {
+				g.upstream.ref = "HEAD"
+			}
+		}
 	}
 	return g.err
 }

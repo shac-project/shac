@@ -21,10 +21,8 @@ if ! command -v "$GO" > /dev/null; then
   GO="$CIPD_ROOT/bin/go"
 fi
 
-echo ""
 echo "- Testing"
 "$GO" test -cover ./...
 
-echo ""
 echo "- Running"
-"$GO" run . check
+"$GO" run . check -v

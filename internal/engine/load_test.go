@@ -8,6 +8,8 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
+	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -113,6 +115,11 @@ func makeGit(t *testing.T) string {
 	writeFile(t, root, "file1.txt", "First file")
 	runGit(t, root, "add", "file1.txt")
 	runGit(t, root, "commit", "-m", "Initial commit")
+	// TODO(maruel): scm.go requires two commits. Not really worth fixing yet,
+	// it's only annoying in unit tests.
+	writeFile(t, root, "file2.txt", "First file")
+	runGit(t, root, "add", "file2.txt")
+	runGit(t, root, "commit", "-m", "Second commit")
 	return root
 }
 
@@ -168,10 +175,41 @@ func TestLoad_SCM_All_Files_Raw(t *testing.T) {
 	}
 }
 
-func TestLoad_SCM_Affected_Files_Git(t *testing.T) {
+func TestLoad_SCM_Affected_Files_Git_Upstream_Tainted(t *testing.T) {
+	root := makeGit(t)
+	// Setup an upstream being the root commit.
+	runGit(t, root, "checkout", "-b", "up", "HEAD~1")
+	runGit(t, root, "checkout", "master")
+	runGit(t, root, "branch", "--set-upstream-to", "up")
+	copyFile(t, root, "scm_affected_files.star")
+	runGit(t, root, "add", "scm_affected_files.star")
+	b := getErrPrint(t)
+	if err := Load(context.Background(), root, "scm_affected_files.star"); err != nil {
+		t.Fatal(err)
+	}
+	if s := b.String(); s != "[//scm_affected_files.star:7] {\"file2.txt\": {}, \"scm_affected_files.star\": {}}\n" {
+		t.Fatal(s)
+	}
+}
+
+func TestLoad_SCM_Affected_Files_Git_NoUpstream_Tainted(t *testing.T) {
 	root := makeGit(t)
 	copyFile(t, root, "scm_affected_files.star")
 	runGit(t, root, "add", "scm_affected_files.star")
+	b := getErrPrint(t)
+	if err := Load(context.Background(), root, "scm_affected_files.star"); err != nil {
+		t.Fatal(err)
+	}
+	if s := b.String(); s != "[//scm_affected_files.star:7] {\"scm_affected_files.star\": {}}\n" {
+		t.Fatal(s)
+	}
+}
+
+func TestLoad_SCM_Affected_Files_Git_NoUpstream_Pristine(t *testing.T) {
+	root := makeGit(t)
+	copyFile(t, root, "scm_affected_files.star")
+	runGit(t, root, "add", "scm_affected_files.star")
+	runGit(t, root, "commit", "-m", "Third commit")
 	b := getErrPrint(t)
 	if err := Load(context.Background(), root, "scm_affected_files.star"); err != nil {
 		t.Fatal(err)
@@ -189,7 +227,7 @@ func TestLoad_SCM_All_Files_Git(t *testing.T) {
 	if err := Load(context.Background(), root, "scm_all_files.star"); err != nil {
 		t.Fatal(err)
 	}
-	if s := b.String(); s != "[//scm_all_files.star:7] {\"file1.txt\": {}, \"scm_all_files.star\": {}}\n" {
+	if s := b.String(); s != "[//scm_all_files.star:7] {\"file1.txt\": {}, \"file2.txt\": {}, \"scm_all_files.star\": {}}\n" {
 		t.Fatal(s)
 	}
 }
@@ -314,4 +352,6 @@ func (panicOnWrite) Write([]byte) (int, error) {
 func init() {
 	// Catch unexpected stderrPrint usage.
 	stderrPrint = panicOnWrite{}
+	// Silence logging.
+	log.SetOutput(io.Discard)
 }
