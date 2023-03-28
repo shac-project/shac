@@ -28,8 +28,9 @@ func TestLoad_SCM_Affected_Files_Raw(t *testing.T) {
 	if err := Load(context.Background(), root, "scm_affected_files.star", false); err != nil {
 		t.Fatal(err)
 	}
-	if s := b.String(); s != "[//scm_affected_files.star:7] {\"file1.txt\": {}, \"scm_affected_files.star\": {}}\n" {
-		t.Fatal(s)
+	want := "[//scm_affected_files.star:7] {\"file1.txt\": file(action = \"\"), \"scm_affected_files.star\": file(action = \"\")}\n"
+	if diff := cmp.Diff(want, b.String()); diff != "" {
+		t.Fatalf("mismatch (+want -got):\n%s", diff)
 	}
 }
 
@@ -41,8 +42,9 @@ func TestLoad_SCM_All_Files_Raw(t *testing.T) {
 	if err := Load(context.Background(), root, "scm_all_files.star", false); err != nil {
 		t.Fatal(err)
 	}
-	if s := b.String(); s != "[//scm_all_files.star:7] {\"file1.txt\": {}, \"scm_all_files.star\": {}}\n" {
-		t.Fatal(s)
+	want := "[//scm_all_files.star:7] {\"file1.txt\": file(action = \"\"), \"scm_all_files.star\": file(action = \"\")}\n"
+	if diff := cmp.Diff(want, b.String()); diff != "" {
+		t.Fatalf("mismatch (+want -got):\n%s", diff)
 	}
 }
 
@@ -55,8 +57,9 @@ func TestLoad_SCM_Affected_Files_Git_All(t *testing.T) {
 	if err := Load(context.Background(), root, "scm_affected_files.star", true); err != nil {
 		t.Fatal(err)
 	}
-	if s := b.String(); s != "[//scm_affected_files.star:7] {\"file1.txt\": {}, \"file2.txt\": {}, \"scm_affected_files.star\": {}}\n" {
-		t.Fatal(s)
+	want := "[//scm_affected_files.star:7] {\"file1.txt\": file(action = \"\"), \"file2.txt\": file(action = \"\"), \"scm_affected_files.star\": file(action = \"\")}\n"
+	if diff := cmp.Diff(want, b.String()); diff != "" {
+		t.Fatalf("mismatch (+want -got):\n%s", diff)
 	}
 }
 
@@ -72,8 +75,9 @@ func TestLoad_SCM_Affected_Files_Git_Upstream_Tainted(t *testing.T) {
 	if err := Load(context.Background(), root, "scm_affected_files.star", false); err != nil {
 		t.Fatal(err)
 	}
-	if s := b.String(); s != "[//scm_affected_files.star:7] {\"file2.txt\": {}, \"scm_affected_files.star\": {}}\n" {
-		t.Fatal(s)
+	want := "[//scm_affected_files.star:7] {\"file2.txt\": file(action = \"A\"), \"scm_affected_files.star\": file(action = \"A\")}\n"
+	if diff := cmp.Diff(want, b.String()); diff != "" {
+		t.Fatalf("mismatch (+want -got):\n%s", diff)
 	}
 }
 
@@ -85,8 +89,9 @@ func TestLoad_SCM_Affected_Files_Git_NoUpstream_Tainted(t *testing.T) {
 	if err := Load(context.Background(), root, "scm_affected_files.star", false); err != nil {
 		t.Fatal(err)
 	}
-	if s := b.String(); s != "[//scm_affected_files.star:7] {\"scm_affected_files.star\": {}}\n" {
-		t.Fatal(s)
+	want := "[//scm_affected_files.star:7] {\"scm_affected_files.star\": file(action = \"A\")}\n"
+	if diff := cmp.Diff(want, b.String()); diff != "" {
+		t.Fatalf("mismatch (+want -got):\n%s", diff)
 	}
 }
 
@@ -99,8 +104,9 @@ func TestLoad_SCM_Affected_Files_Git_NoUpstream_Pristine(t *testing.T) {
 	if err := Load(context.Background(), root, "scm_affected_files.star", false); err != nil {
 		t.Fatal(err)
 	}
-	if s := b.String(); s != "[//scm_affected_files.star:7] {\"scm_affected_files.star\": {}}\n" {
-		t.Fatal(s)
+	want := "[//scm_affected_files.star:7] {\"scm_affected_files.star\": file(action = \"A\")}\n"
+	if diff := cmp.Diff(want, b.String()); diff != "" {
+		t.Fatalf("mismatch (+want -got):\n%s", diff)
 	}
 }
 
@@ -112,8 +118,9 @@ func TestLoad_SCM_All_Files_Git(t *testing.T) {
 	if err := Load(context.Background(), root, "scm_all_files.star", false); err != nil {
 		t.Fatal(err)
 	}
-	if s := b.String(); s != "[//scm_all_files.star:7] {\"file1.txt\": {}, \"file2.txt\": {}, \"scm_all_files.star\": {}}\n" {
-		t.Fatal(s)
+	want := "[//scm_all_files.star:7] {\"file1.txt\": file(action = \"\"), \"file2.txt\": file(action = \"\"), \"scm_all_files.star\": file(action = \"\")}\n"
+	if diff := cmp.Diff(want, b.String()); diff != "" {
+		t.Fatalf("mismatch (+want -got):\n%s", diff)
 	}
 }
 

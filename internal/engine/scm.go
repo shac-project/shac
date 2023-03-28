@@ -33,11 +33,18 @@ type commitRef struct {
 	ref string
 }
 
+type file struct {
+	path   string
+	action string
+}
+
 // scmCheckout is the generic interface for version controlled sources.
 type scmCheckout interface {
-	affectedFiles(ctx context.Context) ([]string, error)
-	allFiles(ctx context.Context) ([]string, error)
+	affectedFiles(ctx context.Context) ([]file, error)
+	allFiles(ctx context.Context) ([]file, error)
 }
+
+// Git support.
 
 func getSCM(ctx context.Context, root string) scmCheckout {
 	g := &gitCheckout{}
@@ -58,9 +65,9 @@ type gitCheckout struct {
 	env      []string
 
 	mu       sync.Mutex
-	modified []string // modified files in this checkout
-	all      []string // all files in the repo.
-	err      error    // save error.
+	modified []file // modified files in this checkout
+	all      []file // all files in the repo.
+	err      error  // save error.
 }
 
 func (g *gitCheckout) init(ctx context.Context, root string) error {
@@ -118,16 +125,23 @@ func (g *gitCheckout) run(ctx context.Context, args ...string) string {
 // affectedFiles returns the modified files on this checkout.
 //
 // The entries are lazy loaded and cached.
-func (g *gitCheckout) affectedFiles(ctx context.Context) ([]string, error) {
+func (g *gitCheckout) affectedFiles(ctx context.Context) ([]file, error) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	if g.modified == nil {
-		// TODO(maruel): Extract more information.
-		if o := g.run(ctx, "diff", "--name-only", "-z", g.upstream.ref); len(o) != 0 {
-			g.modified = strings.Split(o[:len(o)-1], "\x00")
-			sort.Strings(g.modified)
+		// TODO(maruel): Using --find-copies-harder would be too slow for large
+		// repositories. It'd be nice to autodetect?
+		if o := g.run(ctx, "diff", "--name-status", "-z", "-C", g.upstream.ref); len(o) != 0 {
+			// This code keeps a hold pointers on the original buffer. It's not a big deal.
+			items := strings.Split(o[:len(o)-1], "\x00")
+			g.modified = make([]file, len(items)/2)
+			for i := 0; i < len(items); i += 2 {
+				g.modified[i/2].action = items[i]
+				g.modified[i/2].path = items[i+1]
+			}
+			sort.Slice(g.modified, func(i, j int) bool { return g.modified[i].path < g.modified[j].path })
 		} else {
-			g.modified = []string{}
+			g.modified = []file{}
 		}
 	}
 	return g.modified, g.err
@@ -136,34 +150,40 @@ func (g *gitCheckout) affectedFiles(ctx context.Context) ([]string, error) {
 // allFiles returns all the files in this checkout.
 //
 // The entries are lazy loaded and cached.
-func (g *gitCheckout) allFiles(ctx context.Context) ([]string, error) {
+func (g *gitCheckout) allFiles(ctx context.Context) ([]file, error) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	if g.all == nil {
 		// TODO(maruel): Extract more information.
 		if o := g.run(ctx, "ls-files", "-z"); len(o) != 0 {
-			g.all = strings.Split(o[:len(o)-1], "\x00")
-			sort.Strings(g.all)
+			items := strings.Split(o[:len(o)-1], "\x00")
+			g.all = make([]file, 0, len(items))
+			for i := 0; i < len(items); i++ {
+				g.all = append(g.all, file{path: items[i]})
+			}
+			sort.Slice(g.all, func(i, j int) bool { return g.all[i].path < g.all[j].path })
 		} else {
-			g.all = []string{}
+			g.all = []file{}
 		}
 	}
 	return g.all, g.err
 }
 
+// Generic support.
+
 type rawTree struct {
 	root string
 
 	mu  sync.Mutex
-	all []string
+	all []file
 }
 
-func (r *rawTree) affectedFiles(ctx context.Context) ([]string, error) {
+func (r *rawTree) affectedFiles(ctx context.Context) ([]file, error) {
 	return r.allFiles(ctx)
 }
 
 // allFiles returns all files in this directory tree.
-func (r *rawTree) allFiles(ctx context.Context) ([]string, error) {
+func (r *rawTree) allFiles(ctx context.Context) ([]file, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.all == nil {
@@ -171,7 +191,7 @@ func (r *rawTree) allFiles(ctx context.Context) ([]string, error) {
 		filepath.WalkDir(r.root, func(path string, d fs.DirEntry, err error) error {
 			if err == nil {
 				if !d.IsDir() {
-					r.all = append(r.all, path[l:])
+					r.all = append(r.all, file{path: path[l:]})
 				}
 			}
 			return nil
@@ -180,7 +200,7 @@ func (r *rawTree) allFiles(ctx context.Context) ([]string, error) {
 	return r.all, nil
 }
 
-//
+// Starlark adapter code.
 
 func scmFilesCommon(th *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple, all bool) (starlark.Value, error) {
 	if len(args) > 0 {
@@ -191,7 +211,7 @@ func scmFilesCommon(th *starlark.Thread, fn *starlark.Builtin, args starlark.Tup
 	}
 	ctx := interpreter.Context(th)
 	s := ctxState(ctx)
-	var files []string
+	var files []file
 	var err error
 	if s.inputs.allFiles || all {
 		files, err = s.scm.allFiles(ctx)
@@ -204,9 +224,10 @@ func scmFilesCommon(th *starlark.Thread, fn *starlark.Builtin, args starlark.Tup
 	// files is guaranteed to be sorted.
 	out := starlark.NewDict(len(files))
 	for _, f := range files {
-		// TODO(maruel): Return a struct with methods to query the file size, the
-		// action (added, removed, etc), the diff or just the new lines.
-		out.SetKey(starlark.String(f), starlark.NewDict(0))
+		out.SetKey(starlark.String(f.path), toValue("file", starlark.StringDict{
+			// TODO(maruel): Add new_lines() function to get the new lines from this file.
+			"action": starlark.String(f.action),
+		}))
 	}
 	return out, nil
 }
