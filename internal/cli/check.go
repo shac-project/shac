@@ -9,6 +9,7 @@ import (
 
 	flag "github.com/spf13/pflag"
 	"go.fuchsia.dev/shac-project/shac/internal/engine"
+	"go.fuchsia.dev/shac-project/shac/internal/reporting"
 )
 
 type checkCmd struct {
@@ -32,5 +33,5 @@ func (c *checkCmd) SetFlags(f *flag.FlagSet) {
 }
 
 func (c *checkCmd) Execute(ctx context.Context, f *flag.FlagSet) error {
-	return engine.Load(ctx, c.root, c.main, c.allFiles)
+	return engine.Load(ctx, c.root, c.main, c.allFiles, reporting.Get())
 }

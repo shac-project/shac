@@ -21,6 +21,7 @@ import (
 )
 
 func TestLoad_SCM_Raw(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	writeFile(t, root, "file1.txt", "First file")
 	copySCM(t, root)
@@ -34,11 +35,13 @@ func TestLoad_SCM_Raw(t *testing.T) {
 		testStarlark(t, root, "scm_affected_files.star", false, want)
 	})
 	t.Run("affected_new_lines", func(t *testing.T) {
+		t.Parallel()
 		want := "[//scm_affected_files_new_lines.star:15] file1.txt\n" +
 			"1: First file\n"
 		testStarlark(t, root, "scm_affected_files_new_lines.star", false, want)
 	})
 	t.Run("all", func(t *testing.T) {
+		t.Parallel()
 		want := "[//scm_all_files.star:9] \n" +
 			"file1.txt: \n" +
 			"scm_affected_files.star: \n" +
@@ -51,11 +54,13 @@ func TestLoad_SCM_Raw(t *testing.T) {
 
 func TestLoad_SCM_Git_NoUpstream_Pristine(t *testing.T) {
 	// No upstream branch set, pristine checkout.
+	t.Parallel()
 	root := makeGit(t)
 	copySCM(t, root)
 	runGit(t, root, "add", "scm_*.star")
 	runGit(t, root, "commit", "-m", "Third commit")
 	t.Run("affected", func(t *testing.T) {
+		t.Parallel()
 		want := "[//scm_affected_files.star:9] \n" +
 			"scm_affected_files.star: A\n" +
 			"scm_affected_files_new_lines.star: A\n" +
@@ -64,6 +69,7 @@ func TestLoad_SCM_Git_NoUpstream_Pristine(t *testing.T) {
 		testStarlark(t, root, "scm_affected_files.star", false, want)
 	})
 	t.Run("affected/all", func(t *testing.T) {
+		t.Parallel()
 		want := "[//scm_affected_files.star:9] \n" +
 			"file1.txt: A\n" +
 			"file2.txt: A\n" +
@@ -74,6 +80,7 @@ func TestLoad_SCM_Git_NoUpstream_Pristine(t *testing.T) {
 		testStarlark(t, root, "scm_affected_files.star", true, want)
 	})
 	t.Run("all", func(t *testing.T) {
+		t.Parallel()
 		want := "[//scm_all_files.star:9] \n" +
 			"file1.txt: A\n" +
 			"file2.txt: A\n" +
@@ -87,10 +94,12 @@ func TestLoad_SCM_Git_NoUpstream_Pristine(t *testing.T) {
 
 func TestLoad_SCM_Git_NoUpstream_Staged(t *testing.T) {
 	// No upstream branch set, staged changes.
+	t.Parallel()
 	root := makeGit(t)
 	copySCM(t, root)
 	runGit(t, root, "add", "scm_*.star")
 	t.Run("affected", func(t *testing.T) {
+		t.Parallel()
 		want := "[//scm_affected_files.star:9] \n" +
 			"scm_affected_files.star: A\n" +
 			"scm_affected_files_new_lines.star: A\n" +
@@ -99,16 +108,19 @@ func TestLoad_SCM_Git_NoUpstream_Staged(t *testing.T) {
 		testStarlark(t, root, "scm_affected_files.star", false, want)
 	})
 	t.Run("affected_new_lines", func(t *testing.T) {
+		t.Parallel()
 		want := "[//scm_affected_files_new_lines.star:15] scm_affected_files.star\n" +
 			"1: # Copyright 2023 The Fuchsia Authors. All rights reserved.\n"
 		testStarlark(t, root, "scm_affected_files_new_lines.star", false, want)
 	})
 	t.Run("affected_new_lines/all", func(t *testing.T) {
+		t.Parallel()
 		want := "[//scm_affected_files_new_lines.star:15] file1.txt\n" +
 			"1: First file\n"
 		testStarlark(t, root, "scm_affected_files_new_lines.star", true, want)
 	})
 	t.Run("all", func(t *testing.T) {
+		t.Parallel()
 		want := "[//scm_all_files.star:9] \n" +
 			"file1.txt: A\n" +
 			"file2.txt: A\n" +
@@ -122,6 +134,7 @@ func TestLoad_SCM_Git_NoUpstream_Staged(t *testing.T) {
 
 func TestLoad_SCM_Git_Upstream_Staged(t *testing.T) {
 	// Upstream set, staged changes.
+	t.Parallel()
 	root := makeGit(t)
 	runGit(t, root, "checkout", "-b", "up", "HEAD~1")
 	runGit(t, root, "checkout", "master")
@@ -129,6 +142,7 @@ func TestLoad_SCM_Git_Upstream_Staged(t *testing.T) {
 	copySCM(t, root)
 	runGit(t, root, "add", "scm_*.star")
 	t.Run("affected", func(t *testing.T) {
+		t.Parallel()
 		want := "[//scm_affected_files.star:9] \n" +
 			"file2.txt: A\n" +
 			"scm_affected_files.star: A\n" +
@@ -138,6 +152,7 @@ func TestLoad_SCM_Git_Upstream_Staged(t *testing.T) {
 		testStarlark(t, root, "scm_affected_files.star", false, want)
 	})
 	t.Run("all", func(t *testing.T) {
+		t.Parallel()
 		want := "[//scm_all_files.star:9] \n" +
 			"file1.txt: A\n" +
 			"file2.txt: A\n" +
@@ -288,7 +303,7 @@ func TestTestDataFail(t *testing.T) {
 		i := i
 		t.Run(data[i].name, func(t *testing.T) {
 			t.Parallel()
-			err := Load(context.Background(), p, data[i].name, false)
+			err := Load(context.Background(), p, data[i].name, false, &reportNoPrint{t: t})
 			if err == nil {
 				t.Fatal("expecting an error")
 			}
@@ -316,6 +331,7 @@ func TestTestDataFail(t *testing.T) {
 
 // TestTestDataSimple runs all the files under testdata/simple/.
 func TestTestDataSimple(t *testing.T) {
+	t.Parallel()
 	p, got := enumDir(t, "simple")
 	v := fmt.Sprintf("(%d, %d, %d)", version[0], version[1], version[2])
 	data := []struct {
@@ -373,12 +389,12 @@ func TestTestDataSimple(t *testing.T) {
 // Utilities
 
 func testStarlark(t *testing.T, root, name string, all bool, want string) {
-	b := getErrPrint(t)
-	if err := Load(context.Background(), root, name, all); err != nil {
+	r := reportPrint{t: t}
+	if err := Load(context.Background(), root, name, all, &r); err != nil {
 		t.Helper()
 		t.Fatal(err)
 	}
-	if diff := cmp.Diff(want, b.String()); diff != "" {
+	if diff := cmp.Diff(want, r.b.String()); diff != "" {
 		t.Helper()
 		t.Fatalf("mismatch (+want -got):\n%s", diff)
 	}
@@ -458,25 +474,24 @@ func runGit(t *testing.T, root string, args ...string) string {
 	return strings.TrimSpace(string(out))
 }
 
-func getErrPrint(t *testing.T) *bytes.Buffer {
-	old := stderrPrint
-	t.Cleanup(func() {
-		stderrPrint = old
-	})
-	b := &bytes.Buffer{}
-	stderrPrint = b
-	return b
+type reportNoPrint struct {
+	t *testing.T
 }
 
-type panicOnWrite struct{}
+func (r *reportNoPrint) Print(ctx context.Context, file string, line int, message string) {
+	r.t.Errorf("unexpected print: %s(%d): %s", file, line, message)
+}
 
-func (panicOnWrite) Write([]byte) (int, error) {
-	panic("unexpected write")
+type reportPrint struct {
+	t *testing.T
+	b bytes.Buffer
+}
+
+func (r *reportPrint) Print(ctx context.Context, file string, line int, message string) {
+	fmt.Fprintf(&r.b, "[%s:%d] %s\n", file, line, message)
 }
 
 func init() {
-	// Catch unexpected stderrPrint usage.
-	stderrPrint = panicOnWrite{}
 	// Silence logging.
 	log.SetOutput(io.Discard)
 }
