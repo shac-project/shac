@@ -65,7 +65,7 @@ func TestLoad_Dir_Shac(t *testing.T) {
 	if err := Load(context.Background(), "testdata", "dir_shac.star"); err != nil {
 		t.Fatal(err)
 	}
-	if s := b.String(); s != "[//dir_shac.star:6] [\"exec\", \"io\", \"result\", \"scm\"]\n" {
+	if s := b.String(); s != "[//dir_shac.star:6] [\"exec\", \"io\", \"re\", \"result\", \"scm\"]\n" {
 		t.Fatal(s)
 	}
 }
@@ -87,6 +87,34 @@ func TestLoad_Minimal(t *testing.T) {
 	}
 	v := fmt.Sprintf("(%d, %d, %d)", version[0], version[1], version[2])
 	if s := b.String(); s != "[//minimal.star:5] "+v+"\n" {
+		t.Fatal(s)
+	}
+}
+
+func TestLoad_Re_All_Matches(t *testing.T) {
+	b := getErrPrint(t)
+	if err := Load(context.Background(), "testdata", "re_allmatches.star"); err != nil {
+		t.Fatal(err)
+	}
+	want := `[//re_allmatches.star:7] ()
+[//re_allmatches.star:9] (match(groups = ("TODO(foo)",), offset = 4), match(groups = ("TODO(bar)",), offset = 14))
+[//re_allmatches.star:11] (match(groups = ("anc", "n", "c"), offset = 0),)
+`
+	if s := b.String(); s != want {
+		t.Fatal(s)
+	}
+}
+
+func TestLoad_Re_Match(t *testing.T) {
+	b := getErrPrint(t)
+	if err := Load(context.Background(), "testdata", "re_match.star"); err != nil {
+		t.Fatal(err)
+	}
+	want := `[//re_match.star:7] None
+[//re_match.star:9] match(groups = ("TODO(foo)",), offset = 4)
+[//re_match.star:11] match(groups = ("anc", "n", "c"), offset = 0)
+`
+	if s := b.String(); s != want {
 		t.Fatal(s)
 	}
 }
@@ -290,6 +318,21 @@ func TestTestDataFail(t *testing.T) {
 			"io_read_file_windows.star",
 			// TODO(maruel): Fix the error to include the call site.
 			errors.New("use POSIX style path"),
+		},
+		{
+			"re_allmatches_no_arg.star",
+			// TODO(maruel): Fix the error to include the call site.
+			errors.New("allmatches: missing argument for pattern"),
+		},
+		{
+			"re_match_bad_re.star",
+			// TODO(maruel): Fix the error to include the call site.
+			errors.New("error parsing regexp: missing closing ): `(`"),
+		},
+		{
+			"re_match_no_arg.star",
+			// TODO(maruel): Fix the error to include the call site.
+			errors.New("match: missing argument for pattern"),
 		},
 		{
 			"register_check_kwargs.star",

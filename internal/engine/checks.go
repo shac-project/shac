@@ -60,6 +60,10 @@ func getShac() starlark.Value {
 		"io": toValue("io", starlark.StringDict{
 			"read_file": starlark.NewBuiltin("read_file", readFile),
 		}),
+		"re": toValue("re", starlark.StringDict{
+			"match":      starlark.NewBuiltin("match", reMatch),
+			"allmatches": starlark.NewBuiltin("allmatches", reAllMatches),
+		}),
 		"result": toValue("result", starlark.StringDict{
 			"emit_comment":  builtins.Fail,
 			"emit_row":      builtins.Fail,
