@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime/debug"
+	"sync"
 
 	"go.chromium.org/luci/common/data/stringset"
 	"go.chromium.org/luci/common/errors"
@@ -58,11 +59,16 @@ type inputs struct {
 
 // state represents a parsing state of the main starlark tree.
 type state struct {
-	intr        *interpreter.Interpreter
-	inputs      *inputs
+	intr     *interpreter.Interpreter
+	inputs   *inputs
+	allFiles bool
+	scm      scmCheckout
+
 	checks      checks
-	printCalled bool
 	doneLoading bool
+
+	mu          sync.Mutex
+	printCalled bool
 }
 
 // ctxState pulls out *state from the context.
@@ -110,6 +116,8 @@ func parse(ctx context.Context, inputs *inputs) (*state, error) {
 			interpreter.MainPkg: inputs.code,
 		},
 		Logger: func(file string, line int, message string) {
+			s.mu.Lock()
+			defer s.mu.Unlock()
 			s.printCalled = true
 			fmt.Fprintf(stderrPrint, "[%s:%d] %s\n", file, line, message)
 		},
@@ -117,8 +125,10 @@ func parse(ctx context.Context, inputs *inputs) (*state, error) {
 			failures.Install(th)
 		},
 	}
-
 	ctx = context.WithValue(ctx, stateCtxKey, s)
+
+	s.scm = getSCM(ctx, inputs.root)
+
 	var err error
 	if err = s.intr.Init(ctx); err == nil {
 		_, err = s.intr.ExecModule(ctx, interpreter.MainPkg, s.inputs.main)

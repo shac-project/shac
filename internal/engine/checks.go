@@ -65,6 +65,10 @@ func getShac() starlark.Value {
 			"emit_row":      builtins.Fail,
 			"emit_artifact": builtins.Fail,
 		}),
+		"scm": toValue("scm", starlark.StringDict{
+			"affected_files": starlark.NewBuiltin("affected_files", scmAffectedFiles),
+			"all_files":      starlark.NewBuiltin("all_files", scmAllFiles),
+		}),
 	})
 }
 

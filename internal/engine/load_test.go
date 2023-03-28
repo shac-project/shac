@@ -9,7 +9,9 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -43,6 +45,26 @@ func TestLoad_Backtrace(t *testing.T) {
 Error: inner`
 	if diff := cmp.Diff(want, err2.Backtrace()); diff != "" {
 		t.Fatalf("mismatch (+want -got):\n%s", diff)
+	}
+}
+
+func TestLoad_Dir_Native(t *testing.T) {
+	b := getErrPrint(t)
+	if err := Load(context.Background(), "testdata", "dir_native.star"); err != nil {
+		t.Fatal(err)
+	}
+	if s := b.String(); s != "[//dir_native.star:5] [\"commitHash\", \"version\"]\n" {
+		t.Fatal(s)
+	}
+}
+
+func TestLoad_Dir_Shac(t *testing.T) {
+	b := getErrPrint(t)
+	if err := Load(context.Background(), "testdata", "dir_shac.star"); err != nil {
+		t.Fatal(err)
+	}
+	if s := b.String(); s != "[//dir_shac.star:6] [\"exec\", \"io\", \"result\", \"scm\"]\n" {
+		t.Fatal(s)
 	}
 }
 
@@ -81,6 +103,93 @@ func TestLoad_Register_Check_Recursive(t *testing.T) {
 	if err := Load(context.Background(), "testdata", "register_check_recursive.star"); err == nil {
 		t.Fatal("expected error")
 	} else if s := err.Error(); s != "can't register checks after done loading" {
+		t.Fatal(s)
+	}
+}
+
+func makeGit(t *testing.T) string {
+	root := t.TempDir()
+	runGit(t, root, "init")
+	writeFile(t, root, "file1.txt", "First file")
+	runGit(t, root, "add", "file1.txt")
+	runGit(t, root, "commit", "-m", "Initial commit")
+	return root
+}
+
+func copyFile(t *testing.T, dst, path string) {
+	d, err := os.ReadFile(filepath.Join("testdata", path))
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, dst, path, string(d))
+}
+
+func writeFile(t *testing.T, root, path, content string) {
+	if err := os.WriteFile(filepath.Join(root, path), []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func runGit(t *testing.T, root string, args ...string) string {
+	cmd := exec.Command("git", args...)
+	cmd.Dir = root
+	// First is for git version before 2.32, the rest are to skip the user and system config.
+	cmd.Env = append(os.Environ(), "GIT_CONFIG_NOGLOBAL=true", "GIT_CONFIG_GLOBAL=", "GIT_CONFIG_SYSTEM=", "EMAIL=test@example.com", "GIT_AUTHOR_DATE=2000-01-01T00:00:00", "GIT_COMMITTER_DATE=2000-01-01T00:00:00")
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return strings.TrimSpace(string(out))
+}
+
+func TestLoad_SCM_Affected_Files_Raw(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, root, "file1.txt", "First file")
+	copyFile(t, root, "scm_affected_files.star")
+	b := getErrPrint(t)
+	if err := Load(context.Background(), root, "scm_affected_files.star"); err != nil {
+		t.Fatal(err)
+	}
+	if s := b.String(); s != "[//scm_affected_files.star:7] {\"file1.txt\": {}, \"scm_affected_files.star\": {}}\n" {
+		t.Fatal(s)
+	}
+}
+
+func TestLoad_SCM_All_Files_Raw(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, root, "file1.txt", "First file")
+	copyFile(t, root, "scm_all_files.star")
+	b := getErrPrint(t)
+	if err := Load(context.Background(), root, "scm_all_files.star"); err != nil {
+		t.Fatal(err)
+	}
+	if s := b.String(); s != "[//scm_all_files.star:7] {\"file1.txt\": {}, \"scm_all_files.star\": {}}\n" {
+		t.Fatal(s)
+	}
+}
+
+func TestLoad_SCM_Affected_Files_Git(t *testing.T) {
+	root := makeGit(t)
+	copyFile(t, root, "scm_affected_files.star")
+	runGit(t, root, "add", "scm_affected_files.star")
+	b := getErrPrint(t)
+	if err := Load(context.Background(), root, "scm_affected_files.star"); err != nil {
+		t.Fatal(err)
+	}
+	if s := b.String(); s != "[//scm_affected_files.star:7] {\"scm_affected_files.star\": {}}\n" {
+		t.Fatal(s)
+	}
+}
+
+func TestLoad_SCM_All_Files_Git(t *testing.T) {
+	root := makeGit(t)
+	copyFile(t, root, "scm_all_files.star")
+	runGit(t, root, "add", "scm_all_files.star")
+	b := getErrPrint(t)
+	if err := Load(context.Background(), root, "scm_all_files.star"); err != nil {
+		t.Fatal(err)
+	}
+	if s := b.String(); s != "[//scm_all_files.star:7] {\"file1.txt\": {}, \"scm_all_files.star\": {}}\n" {
 		t.Fatal(s)
 	}
 }
