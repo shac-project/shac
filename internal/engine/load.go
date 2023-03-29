@@ -50,7 +50,7 @@ func Load(ctx context.Context, root, main string, allFiles bool, r Report) error
 	if len(s.checks.c) == 0 && !s.printCalled {
 		return errors.New("did you forget to call register_check?")
 	}
-	ctx = context.WithValue(ctx, stateCtxKey, s)
+	ctx = context.WithValue(ctx, &stateCtxKey, s)
 	if errs := s.checks.callAll(ctx, s.intr.Thread(ctx)); len(errs) != 0 {
 		return dedupeErrs(errs)
 	}
@@ -82,7 +82,7 @@ type state struct {
 //
 // Panics if not there.
 func ctxState(ctx context.Context) *state {
-	return ctx.Value(stateCtxKey).(*state)
+	return ctx.Value(&stateCtxKey).(*state)
 }
 
 // dedupeErrs returns a list of merged errors as a MultiError, deduplicating
@@ -101,7 +101,7 @@ func dedupeErrs(err ...error) error {
 	return errs
 }
 
-const stateCtxKey = "shac.State"
+var stateCtxKey = "shac.State"
 
 var (
 	// version is the current tool version.
@@ -130,7 +130,7 @@ func parse(ctx context.Context, inputs *inputs, r Report) (*state, error) {
 			failures.Install(th)
 		},
 	}
-	ctx = context.WithValue(ctx, stateCtxKey, s)
+	ctx = context.WithValue(ctx, &stateCtxKey, s)
 
 	s.scm = getSCM(ctx, inputs.root)
 
