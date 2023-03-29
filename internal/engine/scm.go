@@ -6,6 +6,7 @@ package engine
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io/fs"
 	"log"
@@ -56,7 +57,15 @@ func getSCM(ctx context.Context, root string) scmCheckout {
 	if err == nil {
 		return g
 	}
-	log.Printf("git not detected: %s", err)
+	if errors.Is(err, exec.ErrNotFound) {
+		log.Printf("git not detected on $PATH")
+	} else if strings.Contains(err.Error(), "not a git repository") {
+		log.Printf("current working directory is not a git repository")
+	} else {
+		// Any other error is fatal, `g.err` will be set and cause execution to
+		// stop the next time `g.run` is called.
+		return g
+	}
 	// TODO(maruel): Add the scm of your choice.
 	return &rawTree{root: root}
 }
@@ -125,7 +134,11 @@ func (g *gitCheckout) run(ctx context.Context, args ...string) string {
 	cmd.Env = g.env
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		g.err = fmt.Errorf("error running git %s: %s", strings.Join(args, " "), out)
+		if errExit := (&exec.ExitError{}); errors.As(err, &errExit) {
+			g.err = fmt.Errorf("error running git %s: %w\n%s", strings.Join(args, " "), err, out)
+		} else {
+			g.err = err
+		}
 	}
 	return strings.TrimSpace(string(out))
 }
