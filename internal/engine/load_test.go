@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -168,10 +169,6 @@ func TestLoad_SCM_Git_Upstream_Staged(t *testing.T) {
 func TestTestDataFail(t *testing.T) {
 	t.Parallel()
 	p, got := enumDir(t, "fail")
-	inexistant, err := filepath.Abs(filepath.Join("testdata", "fail", "inexistant"))
-	if err != nil {
-		t.Fatal(err)
-	}
 	// TODO(maruel): Fix the error to include the call site when applicable.
 	data := []struct {
 		name  string
@@ -211,7 +208,21 @@ func TestTestDataFail(t *testing.T) {
 		},
 		{
 			"io_read_file_inexistant.star",
-			"open " + inexistant + ": no such file or directory",
+			func() string {
+				inexistant, err := filepath.Abs(filepath.Join("testdata", "fail"))
+				if err != nil {
+					t.Fatal(err)
+				}
+				// Work around the fact that path are not yet correctly handled on
+				// Windows.
+				inexistant += "/inexistant"
+				// TODO(maruel): This error comes from the OS, thus this is a very
+				// brittle test case.
+				if runtime.GOOS == "windows" {
+					return "open " + inexistant + ": The system cannot find the file specified."
+				}
+				return "open " + inexistant + ": no such file or directory"
+			}(),
 			"",
 		},
 		{
@@ -431,6 +442,8 @@ func enumDir(t *testing.T, name string) (string, []string) {
 func makeGit(t *testing.T) string {
 	root := t.TempDir()
 	runGit(t, root, "init")
+	runGit(t, root, "config", "user.email", "test@example.com")
+	runGit(t, root, "config", "user.name", "engine test")
 	writeFile(t, root, "file1.txt", "First file")
 	runGit(t, root, "add", "file1.txt")
 	runGit(t, root, "commit", "-m", "Initial commit")
@@ -465,11 +478,18 @@ func writeFile(t *testing.T, root, path, content string) {
 func runGit(t *testing.T, root string, args ...string) string {
 	cmd := exec.Command("git", args...)
 	cmd.Dir = root
-	// First is for git version before 2.32, the rest are to skip the user and system config.
-	cmd.Env = append(os.Environ(), "GIT_CONFIG_NOGLOBAL=true", "GIT_CONFIG_GLOBAL=", "GIT_CONFIG_SYSTEM=", "EMAIL=test@example.com", "GIT_AUTHOR_DATE=2000-01-01T00:00:00", "GIT_COMMITTER_DATE=2000-01-01T00:00:00")
+	// First is for git version before 2.32, the next two are to skip the user
+	// and system config on more recent version.
+	cmd.Env = append(os.Environ(),
+		"GIT_CONFIG_NOGLOBAL=true",
+		"GIT_CONFIG_GLOBAL=",
+		"GIT_CONFIG_SYSTEM=",
+		"GIT_AUTHOR_DATE=2000-01-01T00:00:00",
+		"GIT_COMMITTER_DATE=2000-01-01T00:00:00",
+		"LANG=C")
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("failed to run git %s\n%s\n%s", strings.Join(args, " "), err, out)
 	}
 	return strings.TrimSpace(string(out))
 }
