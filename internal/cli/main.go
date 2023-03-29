@@ -14,11 +14,6 @@ import (
 	flag "github.com/spf13/pflag"
 )
 
-type app struct {
-	topLevelFlags *flag.FlagSet
-	subcommands   []*flag.FlagSet
-}
-
 type subcommand interface {
 	Name() string
 	Description() string

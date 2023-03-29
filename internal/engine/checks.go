@@ -127,6 +127,7 @@ func readFile(th *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kw
 	if !strings.HasPrefix(dst, s.inputs.root) {
 		return starlark.None, errors.New("cannot escape root")
 	}
+	//#nosec G304
 	b, err := os.ReadFile(dst)
 	if err != nil {
 		return starlark.None, err

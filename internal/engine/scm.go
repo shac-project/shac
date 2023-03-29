@@ -86,7 +86,7 @@ func (g *gitCheckout) init(ctx context.Context, root string) error {
 	}
 	// Determine pristine status but ignoring untracked files. We do not
 	// distinguish between indexed or not.
-	isPristine := "" == g.run(ctx, "status", "--porcelain", "--untracked-files=no")
+	isPristine := g.run(ctx, "status", "--porcelain", "--untracked-files=no") == ""
 	g.upstream.hash = g.run(ctx, "rev-parse", "@{u}")
 	g.upstream.ref = g.run(ctx, "rev-parse", "--abbrev-ref=strict", "--symbolic-full-name", "@{u}")
 	if g.err != nil {
@@ -120,7 +120,7 @@ func (g *gitCheckout) run(ctx context.Context, args ...string) string {
 	cmd.Dir = g.root
 	if g.env == nil {
 		// First is for git version before 2.32, the rest are to skip the user and system config.
-		g.env = append(os.Environ(), "GIT_CONFIG_NOGLOBAL=true", "GIT_CONFIG_GLOBAL=", "GIT_CONFIG_SYSTEM=")
+		g.env = append(os.Environ(), "GIT_CONFIG_NOGLOBAL=true", "GIT_CONFIG_GLOBAL=", "GIT_CONFIG_SYSTEM=", "LANG=C")
 	}
 	cmd.Env = g.env
 	out, err := cmd.CombinedOutput()
@@ -265,10 +265,11 @@ func (r *rawTree) affectedFiles(ctx context.Context) ([]file, error) {
 func (r *rawTree) allFiles(ctx context.Context) ([]file, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	var err error
 	if r.all == nil {
 		l := len(r.root) + 1
-		filepath.WalkDir(r.root, func(path string, d fs.DirEntry, err error) error {
-			if err == nil {
+		err = filepath.WalkDir(r.root, func(path string, d fs.DirEntry, err2 error) error {
+			if err2 == nil {
 				if !d.IsDir() {
 					r.all = append(r.all, file{path: path[l:]})
 				}
@@ -276,7 +277,7 @@ func (r *rawTree) allFiles(ctx context.Context) ([]file, error) {
 			return nil
 		})
 	}
-	return r.all, nil
+	return r.all, err
 }
 
 func (r *rawTree) newLines(path string) starlarkFunc {
@@ -318,7 +319,7 @@ func scmFilesCommon(th *starlark.Thread, fn *starlark.Builtin, args starlark.Tup
 	// files is guaranteed to be sorted.
 	out := starlark.NewDict(len(files))
 	for _, f := range files {
-		out.SetKey(starlark.String(f.path), toValue("file", starlark.StringDict{
+		_ = out.SetKey(starlark.String(f.path), toValue("file", starlark.StringDict{
 			"action":    starlark.String(f.action),
 			"new_lines": starlark.NewBuiltin("new_lines", s.scm.newLines(f.path)),
 		}))
@@ -343,6 +344,7 @@ func scmAllFiles(th *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple,
 
 // newLinesWhole returns the whole file as new lines.
 func newLinesWhole(root, path string) (starlark.Value, error) {
+	//#nosec G304
 	b, err := os.ReadFile(filepath.Join(root, path))
 	if err != nil {
 		return starlark.None, err
