@@ -112,6 +112,10 @@ func (g *gitCheckout) run(ctx context.Context, args ...string) string {
 	if g.err != nil {
 		return ""
 	}
+	args = append([]string{
+		// Don't update the git index during read operations.
+		"--no-optional-locks",
+	}, args...)
 	cmd := exec.CommandContext(ctx, "git", args...)
 	cmd.Dir = g.root
 	if g.env == nil {
