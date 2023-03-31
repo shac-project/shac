@@ -6,16 +6,23 @@ package engine
 
 import (
 	"context"
+	_ "embed"
+	"fmt"
 	"os"
 	"path"
 	"strings"
 
 	"go.chromium.org/luci/common/errors"
+	"go.chromium.org/luci/lucicfg/docgen"
 	"go.chromium.org/luci/starlark/builtins"
 	"go.chromium.org/luci/starlark/interpreter"
+	"go.fuchsia.dev/shac-project/shac/doc"
 	"go.starlark.net/starlark"
 	"go.starlark.net/starlarkstruct"
 )
+
+//go:embed stdlib.mdt
+var shacMDTemplate string
 
 // checks is a list of registered checks callbacks.
 //
@@ -55,6 +62,9 @@ func (c *checks) callAll(ctx context.Context, th *starlark.Thread) errors.MultiE
 	return errs
 }
 
+// getShac returns the shac object.
+//
+// Make sure to update stdlib.star whenever this object is modified.
 func getShac() starlark.Value {
 	return toValue("shac", starlark.StringDict{
 		"exec": builtins.Fail,
@@ -77,12 +87,32 @@ func getShac() starlark.Value {
 	})
 }
 
+// getDoc returns documentation for all the interfaces exposed by shac.
+func getDoc() string {
+	g := docgen.Generator{
+		Starlark: func(m string) (string, error) {
+			// 'module' here is something like "@stdlib//path".
+			if m != "main.star" {
+				return "", fmt.Errorf("unknown module %q", m)
+			}
+			return doc.StdlibSrc, nil
+		},
+	}
+	b, err := g.Render(shacMDTemplate)
+	if err != nil {
+		panic(err)
+	}
+	return string(b)
+}
+
 // toValue converts a StringDict to a Value.
 func toValue(name string, d starlark.StringDict) starlark.Value {
 	return starlarkstruct.FromStringDict(starlark.String(name), d)
 }
 
 // registerCheck implements native function register_check().
+//
+// Make sure to update stdlib.star whenever this function is modified.
 func registerCheck(th *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	var cb starlark.Callable
 	if err := starlark.UnpackPositionalArgs(fn.Name(), args, kwargs, 1, &cb); err != nil {
@@ -103,6 +133,8 @@ func registerCheck(th *starlark.Thread, fn *starlark.Builtin, args starlark.Tupl
 // readFile implements native function shac.io.read_file().
 //
 // Use POSIX style relative path. "..", "\" and absolute paths are denied.
+//
+// Make sure to update stdlib.star whenever this function is modified.
 func readFile(th *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	var argname starlark.String
 	if err := starlark.UnpackPositionalArgs(fn.Name(), args, kwargs, 1, &argname); err != nil {

@@ -1,0 +1,67 @@
+{{/*
+Copyright 2023 The Fuchsia Authors. All rights reserved.
+Use of this source code is governed by a BSD-style
+license that can be found in the LICENSE file.
+
+Renders documentation for all functions in the given struct, and
+recurses.
+
+Argument is a lucicfg/docgen.symbol. See checks.go for the processing code and
+docgen_test.go on how to use the template.
+*/}}
+
+{{- /* gen-struct generates the documentation for a struct. It is recursive. */}}
+{{- define "gen-struct" -}}
+## {{.FullName}} {#{{.Anchor}}}
+
+{{ .Def.Comments | LinkifySymbols }}
+{{- range .Symbols "struct"}}
+
+{{ template "gen-struct" . }}
+{{- end }}
+{{- range .Symbols "var"}}
+
+{{ template "gen-var" . }}
+{{- end }}
+{{- range .Symbols "func"}}
+
+{{ template "gen-func" . }}
+{{- end}}
+{{- end}}
+
+{{- /* gen-func generates the documentation for a func. */}}
+{{- define "gen-func" -}}
+## {{.FullName}} {#{{.Anchor}}}
+
+```python
+{{.InvocationSnippet}}
+```
+
+{{.Doc.Description | LinkifySymbols}}
+{{- if .Doc.Args}}
+
+### Arguments {#{{.Anchor "args"}}}
+{{ range .Doc.Args}}
+* **{{.Name | EscapeMD}}**: {{.Desc | LinkifySymbols}}
+{{- end}}
+{{- end}}
+{{- if .Doc.Returns}}
+
+### Returns {#{{.Anchor "returns"}}}
+
+{{.Doc.Returns | LinkifySymbols}}
+{{- end}}
+{{- end}}
+
+{{- /* gen-var generates the documentation for a variable. */}}
+{{- define "gen-var"}}
+## {{.FullName}} {#{{.Anchor}}}
+{{- end}}
+
+{{- $shac := Symbol "main.star" "shac"}}
+{{- $register_check := Symbol "main.star" "register_check" -}}
+# shac runtime library
+
+{{ template "gen-func" $register_check}}
+
+{{ template "gen-struct" $shac}}

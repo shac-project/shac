@@ -332,6 +332,7 @@ func scmFilesCommon(th *starlark.Thread, fn *starlark.Builtin, args starlark.Tup
 	// files is guaranteed to be sorted.
 	out := starlark.NewDict(len(files))
 	for _, f := range files {
+		// Make sure to update stdlib.star whenever this object is modified.
 		_ = out.SetKey(starlark.String(f.path), toValue("file", starlark.StringDict{
 			"action":    starlark.String(f.action),
 			"new_lines": starlark.NewBuiltin("new_lines", s.scm.newLines(f.path)),
@@ -344,6 +345,8 @@ func scmFilesCommon(th *starlark.Thread, fn *starlark.Builtin, args starlark.Tup
 // scmAffectedFiles implements native function shac.scm.affected_files().
 //
 // It returns a dictionary.
+//
+// Make sure to update stdlib.star whenever this function is modified.
 func scmAffectedFiles(th *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	return scmFilesCommon(th, fn, args, kwargs, false)
 }
@@ -351,11 +354,15 @@ func scmAffectedFiles(th *starlark.Thread, fn *starlark.Builtin, args starlark.T
 // scmAllFiles implements native function shac.scm.all_files().
 //
 // It returns a dictionary.
+//
+// Make sure to update stdlib.star whenever this function is modified.
 func scmAllFiles(th *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	return scmFilesCommon(th, fn, args, kwargs, true)
 }
 
 // newLinesWhole returns the whole file as new lines.
+//
+// Make sure to update stdlib.star whenever this function is modified.
 func newLinesWhole(root, path string) (starlark.Value, error) {
 	//#nosec G304
 	b, err := os.ReadFile(filepath.Join(root, path))
