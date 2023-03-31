@@ -14,7 +14,7 @@ Scalable Hermetic Analysis and Checks.
 
 ⚠ The source of truth is at
 https://fuchsia.googlesource.com/shac-project/shac.git and uses
-[Gerrit](https://fuchsia-review.git.corp.google.com/q/repo:shac-project/shac)
+[Gerrit](https://fuchsia-review.googlesource.com/q/repo:shac-project/shac)
 for code review.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) to submit changes.
