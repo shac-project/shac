@@ -48,3 +48,20 @@ Returns affected files.
 
 A map of {path: struct()} where the struct has a string field action and a
 function new_line().
+
+## shac.exec {#shac.exec}
+
+```python
+shac.exec(cmd = None, cwd = None)
+```
+
+Runs a command as a subprocess.
+
+### Arguments {#shac.exec-args}
+
+* **cmd**: Subprocess command line.
+* **cwd**: Relative path to cwd for the subprocess.
+
+### Returns {#shac.exec-returns}
+
+An integer corresponding to the subprocess exit code.

@@ -9,6 +9,7 @@ import (
 	_ "embed"
 	"fmt"
 	"os"
+	"os/exec"
 	"path"
 	"strings"
 
@@ -67,7 +68,7 @@ func (c *checks) callAll(ctx context.Context, th *starlark.Thread) errors.MultiE
 // Make sure to update stdlib.star whenever this object is modified.
 func getShac() starlark.Value {
 	return toValue("shac", starlark.StringDict{
-		"exec": builtins.Fail,
+		"exec": starlark.NewBuiltin("exec", execSubprocess),
 		"io": toValue("io", starlark.StringDict{
 			"read_file": starlark.NewBuiltin("read_file", readFile),
 		}),
@@ -140,24 +141,11 @@ func readFile(th *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kw
 	if err := starlark.UnpackPositionalArgs(fn.Name(), args, kwargs, 1, &argname); err != nil {
 		return nil, err
 	}
-	p := string(argname)
-	if strings.Contains(p, "\\") {
-		return starlark.None, errors.New("use POSIX style path")
-	}
-	// Package path use POSIX style even on Windows, unlike path/filepath.
-	if path.IsAbs(p) {
-		return starlark.None, errors.New("do not use absolute path")
-	}
-	// This is overly zealous. Revisit if it is too much.
-	// TODO(maruel): Make it work on Windows.
 	ctx := interpreter.Context(th)
 	s := ctxState(ctx)
-	if path.Clean(p) != p {
-		return starlark.None, errors.New("pass cleaned path")
-	}
-	dst := path.Join(s.inputs.root, p)
-	if !strings.HasPrefix(dst, s.inputs.root) {
-		return starlark.None, errors.New("cannot escape root")
+	dst, err := absPath(string(argname), s.inputs.root)
+	if err != nil {
+		return starlark.None, err
 	}
 	//#nosec G304
 	b, err := os.ReadFile(dst)
@@ -166,4 +154,83 @@ func readFile(th *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kw
 	}
 	// TODO(maruel): Use unsafe conversion to save a memory copy.
 	return starlark.Bytes(b), nil
+}
+
+// absPath makes a source-relative path absolute, validating it along the way.
+//
+// TODO(maruel): Make it work on Windows.
+func absPath(rel, rootDir string) (string, error) {
+	if strings.Contains(rel, "\\") {
+		return "", errors.New("use POSIX style path")
+	}
+	// Package path use POSIX style even on Windows, unlike path/filepath.
+	if path.IsAbs(rel) {
+		return "", errors.New("do not use absolute path")
+	}
+	// This is overly zealous. Revisit if it is too much.
+	if path.Clean(rel) != rel {
+		return "", errors.New("pass cleaned path")
+	}
+	pathParts := append([]string{rootDir}, strings.Split(rel, "/")...)
+	res := path.Join(pathParts...)
+	if !strings.HasPrefix(res, rootDir) {
+		return "", errors.New("cannot escape root")
+	}
+	return res, nil
+}
+
+// execSubprocess implements the native function shac.exec().
+//
+// TODO(olivernewman): Return a struct with stdout and stderr in addition to the
+// exit code.
+//
+// Make sure to update stdlib.star whenever this function is modified.
+func execSubprocess(th *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+	var rawCmd *starlark.List
+	var cwd starlark.String
+	if err := starlark.UnpackArgs(fn.Name(), args, kwargs,
+		"cmd", &rawCmd,
+		"cwd?", &cwd,
+	); err != nil {
+		return nil, err
+	}
+	if rawCmd.Len() == 0 {
+		return starlark.None, errors.New("cmdline must not be an empty list")
+	}
+
+	var parsedCmd []string
+	var val starlark.Value
+	iter := rawCmd.Iterate()
+	defer iter.Done()
+	for iter.Next(&val) {
+		str, ok := val.(starlark.String)
+		if !ok {
+			return starlark.None, errors.New("command args must be strings")
+		}
+		parsedCmd = append(parsedCmd, str.GoString())
+	}
+
+	ctx := interpreter.Context(th)
+	s := ctxState(ctx)
+
+	// TODO(olivernewman): Wrap with nsjail on linux.
+	cmd := exec.CommandContext(ctx, parsedCmd[0], parsedCmd[1:]...)
+
+	if cwd.GoString() != "" {
+		var err error
+		cmd.Dir, err = absPath(cwd.GoString(), s.inputs.root)
+		if err != nil {
+			return starlark.None, err
+		}
+	} else {
+		cmd.Dir = s.inputs.root
+	}
+
+	if err := cmd.Run(); err != nil {
+		if errExit := (&exec.ExitError{}); errors.As(err, &errExit) {
+			return starlark.MakeInt(errExit.ExitCode()), nil
+		}
+		return starlark.None, err
+	}
+	return starlark.MakeInt(0), nil
 }

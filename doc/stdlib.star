@@ -23,8 +23,21 @@ def _affected_files(glob = None):
   """
   pass
 
+def _exec(cmd, cwd = None):
+  """Runs a command as a subprocess.
+
+  Args:
+    cmd: Subprocess command line.
+    cwd: Relative path to cwd for the subprocess.
+
+  Returns:
+    An integer corresponding to the subprocess exit code.
+  """
+  pass
+
 # shac is the object passed to register_check(...) callback.
 shac = struct(
+  exec = _exec,
   # shac.io exposes the API to interact with the file system.
   io = struct(
     read_file = _read_file,

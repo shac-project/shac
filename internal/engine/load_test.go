@@ -190,6 +190,21 @@ func TestTestDataFail(t *testing.T) {
 			"",
 		},
 		{
+			"exec_bad_type_in_args.star",
+			"command args must be strings",
+			"",
+		},
+		{
+			"exec_command_not_in_path.star",
+			`exec: "this-command-does-not-exist": executable file not found in $PATH`,
+			"",
+		},
+		{
+			"exec_invalid_cwd.star",
+			"cannot escape root",
+			"",
+		},
+		{
 			"fail.star",
 			"an expected failure",
 			`  //fail.star:5:5: in <toplevel>` + "\n" +
@@ -356,6 +371,10 @@ func TestTestDataSimple(t *testing.T) {
 		{
 			"dir_shac.star",
 			"[//dir_shac.star:6] [\"exec\", \"io\", \"re\", \"result\", \"scm\"]\n",
+		},
+		{
+			"exec_success.star",
+			"[//exec_success.star:6] retcode: 0\n",
 		},
 		{
 			"io_read_file.star",

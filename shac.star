@@ -13,5 +13,7 @@ def cb(shac):
         out += "\n" + name + "(" + str(num) + "): " + m.groups[0]
   if out:
     print(out)
+  if shac.exec(["echo", "hello world"]) != 0:
+    fail("failed to run echo")
 
 register_check(cb)
