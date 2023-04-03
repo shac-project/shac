@@ -214,6 +214,7 @@ func execSubprocess(th *starlark.Thread, fn *starlark.Builtin, args starlark.Tup
 	s := ctxState(ctx)
 
 	// TODO(olivernewman): Wrap with nsjail on linux.
+	//#nosec G204
 	cmd := exec.CommandContext(ctx, parsedCmd[0], parsedCmd[1:]...)
 
 	if cwd.GoString() != "" {

@@ -196,7 +196,12 @@ func TestTestDataFail(t *testing.T) {
 		},
 		{
 			"exec_command_not_in_path.star",
-			`exec: "this-command-does-not-exist": executable file not found in $PATH`,
+			func() string {
+				if runtime.GOOS == "windows" {
+					return `exec: "this-command-does-not-exist": executable file not found in %PATH%`
+				}
+				return `exec: "this-command-does-not-exist": executable file not found in $PATH`
+			}(),
 			"",
 		},
 		{
