@@ -26,7 +26,7 @@ docgen_test.go on how to use the template.
 
 {{- /* gen-struct generates the documentation for a struct. It is recursive. */}}
 {{- define "gen-struct" -}}
-## {{.FullName}} {#{{.Anchor}}}
+## {{.FullName}}
 
 {{ if .Def }}{{ .Def.Comments | LinkifySymbols }}{{ end }}
 {{- range .Symbols "struct"}}
@@ -46,7 +46,7 @@ docgen_test.go on how to use the template.
 
 {{- /* gen-func generates the documentation for a func. */}}
 {{- define "gen-func" -}}
-## {{.FullName}} {#{{.Anchor}}}
+## {{.FullName}}
 
 ```python
 {{.InvocationSnippet}}
@@ -55,14 +55,14 @@ docgen_test.go on how to use the template.
 {{.Doc.Description | LinkifySymbols}}
 {{- if .Doc.Args}}
 
-### Arguments {#{{.Anchor "args"}}}
+### Arguments
 {{ range .Doc.Args}}
 * **{{.Name | EscapeMD}}**: {{.Desc | LinkifySymbols}}
 {{- end}}
 {{- end}}
 {{- if .Doc.Returns}}
 
-### Returns {#{{.Anchor "returns"}}}
+### Returns
 
 {{.Doc.Returns | LinkifySymbols}}
 {{- end}}
@@ -71,5 +71,5 @@ docgen_test.go on how to use the template.
 
 {{- /* gen-var generates the documentation for a variable. */}}
 {{- define "gen-var"}}
-## {{.FullName}} {#{{.Anchor}}}
+## {{.FullName}}
 {{- end}}
