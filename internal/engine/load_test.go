@@ -145,6 +145,7 @@ func TestLoad_SCM_Git_Upstream_Staged(t *testing.T) {
 	t.Run("affected", func(t *testing.T) {
 		t.Parallel()
 		want := "[//scm_affected_files.star:9] \n" +
+			"file1.txt: R\n" +
 			"file2.txt: A\n" +
 			"scm_affected_files.star: A\n" +
 			"scm_affected_files_new_lines.star: A\n" +
@@ -464,16 +465,21 @@ func enumDir(t *testing.T, name string) (string, []string) {
 }
 
 func makeGit(t *testing.T) string {
+	// scm.go requires two commits. Not really worth fixing yet, it's only
+	// annoying in unit tests.
 	root := t.TempDir()
 	runGit(t, root, "init")
 	runGit(t, root, "config", "user.email", "test@example.com")
 	runGit(t, root, "config", "user.name", "engine test")
-	writeFile(t, root, "file1.txt", "First file")
-	runGit(t, root, "add", "file1.txt")
+
+	writeFile(t, root, "file.txt", "First file\nIt doesn't contain\na lot of lines.\n")
+	runGit(t, root, "add", "file.txt")
 	runGit(t, root, "commit", "-m", "Initial commit")
-	// TODO(maruel): scm.go requires two commits. Not really worth fixing yet,
-	// it's only annoying in unit tests.
-	writeFile(t, root, "file2.txt", "First file")
+
+	runGit(t, root, "mv", "file.txt", "file1.txt")
+	writeFile(t, root, "file1.txt", "First file\nIt contains\na lot of lines.\n")
+	runGit(t, root, "add", "file1.txt")
+	writeFile(t, root, "file2.txt", "Second file")
 	runGit(t, root, "add", "file2.txt")
 	runGit(t, root, "commit", "-m", "Second commit")
 	return root

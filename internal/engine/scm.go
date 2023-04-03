@@ -97,20 +97,22 @@ func (g *gitCheckout) init(ctx context.Context, root string) error {
 	// distinguish between indexed or not.
 	isPristine := g.run(ctx, "status", "--porcelain", "--untracked-files=no") == ""
 	g.upstream.hash = g.run(ctx, "rev-parse", "@{u}")
-	g.upstream.ref = g.run(ctx, "rev-parse", "--abbrev-ref=strict", "--symbolic-full-name", "@{u}")
 	if g.err != nil {
 		const noUpstream = "no upstream configured for branch"
 		const noBranch = "HEAD does not point to a branch"
 		if s := g.err.Error(); strings.Contains(s, noUpstream) || strings.Contains(s, noBranch) {
-			// If @{u} is undefined, silently default to use HEAD~1 if pristine, HEAD otherwise.
 			g.err = nil
+			// If @{u} is undefined, silently default to use HEAD~1 if pristine, HEAD otherwise.
 			if isPristine {
 				// If HEAD~1 doesn't exist, this will fail.
 				g.upstream.ref = "HEAD~1"
 			} else {
 				g.upstream.ref = "HEAD"
 			}
+			g.upstream.hash = g.run(ctx, "rev-parse", g.upstream.ref)
 		}
+	} else {
+		g.upstream.ref = g.run(ctx, "rev-parse", "--abbrev-ref=strict", "--symbolic-full-name", "@{u}")
 	}
 	return g.err
 }
@@ -150,20 +152,37 @@ func (g *gitCheckout) affectedFiles(ctx context.Context) ([]file, error) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	if g.modified == nil {
-		// TODO(maruel): Using --find-copies-harder would be too slow for large
-		// repositories. It'd be nice to autodetect?
-		if o := g.run(ctx, "diff", "--name-status", "-z", "-C", g.upstream.ref); len(o) != 0 {
-			// This code keeps a hold pointers on the original buffer. It's not a big deal.
-			items := strings.Split(o[:len(o)-1], "\x00")
-			g.modified = make([]file, len(items)/2)
-			for i := 0; i < len(items); i += 2 {
-				g.modified[i/2].action = items[i]
-				g.modified[i/2].path = items[i+1]
+		// Each line has a variable number of NUL character, so process one at a time.
+		for o := g.run(ctx, "diff", "--name-status", "-z", "-C", g.upstream.hash); len(o) != 0; {
+			var action, path string
+			if i := strings.IndexByte(o, 0); i != -1 {
+				// For rename, ignore the percentage number.
+				action = o[:1]
+				o = o[i+1:]
+				if i = strings.IndexByte(o, 0); i != -1 {
+					path = o[:i]
+					o = o[i+1:]
+					if action == "R" {
+						if i = strings.IndexByte(o, 0); i != -1 {
+							// Ignore the source for now.
+							path = o[:i]
+							o = o[i+1:]
+						} else {
+							path = ""
+						}
+					}
+				}
 			}
-			sort.Slice(g.modified, func(i, j int) bool { return g.modified[i].path < g.modified[j].path })
-		} else {
+			if path == "" {
+				g.err = fmt.Errorf("missing trailing NUL character from git diff --name-status -z -C %s", g.upstream.hash)
+				break
+			}
+			g.modified = append(g.modified, file{action: action, path: path})
+		}
+		if g.modified == nil {
 			g.modified = []file{}
 		}
+		sort.Slice(g.modified, func(i, j int) bool { return g.modified[i].path < g.modified[j].path })
 	}
 	return g.modified, g.err
 }
@@ -208,7 +227,7 @@ func (g *gitCheckout) newLines(path string) starlarkFunc {
 			// was modified or not.
 			return newLinesWhole(s.inputs.root, path)
 		}
-		o := g.run(ctx, "diff", "--no-prefix", "-C", "-U0", g.upstream.ref, "--", path)
+		o := g.run(ctx, "diff", "--no-prefix", "-C", "-U0", g.upstream.hash, "--", path)
 		if o == "" {
 			// TODO(maruel): This is not normal. For now fallback to the whole file.
 			return newLinesWhole(s.inputs.root, path)
