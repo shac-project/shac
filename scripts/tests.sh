@@ -5,24 +5,29 @@
 
 set -eu -o pipefail
 
-REPO_ROOT="$(dirname "$(dirname "${BASH_SOURCE[0]}")")"
+REPO_ROOT="$(realpath "$(dirname "$(dirname "${BASH_SOURCE[0]}")")")"
 cd "$REPO_ROOT"
 
-GO=go
+CIPD_ROOT="$REPO_ROOT/.tools"
+if [ ! -d "$CIPD_ROOT" ]; then
+  mkdir "$CIPD_ROOT"
+fi
+# Make it so "go install" installs locally.
+export GOPATH="$CIPD_ROOT"
+export GOBIN="$CIPD_ROOT/bin"
+export PATH="$CIPD_ROOT/bin:$PATH"
 
 # Install Go using CIPD if it's not on $PATH.
-if ! command -v "$GO" > /dev/null; then
-  CIPD_ROOT="$REPO_ROOT/.tools"
-  if [ ! -d "$CIPD_ROOT" ]; then
-    echo "- Installing Go from CIPD..."
-    cipd init -force "$CIPD_ROOT"
-    cipd install -log-level error -root "$CIPD_ROOT" 'infra/3pp/tools/go/${platform}'
-  fi
-  GO="$CIPD_ROOT/bin/go"
+if ! command -v "go" > /dev/null; then
+  export GOROOT="$CIPD_ROOT/go"
+  echo "- Installing Go from CIPD..."
+  cipd init -force "$GOROOT"
+  cipd install -log-level error -root "$GOROOT" 'infra/3pp/tools/go/${platform}'
+  export PATH="$GOROOT/bin:$PATH"
 fi
 
 echo "- Testing"
-"$GO" test -cover ./...
+go test -cover ./...
 
 echo "- Running"
-"$GO" run . check -v
+go run . check -v

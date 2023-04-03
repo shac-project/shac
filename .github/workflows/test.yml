@@ -119,7 +119,6 @@ jobs:
       if: always()
       run: |
         go install github.com/gordonklaus/ineffassign@latest
-        go install github.com/securego/gosec/v2/cmd/gosec@latest
         go install golang.org/x/tools/go/analysis/passes/shadow/cmd/shadow@latest
         go install honnef.co/go/tools/cmd/staticcheck@latest
     - name: 'go install necessary tools (ubuntu)'
@@ -144,9 +143,6 @@ jobs:
     - name: 'Check: staticcheck'
       if: always()
       run: staticcheck ./...
-    - name: 'Check: gosec'
-      if: always()
-      run: gosec -fmt=golint -quiet ./...
       # The following checks are not dependent on the OS or go build tags. Only
       # run them on ubuntu-latest since it's the fastest one.
     - name: 'Check: no executable was committed (ubuntu)'

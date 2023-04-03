@@ -39,6 +39,6 @@ func (d *docCmd) Execute(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
-	os.Stdout.WriteString(doc)
+	_, _ = os.Stdout.WriteString(doc)
 	return nil
 }

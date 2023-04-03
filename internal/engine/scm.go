@@ -383,7 +383,6 @@ func scmAllFiles(th *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple,
 //
 // Make sure to update stdlib.star whenever this function is modified.
 func newLinesWhole(root, path string) (starlark.Value, error) {
-	//#nosec G304
 	b, err := os.ReadFile(filepath.Join(root, path))
 	if err != nil {
 		return starlark.None, err

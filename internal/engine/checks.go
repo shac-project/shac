@@ -126,7 +126,6 @@ func readFile(th *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kw
 	if err != nil {
 		return starlark.None, err
 	}
-	//#nosec G304
 	b, err := os.ReadFile(dst)
 	if err != nil {
 		return starlark.None, err

@@ -7,6 +7,8 @@
 This file will evolve as new shac functionality is being added.
 """
 
+load("go.star", "gosec")
+
 
 def new_todos(shac):
   """Prints the added TODOs.
@@ -26,4 +28,6 @@ def new_todos(shac):
   if shac.exec(["echo", "hello world"]) != 0:
     fail("failed to run echo")
 
+
 register_check(new_todos)
+register_check(gosec)
