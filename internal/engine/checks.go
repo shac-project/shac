@@ -91,7 +91,9 @@ func toValue(name string, d starlark.StringDict) starlark.Value {
 // Make sure to update stdlib.star whenever this function is modified.
 func registerCheck(th *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	var cb starlark.Callable
-	if err := starlark.UnpackPositionalArgs(fn.Name(), args, kwargs, 1, &cb); err != nil {
+	if err := starlark.UnpackArgs(fn.Name(), args, kwargs,
+		"cb", &cb,
+	); err != nil {
 		return nil, err
 	}
 	if len(kwargs) != 0 {
@@ -112,13 +114,15 @@ func registerCheck(th *starlark.Thread, fn *starlark.Builtin, args starlark.Tupl
 //
 // Make sure to update stdlib.star whenever this function is modified.
 func readFile(th *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
-	var argname starlark.String
-	if err := starlark.UnpackPositionalArgs(fn.Name(), args, kwargs, 1, &argname); err != nil {
+	var argpath starlark.String
+	if err := starlark.UnpackArgs(fn.Name(), args, kwargs,
+		"path", &argpath,
+	); err != nil {
 		return nil, err
 	}
 	ctx := interpreter.Context(th)
 	s := ctxState(ctx)
-	dst, err := absPath(string(argname), s.inputs.root)
+	dst, err := absPath(string(argpath), s.inputs.root)
 	if err != nil {
 		return starlark.None, err
 	}

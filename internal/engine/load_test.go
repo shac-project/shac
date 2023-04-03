@@ -248,7 +248,7 @@ func TestTestDataFail(t *testing.T) {
 		},
 		{
 			"io_read_file_missing_arg.star",
-			"read_file: got 0 arguments, want 1",
+			"read_file: missing argument for path",
 			"",
 		},
 		{
@@ -278,15 +278,15 @@ func TestTestDataFail(t *testing.T) {
 		},
 		{
 			"register_check_kwargs.star",
-			"register_check: unexpected keyword arguments",
+			"register_check: unexpected keyword argument \"callback\"",
 			`  //register_check_kwargs.star:8:15: in <toplevel>` + "\n" +
-				`Error in register_check: register_check: unexpected keyword arguments`,
+				`Error in register_check: register_check: unexpected keyword argument "callback"`,
 		},
 		{
 			"register_check_no_arg.star",
-			"register_check: got 0 arguments, want 1",
+			"register_check: missing argument for cb",
 			`  //register_check_no_arg.star:5:15: in <toplevel>` + "\n" +
-				`Error in register_check: register_check: got 0 arguments, want 1`,
+				`Error in register_check: register_check: missing argument for cb`,
 		},
 		{
 			"register_check_recursive.star",
