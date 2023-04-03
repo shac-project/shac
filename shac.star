@@ -2,8 +2,18 @@
 # Use of this source code is governed by a BSD-style
 # license that can be found in the LICENSE file.
 
-def cb(shac):
-  """Prints the added TODOs."""
+"""Checks for shac itself
+
+This file will evolve as new shac functionality is being added.
+"""
+
+
+def new_todos(shac):
+  """Prints the added TODOs.
+
+  Args:
+    shac: A shac instance.
+  """
   out = ""
   for name, meta in shac.scm.affected_files().items():
     for num, line in meta.new_lines():
@@ -16,4 +26,4 @@ def cb(shac):
   if shac.exec(["echo", "hello world"]) != 0:
     fail("failed to run echo")
 
-register_check(cb)
+register_check(new_todos)

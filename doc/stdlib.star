@@ -4,12 +4,16 @@
 
 # This file contains pseudo-code that represents shac's runtime standard
 # library solely for documentation purpose.
-#
-# The starlark language specification is documented at
-# https://github.com/google/starlark-go/blob/HEAD/doc/spec.md. It is a python
-# derivative.
-#
-# The standard library is implemented in native Go.
+
+"""shac runtime standard library
+
+The starlark language specification is documented at
+https://github.com/google/starlark-go/blob/HEAD/doc/spec.md. It is a python
+derivative.
+
+Note: The standard library is implemented in native Go.
+"""
+
 
 def _affected_files(glob = None):
   """Returns affected files.
@@ -35,6 +39,18 @@ def _exec(cmd, cwd = None):
   """
   pass
 
+def register_check(cb):
+  """Registers a shac check.
+
+  Args:
+    cb: Starlark function that is called back to implement the check. Passed a
+      single argument shac(...).
+
+  Returns:
+    None
+  """
+  pass
+
 # shac is the object passed to register_check(...) callback.
 shac = struct(
   exec = _exec,
@@ -53,15 +69,3 @@ shac = struct(
     all_files = _all_files,
   ),
 )
-
-def register_check(cb):
-  """Registers a shac check.
-
-  Args:
-    cb: Starlark function that is called back to implement the check. Passed a
-      single argument shac(...).
-
-  Returns:
-    None
-  """
-  pass

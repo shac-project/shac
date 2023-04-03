@@ -10,11 +10,25 @@ Argument is a lucicfg/docgen.symbol. See checks.go for the processing code and
 docgen_test.go on how to use the template.
 */}}
 
+
+{{- /* gen-any generates the documentation for a func, struct or var. It is recursive. */}}
+{{- define "gen-any"}}
+{{- $flavor := .Flavor }}
+{{- if eq $flavor "func" }}
+{{- template "gen-func" . }}
+{{- else if eq $flavor "struct" }}
+{{- template "gen-struct" . }}
+{{- else if eq $flavor "var" }}
+{{- template "gen-var" . }}
+{{- end }}
+{{- end }}
+
+
 {{- /* gen-struct generates the documentation for a struct. It is recursive. */}}
 {{- define "gen-struct" -}}
 ## {{.FullName}} {#{{.Anchor}}}
 
-{{ .Def.Comments | LinkifySymbols }}
+{{ if .Def }}{{ .Def.Comments | LinkifySymbols }}{{ end }}
 {{- range .Symbols "struct"}}
 
 {{ template "gen-struct" . }}
@@ -28,6 +42,7 @@ docgen_test.go on how to use the template.
 {{ template "gen-func" . }}
 {{- end}}
 {{- end}}
+
 
 {{- /* gen-func generates the documentation for a func. */}}
 {{- define "gen-func" -}}
@@ -53,15 +68,8 @@ docgen_test.go on how to use the template.
 {{- end}}
 {{- end}}
 
+
 {{- /* gen-var generates the documentation for a variable. */}}
 {{- define "gen-var"}}
 ## {{.FullName}} {#{{.Anchor}}}
 {{- end}}
-
-{{- $shac := Symbol "main.star" "shac"}}
-{{- $register_check := Symbol "main.star" "register_check" -}}
-# shac runtime library
-
-{{ template "gen-func" $register_check}}
-
-{{ template "gen-struct" $shac}}

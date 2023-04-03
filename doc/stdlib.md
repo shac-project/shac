@@ -1,4 +1,10 @@
-# shac runtime library
+# shac runtime standard library
+
+The starlark language specification is documented at
+https://github.com/google/starlark-go/blob/HEAD/doc/spec.md. It is a python
+derivative.
+
+Note: The standard library is implemented in native Go.
 
 ## register_check {#register-check}
 

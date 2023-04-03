@@ -6,6 +6,7 @@ package cli
 
 import (
 	"context"
+	"errors"
 
 	flag "github.com/spf13/pflag"
 	"go.fuchsia.dev/shac-project/shac/internal/engine"
@@ -32,6 +33,9 @@ func (c *checkCmd) SetFlags(f *flag.FlagSet) {
 	f.BoolVar(&c.allFiles, "all", false, "checks all the files instead of guess the upstream to diff against")
 }
 
-func (c *checkCmd) Execute(ctx context.Context, f *flag.FlagSet) error {
+func (c *checkCmd) Execute(ctx context.Context, args []string) error {
+	if len(args) != 0 {
+		return errors.New("unsupported arguments")
+	}
 	return engine.Load(ctx, c.root, c.main, c.allFiles, reporting.Get())
 }

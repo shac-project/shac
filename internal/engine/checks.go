@@ -6,24 +6,17 @@ package engine
 
 import (
 	"context"
-	_ "embed"
-	"fmt"
 	"os"
 	"os/exec"
 	"path"
 	"strings"
 
 	"go.chromium.org/luci/common/errors"
-	"go.chromium.org/luci/lucicfg/docgen"
 	"go.chromium.org/luci/starlark/builtins"
 	"go.chromium.org/luci/starlark/interpreter"
-	"go.fuchsia.dev/shac-project/shac/doc"
 	"go.starlark.net/starlark"
 	"go.starlark.net/starlarkstruct"
 )
-
-//go:embed stdlib.mdt
-var shacMDTemplate string
 
 // checks is a list of registered checks callbacks.
 //
@@ -86,24 +79,6 @@ func getShac() starlark.Value {
 			"all_files":      starlark.NewBuiltin("all_files", scmAllFiles),
 		}),
 	})
-}
-
-// getDoc returns documentation for all the interfaces exposed by shac.
-func getDoc() string {
-	g := docgen.Generator{
-		Starlark: func(m string) (string, error) {
-			// 'module' here is something like "@stdlib//path".
-			if m != "main.star" {
-				return "", fmt.Errorf("unknown module %q", m)
-			}
-			return doc.StdlibSrc, nil
-		},
-	}
-	b, err := g.Render(shacMDTemplate)
-	if err != nil {
-		panic(err)
-	}
-	return string(b)
 }
 
 // toValue converts a StringDict to a Value.

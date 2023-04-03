@@ -14,22 +14,41 @@ import (
 	flag "github.com/spf13/pflag"
 )
 
+type app struct {
+	fs      *flag.FlagSet
+	help    bool
+	verbose bool
+}
+
+func (a *app) init(n string) {
+	a.fs = flag.NewFlagSet(n, flag.ContinueOnError)
+	a.fs.BoolVarP(&a.verbose, "verbose", "v", false, "Verbose output")
+	a.fs.BoolVarP(&a.help, "help", "h", false, "Prints help")
+	a.fs.Usage = func() {
+		fmt.Fprintf(os.Stderr, "Usage of %s:\n", n)
+		a.fs.PrintDefaults()
+	}
+}
+
 type subcommand interface {
 	Name() string
 	Description() string
 	SetFlags(*flag.FlagSet)
-	Execute(context.Context, *flag.FlagSet) error
+	Execute(ctx context.Context, args []string) error
 }
 
 func Main(args []string) error {
 	ctx := context.Background()
 
 	if len(args) < 2 {
-		// TODO(maruel): Print help.
+		a := app{}
+		a.init("shac")
+		a.fs.Usage()
 		return fmt.Errorf("subcommand required")
 	}
 
 	subcommands := []subcommand{
+		&docCmd{},
 		&checkCmd{},
 	}
 
@@ -38,21 +57,29 @@ func Main(args []string) error {
 		if s.Name() != name {
 			continue
 		}
-		fs := flag.NewFlagSet(s.Name(), flag.ContinueOnError)
-		fs.Usage = func() {
-			// fs.out() is inaccessible.
-			fmt.Fprintf(os.Stderr, "Usage of shac %s:\n", s.Name())
-			fs.PrintDefaults()
-		}
-		verbose := fs.BoolP("verbose", "v", false, "Verbose output")
-		s.SetFlags(fs)
-		if err := fs.Parse(args[2:]); err != nil {
+		a := app{}
+		a.init("shac " + s.Name())
+		s.SetFlags(a.fs)
+		if err := a.fs.Parse(args[2:]); err != nil {
 			return err
 		}
-		if !*verbose {
+		if a.help {
+			a.fs.Usage()
+			return flag.ErrHelp
+		}
+		if !a.verbose {
 			log.SetOutput(io.Discard)
 		}
-		return s.Execute(ctx, fs)
+		return s.Execute(ctx, a.fs.Args())
 	}
-	return fmt.Errorf("no such command %q", name)
+	a := app{}
+	a.init("shac")
+	if err := a.fs.Parse(args[1:]); err != nil {
+		return err
+	}
+	if a.help {
+		a.fs.Usage()
+		return flag.ErrHelp
+	}
+	return fmt.Errorf("no such command %q", args[1])
 }

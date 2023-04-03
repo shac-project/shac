@@ -5,12 +5,29 @@
 package engine
 
 import (
+	"os"
+	"path/filepath"
 	"strconv"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
 	"go.chromium.org/luci/lucicfg/docgen"
 )
+
+func TestDocStdlib(t *testing.T) {
+	// This is a state change detector.
+	got, err := Doc("stdlib")
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := os.ReadFile(filepath.Join("..", "..", "doc", "stdlib.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if diff := cmp.Diff(string(b), got); diff != "" {
+		t.Fatalf("mismatch (+want -got):\n%s", diff)
+	}
+}
 
 func TestDocgenGenerator(t *testing.T) {
 	// It's not really a unit test, it's more to document parts of what is
