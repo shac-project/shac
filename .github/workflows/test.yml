@@ -222,3 +222,30 @@ jobs:
           git diff
           false
         fi
+
+
+  codeql:
+    name: "codeql: go${{matrix.gover}}.x/${{matrix.os}}"
+    runs-on: "${{matrix.os}}"
+    continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest]
+        # Do not forget to bump every 6 months!
+        gover: ["1.20"]
+    permissions:
+      security-events: write
+    steps:
+    - uses: actions/checkout@v3
+    - uses: actions/setup-go@v4
+      with:
+        go-version: "~${{matrix.gover}}.0"
+    - name: Initialize CodeQL
+      uses: github/codeql-action/init@v2
+      with:
+        languages: go
+    - name: Autobuild
+      uses: github/codeql-action/autobuild@v2
+    - name: Perform CodeQL Analysis
+      uses: github/codeql-action/analyze@v2
