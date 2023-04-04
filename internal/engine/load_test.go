@@ -7,6 +7,7 @@ package engine
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -18,7 +19,6 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
-	"go.chromium.org/luci/common/errors"
 )
 
 func TestLoad_SCM_Raw(t *testing.T) {
@@ -170,7 +170,6 @@ func TestLoad_SCM_Git_Upstream_Staged(t *testing.T) {
 func TestTestDataFail(t *testing.T) {
 	t.Parallel()
 	p, got := enumDir(t, "fail")
-	// TODO(maruel): Fix the error to include the call site when applicable.
 	data := []struct {
 		name  string
 		err   string
@@ -193,7 +192,8 @@ func TestTestDataFail(t *testing.T) {
 		{
 			"exec_bad_type_in_args.star",
 			"command args must be strings",
-			"",
+			"  //exec_bad_type_in_args.star:6:12: in cb\n" +
+				"Error in exec: command args must be strings",
 		},
 		{
 			"exec_command_not_in_path.star",
@@ -203,12 +203,19 @@ func TestTestDataFail(t *testing.T) {
 				}
 				return `exec: "this-command-does-not-exist": executable file not found in $PATH`
 			}(),
-			"",
+			func() string {
+				prefix := "  //exec_command_not_in_path.star:6:12: in cb\nError in exec: "
+				if runtime.GOOS == "windows" {
+					return prefix + `exec: "this-command-does-not-exist": executable file not found in %PATH%`
+				}
+				return prefix + `exec: "this-command-does-not-exist": executable file not found in $PATH`
+			}(),
 		},
 		{
 			"exec_invalid_cwd.star",
 			"cannot escape root",
-			"",
+			"  //exec_invalid_cwd.star:6:12: in cb\n" +
+				"Error in exec: cannot escape root",
 		},
 		{
 			"fail.star",
@@ -220,12 +227,14 @@ func TestTestDataFail(t *testing.T) {
 		{
 			"io_read_file_abs.star",
 			"do not use absolute path",
-			"",
+			"  //io_read_file_abs.star:6:20: in cb\n" +
+				"Error in read_file: do not use absolute path",
 		},
 		{
 			"io_read_file_escape.star",
 			"cannot escape root",
-			"",
+			"  //io_read_file_escape.star:6:20: in cb\n" +
+				"Error in read_file: cannot escape root",
 		},
 		{
 			"io_read_file_inexistant.star",
@@ -244,37 +253,58 @@ func TestTestDataFail(t *testing.T) {
 				}
 				return "open " + inexistant + ": no such file or directory"
 			}(),
-			"",
+			func() string {
+				inexistant, err := filepath.Abs(filepath.Join("testdata", "fail"))
+				if err != nil {
+					t.Fatal(err)
+				}
+				// Work around the fact that path are not yet correctly handled on
+				// Windows.
+				inexistant += "/inexistant"
+				prefix := "  //io_read_file_inexistant.star:6:20: in cb\nError in read_file: "
+				// TODO(maruel): This error comes from the OS, thus this is a very
+				// brittle test case.
+				if runtime.GOOS == "windows" {
+					return prefix + "open " + inexistant + ": The system cannot find the file specified."
+				}
+				return prefix + "open " + inexistant + ": no such file or directory"
+			}(),
 		},
 		{
 			"io_read_file_missing_arg.star",
 			"read_file: missing argument for path",
-			"",
+			"  //io_read_file_missing_arg.star:6:20: in cb\n" +
+				"Error in read_file: read_file: missing argument for path",
 		},
 		{
 			"io_read_file_unclean.star",
 			"pass cleaned path",
-			"",
+			"  //io_read_file_unclean.star:6:20: in cb\n" +
+				"Error in read_file: pass cleaned path",
 		},
 		{
 			"io_read_file_windows.star",
 			"use POSIX style path",
-			"",
+			"  //io_read_file_windows.star:6:20: in cb\n" +
+				"Error in read_file: use POSIX style path",
 		},
 		{
 			"re_allmatches_no_arg.star",
 			"allmatches: missing argument for pattern",
-			"",
+			"  //re_allmatches_no_arg.star:6:21: in cb" +
+				"\nError in allmatches: allmatches: missing argument for pattern",
 		},
 		{
 			"re_match_bad_re.star",
 			"error parsing regexp: missing closing ): `(`",
-			"",
+			"  //re_match_bad_re.star:6:16: in cb\n" +
+				"Error in match: error parsing regexp: missing closing ): `(`",
 		},
 		{
 			"re_match_no_arg.star",
 			"match: missing argument for pattern",
-			"",
+			"  //re_match_no_arg.star:6:16: in cb\n" +
+				"Error in match: match: missing argument for pattern",
 		},
 		{
 			"register_check_kwargs.star",
@@ -291,27 +321,37 @@ func TestTestDataFail(t *testing.T) {
 		{
 			"register_check_recursive.star",
 			"can't register checks after done loading",
+			"  //register_check_recursive.star:9:17: in cb1\n" +
+				"Error in register_check: can't register checks after done loading",
+		},
+		{
+			"register_check_return.star",
+			`check "cb" returned an object of type string, expected None`,
 			"",
 		},
 		{
 			"scm_affected_files_arg.star",
 			"affected_files: unexpected arguments",
-			"",
+			"  //scm_affected_files_arg.star:6:26: in cb\n" +
+				"Error in affected_files: affected_files: unexpected arguments",
 		},
 		{
 			"scm_affected_files_kwarg.star",
 			"affected_files: unexpected keyword arguments",
-			"",
+			"  //scm_affected_files_kwarg.star:6:26: in cb\n" +
+				"Error in affected_files: affected_files: unexpected keyword arguments",
 		},
 		{
 			"scm_all_files_arg.star",
 			"all_files: unexpected arguments",
-			"",
+			"  //scm_all_files_arg.star:6:21: in cb\n" +
+				"Error in all_files: all_files: unexpected arguments",
 		},
 		{
 			"scm_all_files_kwarg.star",
 			"all_files: unexpected keyword arguments",
-			"",
+			"  //scm_all_files_kwarg.star:6:21: in cb\n" +
+				"Error in all_files: all_files: unexpected keyword arguments",
 		},
 		{
 			"syntax_error.star",
@@ -342,7 +382,6 @@ func TestTestDataFail(t *testing.T) {
 			if diff := cmp.Diff(data[i].err, err.Error()); diff != "" {
 				t.Fatalf("mismatch (+want -got):\n%s", diff)
 			}
-			err = unwrapMultiError(t, err)
 			expectTrace := data[i].trace != ""
 			var err2 BacktracableError
 			if errors.As(err, &err2) != expectTrace {
@@ -434,18 +473,6 @@ func testStarlark(t *testing.T, root, name string, all bool, want string) {
 		t.Helper()
 		t.Fatalf("mismatch (+want -got):\n%s", diff)
 	}
-}
-
-func unwrapMultiError(t *testing.T, err error) error {
-	// TODO(maruel): Use go 1.20 unwrap.
-	var errs errors.MultiError
-	if !errors.As(err, &errs) {
-		return err
-	}
-	if len(errs) != 1 {
-		t.Fatal("expected one wrapped error")
-	}
-	return errs[0]
 }
 
 func enumDir(t *testing.T, name string) (string, []string) {

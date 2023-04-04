@@ -6,16 +6,19 @@ package engine
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path"
+	"runtime"
 	"strings"
 
-	"go.chromium.org/luci/common/errors"
 	"go.chromium.org/luci/starlark/builtins"
 	"go.chromium.org/luci/starlark/interpreter"
 	"go.starlark.net/starlark"
 	"go.starlark.net/starlarkstruct"
+	"golang.org/x/sync/errgroup"
 )
 
 // checks is a list of registered checks callbacks.
@@ -23,37 +26,56 @@ import (
 // It lives in state. Checks are executed sequentially after all Starlark
 // code is loaded. They run checks and emit results (results and comments).
 type checks struct {
-	c []starlark.Callable
+	c []check
+}
+
+type check struct {
+	cb starlark.Callable
 }
 
 // add registers a new callback.
 func (c *checks) add(cb starlark.Callable) error {
-	c.c = append(c.c, cb)
+	c.c = append(c.c, check{cb: cb})
 	return nil
 }
 
+func (c *check) name() string {
+	return strings.TrimPrefix(c.cb.Name(), "_")
+}
+
 // callAll calls all the checks.
-func (c *checks) callAll(ctx context.Context, th *starlark.Thread) errors.MultiError {
-	// TODO(maruel): Require go1.20 and use the new stdlib native multierror
-	// support.
-	var errs errors.MultiError
-	fc := builtins.GetFailureCollector(th)
-	args := starlark.Tuple{getShac()}
-	args.Freeze()
-	for _, cb := range c.c {
-		if fc != nil {
-			fc.Clear()
-		}
-		if _, err := starlark.Call(th, cb, args, nil); err != nil {
-			if fc != nil && fc.LatestFailure() != nil {
-				// Prefer this error, it has custom stack trace.
-				errs = append(errs, fc.LatestFailure())
-			} else {
-				errs = append(errs, err)
+//
+// It creates a separate thread per check, limited by the number of CPU cores +
+// 2. This permits to run them concurrently.
+func (c *checks) callAll(ctx context.Context, intr *interpreter.Interpreter) error {
+	eg, ctx := errgroup.WithContext(ctx)
+	eg.SetLimit(runtime.NumCPU() + 2)
+	for i := range c.c {
+		i := i
+		eg.Go(func() error {
+			n := c.c[i].name()
+			th := intr.Thread(ctx)
+			th.Name = n
+			fc := builtins.GetFailureCollector(th)
+			if fc != nil {
+				fc.Clear()
 			}
-		}
+			// TODO(maruel): Set a context for the subdirectory.
+			args := starlark.Tuple{getShac()}
+			args.Freeze()
+			if r, err := starlark.Call(th, c.c[i].cb, args, nil); err != nil {
+				if fc != nil && fc.LatestFailure() != nil {
+					// Prefer this error, it has custom stack trace.
+					return fc.LatestFailure()
+				}
+				return err
+			} else if r != starlark.None {
+				return fmt.Errorf("check %q returned an object of type %s, expected None", n, r.Type())
+			}
+			return nil
+		})
 	}
-	return errs
+	return eg.Wait()
 }
 
 // getShac returns the shac object.

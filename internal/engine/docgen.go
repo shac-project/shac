@@ -8,11 +8,11 @@ package engine
 
 import (
 	_ "embed"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
 
-	"go.chromium.org/luci/common/errors"
 	"go.chromium.org/luci/lucicfg/docgen"
 	"go.chromium.org/luci/lucicfg/docgen/ast"
 	"go.fuchsia.dev/shac-project/shac/doc"

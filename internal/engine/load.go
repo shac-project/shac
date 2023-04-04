@@ -6,12 +6,11 @@ package engine
 
 import (
 	"context"
+	"errors"
 	"path/filepath"
 	"runtime/debug"
 	"sync"
 
-	"go.chromium.org/luci/common/data/stringset"
-	"go.chromium.org/luci/common/errors"
 	"go.chromium.org/luci/starlark/builtins"
 	"go.chromium.org/luci/starlark/interpreter"
 	"go.starlark.net/lib/json"
@@ -58,8 +57,8 @@ func Load(ctx context.Context, root, main string, allFiles bool, r Report) error
 		return errors.New("did you forget to call register_check?")
 	}
 	ctx = context.WithValue(ctx, &stateCtxKey, s)
-	if errs := s.checks.callAll(ctx, s.intr.Thread(ctx)); len(errs) != 0 {
-		return dedupeErrs(errs)
+	if err := s.checks.callAll(ctx, s.intr); err != nil {
+		return err
 	}
 	return nil
 }
@@ -90,22 +89,6 @@ type state struct {
 // Panics if not there.
 func ctxState(ctx context.Context) *state {
 	return ctx.Value(&stateCtxKey).(*state)
-}
-
-// dedupeErrs returns a list of merged errors as a MultiError, deduplicating
-// errors with the same backtrace.
-func dedupeErrs(err ...error) error {
-	// TODO(maruel): Require go1.20 and use the new stdlib native multierror
-	// support.
-	var errs errors.MultiError
-	seenErrs := stringset.New(len(err))
-	for _, e := range err {
-		var bt BacktracableError
-		if !errors.As(e, &bt) || seenErrs.Add(bt.Backtrace()) {
-			errs = append(errs, e)
-		}
-	}
-	return errs
 }
 
 var stateCtxKey = "shac.State"
@@ -150,7 +133,7 @@ func parse(ctx context.Context, inputs *inputs, r Report) (*state, error) {
 			// Prefer the collected error if any, it will have a collected trace.
 			err = f
 		}
-		return nil, dedupeErrs(err)
+		return nil, err
 	}
 	// TODO(maruel): Error if there are unconsumed variables once variables are
 	// added.
