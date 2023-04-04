@@ -10,22 +10,22 @@ This file will evolve as new shac functionality is being added.
 load("go.star", "gosec")
 
 
-def new_todos(shac):
+def new_todos(ctx):
   """Prints the added TODOs.
 
   Args:
     shac: A shac instance.
   """
   out = ""
-  for path, meta in shac.scm.affected_files().items():
+  for path, meta in ctx.scm.affected_files().items():
     for num, line in meta.new_lines():
-      m = shac.re.match("TODO\\(([^)]+)\\).*", line)
+      m = ctx.re.match("TODO\\(([^)]+)\\).*", line)
       if m:
         # TODO(maruel): Validate m.groups[1] once we can emit results (errors).
         out += "\n" + path + "(" + str(num) + "): " + m.groups[0]
   if out:
     print(out)
-  if shac.exec(["echo", "hello world"]) != 0:
+  if ctx.exec(["echo", "hello world"]) != 0:
     fail("failed to run echo")
 
 

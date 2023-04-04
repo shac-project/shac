@@ -2,7 +2,7 @@
 # Use of this source code is governed by a BSD-style
 # license that can be found in the LICENSE file.
 
-def cb(shac):
-  print(dir(shac))
+def cb(ctx):
+  print(dir(ctx))
 
 register_check(cb)

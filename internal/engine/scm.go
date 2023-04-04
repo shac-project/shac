@@ -361,7 +361,7 @@ func scmFilesCommon(th *starlark.Thread, fn *starlark.Builtin, args starlark.Tup
 	return out, nil
 }
 
-// scmAffectedFiles implements native function shac.scm.affected_files().
+// scmAffectedFiles implements native function ctx.scm.affected_files().
 //
 // It returns a dictionary.
 //
@@ -370,7 +370,7 @@ func scmAffectedFiles(th *starlark.Thread, fn *starlark.Builtin, args starlark.T
 	return scmFilesCommon(th, fn, args, kwargs, false)
 }
 
-// scmAllFiles implements native function shac.scm.all_files().
+// scmAllFiles implements native function ctx.scm.all_files().
 //
 // It returns a dictionary.
 //

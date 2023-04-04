@@ -12,7 +12,7 @@ import (
 	"go.starlark.net/starlarkstruct"
 )
 
-// reMatch implements shac.re.match.
+// reMatch implements ctx.re.match.
 //
 // Returns a struct with the first match and its capturing groups. Returns None
 // otherwise.
@@ -30,11 +30,11 @@ func reMatch(th *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwa
 	return matchToGroup(s, m), nil
 }
 
-// reAllMatches implements shac.re.allmatches.
+// reAllMatches implements ctx.re.allmatches.
 //
 // It returns a tuple of structs with all the matches and their capturing
 // groups. If the file is large or the search is expected to end early, use
-// shac.re.match instead.
+// ctx.re.match instead.
 //
 // It uses the RE2 engine as specified at https://golang.org/s/re2syntax.
 func reAllMatches(th *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {

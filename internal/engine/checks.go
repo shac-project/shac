@@ -130,7 +130,7 @@ func registerCheck(th *starlark.Thread, fn *starlark.Builtin, args starlark.Tupl
 	return starlark.None, s.checks.add(cb)
 }
 
-// readFile implements native function shac.io.read_file().
+// readFile implements native function ctx.io.read_file().
 //
 // Use POSIX style relative path. "..", "\" and absolute paths are denied.
 //
@@ -179,7 +179,7 @@ func absPath(rel, rootDir string) (string, error) {
 	return res, nil
 }
 
-// execSubprocess implements the native function shac.exec().
+// execSubprocess implements the native function ctx.exec().
 //
 // TODO(olivernewman): Return a struct with stdout and stderr in addition to the
 // exit code.

@@ -35,7 +35,7 @@ type Report interface {
 
 // Load loads a main shac.star file from a root directory.
 //
-// main is normally shac.star.
+// main is normally ctx.star.
 func Load(ctx context.Context, root, main string, allFiles bool, r Report) error {
 	if filepath.IsAbs(main) {
 		return errors.New("main file must not be an absolute path")

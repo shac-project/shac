@@ -2,8 +2,8 @@
 # Use of this source code is governed by a BSD-style
 # license that can be found in the LICENSE file.
 
-def cb(shac):
-  d = json.decode(str(shac.io.read_file("content.json")))
+def cb(ctx):
+  d = json.decode(str(ctx.io.read_file("content.json")))
   print(d)
 
 register_check(cb)

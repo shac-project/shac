@@ -21,14 +21,212 @@ Note: The shac runtime standard library is implemented in native Go.
 
 ## Table of contents
 
+- [ctx](#ctx)
 - [dir](#dir)
 - [fail](#fail)
 - [json](#json)
 - [load](#load)
 - [print](#print)
 - [register_check](#register_check)
-- [shac](#shac)
 - [struct](#struct)
+
+## ctx
+
+ctx is the object passed to register_check(...) callback.
+
+Fields:
+
+- exec
+- io
+- re
+- scm
+
+## ctx.io
+
+ctx.io is the object that exposes the API to interact with the file system.
+
+Fields:
+
+- read_file
+
+## ctx.io.read_file
+
+Returns the content of a file.
+
+### Example
+
+```python
+def cb(ctx):
+  content = str(ctx.io_read_file("path/to/file.txt"))
+  # Usually run a regexp via ctx.re.match(), or other simple text
+  # processing.
+  print(content)
+
+register_check(cb)
+```
+
+### Arguments
+
+* **path**: path of the file to read. The file must be within the workspace. The path must be relative and in POSIX format, using / separator.
+
+### Returns
+
+Content of the file as bytes.
+
+## ctx.re
+
+ctx.re is the object that exposes the API to run regular expressions on
+starlark strings.
+
+Fields:
+
+- allmatches
+- match
+
+## ctx.re.allmatches
+
+Returns all the matches of the regexp pattern onto content.
+
+### Example
+
+```python
+def cb(ctx):
+  content = str(ctx.io_read_file("path/to/file.txt"))
+  for match in ctx.re.allmatches("TODO\(([^)]+)\).*", content):
+    print(match)
+
+register_check(cb)
+```
+
+### Arguments
+
+* **pattern**: regexp to run. It must use the syntax as described at https://golang.org/s/re2syntax.
+* **str**: string to run the regexp on.
+
+### Returns
+
+list(struct(offset=bytes_offset, groups=list(matches)))
+
+## ctx.re.match
+
+Returns the first match of the regexp pattern onto content.
+
+### Example
+
+```python
+def cb(ctx):
+  content = str(ctx.io_read_file("path/to/file.txt"))
+  # Only print the first match, if any.
+  match = ctx.re.match("TODO\(([^)]+)\).*", "content/true")
+  print(match)
+
+register_check(cb)
+```
+
+### Arguments
+
+* **pattern**: regexp to run. It must use the syntax as described at https://golang.org/s/re2syntax.
+* **str**: string to run the regexp on.
+
+### Returns
+
+struct(offset=bytes_offset, groups=list(matches))
+
+## ctx.scm
+
+ctx.scm is the object exposes the API to query the source control
+management (e.g. git).
+
+Fields:
+
+- affected_files
+- all_files
+
+## ctx.scm.affected_files
+
+Returns affected files as determined by the SCM.
+
+If shac detected that the tree is managed by a source control management
+system, e.g. git, it will detect the upstream branch and return only the files
+currently modified.
+
+If the current directory is not controlled by a SCM, the result is equivalent
+to ctx.scm.all_files().
+
+If shac is run with the --all options, all files are considered "added" to do
+a full run on all files.
+
+### Example
+
+```python
+def new_todos(cb):
+  # Prints only the TODO that were added compared to upstream.
+  for path, meta in ctx.scm.affected_files().items():
+    for num, line in meta.new_lines():
+      m = ctx.re.match("TODO\(([^)]+)\).*", line)
+      print(path + "(" + str(num) + "): " + m.groups[0])
+
+register_check(new_todos)
+```
+
+### Arguments
+
+* **glob**: TODO: Will later accept a glob.
+
+### Returns
+
+A map of {path: struct()} where the struct has a string field action and a
+function new_line().
+
+## ctx.scm.all_files
+
+Returns all files found in the current workspace.
+
+It considers all files "added".
+
+### Example
+
+```python
+def all_todos(cb):
+  for path, meta in ctx.scm.all_files().items():
+    for num, line in meta.new_lines():
+      m = ctx.re.match("TODO\(([^)]+)\).*", line)
+      print(path + "(" + str(num) + "): " + m.groups[0])
+
+register_check(all_todos)
+```
+
+### Arguments
+
+* **glob**: TODO: Will later accept a glob.
+
+### Returns
+
+A map of {path: struct()} where the struct has a string field action and a
+function new_line().
+
+## ctx.exec
+
+Runs a command as a subprocess.
+
+### Example
+
+```python
+def cb(ctx):
+  if ctx.exec("echo", "hello world", cwd="."):
+    fail("echo failed")
+
+register_check(cb)
+```
+
+### Arguments
+
+* **cmd**: Subprocess command line.
+* **cwd**: Relative path to cwd for the subprocess.
+
+### Returns
+
+An integer corresponding to the subprocess exit code.
 
 ## dir
 
@@ -54,8 +252,8 @@ def print_attributes(name, obj):
     else:
       print(fullname + "=" + repr(attrval))
 
-def cb(shac):
-  print_attributes("shac", shac)
+def cb(ctx):
+  print_attributes("ctx", ctx)
   print_attributes("str", "")
   print_attributes("dict", {})
   print_attributes("set", set())
@@ -127,10 +325,10 @@ See the full documentation at https://bazel.build/rules/lib/json#decode.
 data = json.decode('{"foo":"bar}')
 print(data["foo"])
 
-def cb(shac):
+def cb(ctx):
   # Load a configuration from a json file in the tree, containing a
   # dict with a "version" key.
-  decoded = shac.io.read_file("config.json")
+  decoded = ctx.io.read_file("config.json")
   print(decoded["version"])
 
 register_check(cb)
@@ -201,9 +399,9 @@ https://github.com/google/starlark-go/blob/HEAD/doc/spec.md#freezing-a-value.
 ```python
 load("go.star", "gosec")
 
-def _gosec(shac):
+def _gosec(ctx):
   # Use a specific gosec version, instead of upstream's default version.
-  gosec(shac, version="v2.9.6")
+  gosec(ctx, version="v2.9.6")
 
 register_checks(_gosec)
 ```
@@ -243,7 +441,7 @@ Each callback will be run in parallel.
 ### Example
 
 ```python
-def cb(shac):
+def cb(ctx):
   fail("implement me")
 
 register_check(cb)
@@ -251,205 +449,7 @@ register_check(cb)
 
 ### Arguments
 
-* **cb**: Starlark function that is called back to implement the check. Passed a single argument shac(...).
-
-## shac
-
-shac is the object passed to register_check(...) callback.
-
-Fields:
-
-- exec
-- io
-- re
-- scm
-
-## shac.io
-
-shac.io is the object that exposes the API to interact with the file system.
-
-Fields:
-
-- read_file
-
-## shac.io.read_file
-
-Returns the content of a file.
-
-### Example
-
-```python
-def cb(shac):
-  content = str(shac.io_read_file("path/to/file.txt"))
-  # Usually run a regexp via shac.re.match(), or other simple text
-  # processing.
-  print(content)
-
-register_check(cb)
-```
-
-### Arguments
-
-* **path**: path of the file to read. The file must be within the workspace. The path must be relative and in POSIX format, using / separator.
-
-### Returns
-
-Content of the file as bytes.
-
-## shac.re
-
-shac.re is the object that exposes the API to run regular expressions on
-starlark strings.
-
-Fields:
-
-- allmatches
-- match
-
-## shac.re.allmatches
-
-Returns all the matches of the regexp pattern onto content.
-
-### Example
-
-```python
-def cb(shac):
-  content = str(shac.io_read_file("path/to/file.txt"))
-  for match in shac.re.allmatches("TODO\(([^)]+)\).*", content):
-    print(match)
-
-register_check(cb)
-```
-
-### Arguments
-
-* **pattern**: regexp to run. It must use the syntax as described at https://golang.org/s/re2syntax.
-* **str**: string to run the regexp on.
-
-### Returns
-
-list(struct(offset=bytes_offset, groups=list(matches)))
-
-## shac.re.match
-
-Returns the first match of the regexp pattern onto content.
-
-### Example
-
-```python
-def cb(shac):
-  content = str(shac.io_read_file("path/to/file.txt"))
-  # Only print the first match, if any.
-  match = shac.re.match("TODO\(([^)]+)\).*", "content/true")
-  print(match)
-
-register_check(cb)
-```
-
-### Arguments
-
-* **pattern**: regexp to run. It must use the syntax as described at https://golang.org/s/re2syntax.
-* **str**: string to run the regexp on.
-
-### Returns
-
-struct(offset=bytes_offset, groups=list(matches))
-
-## shac.scm
-
-shac.scm is the object exposes the API to query the source control
-management (e.g. git).
-
-Fields:
-
-- affected_files
-- all_files
-
-## shac.scm.affected_files
-
-Returns affected files as determined by the SCM.
-
-If shac detected that the tree is managed by a source control management
-system, e.g. git, it will detect the upstream branch and return only the files
-currently modified.
-
-If the current directory is not controlled by a SCM, the result is equivalent
-to shac.scm.all_files().
-
-If shac is run with the --all options, all files are considered "added" to do
-a full run on all files.
-
-### Example
-
-```python
-def new_todos(cb):
-  # Prints only the TODO that were added compared to upstream.
-  for path, meta in shac.scm.affected_files().items():
-    for num, line in meta.new_lines():
-      m = shac.re.match("TODO\(([^)]+)\).*", line)
-      print(path + "(" + str(num) + "): " + m.groups[0])
-
-register_check(new_todos)
-```
-
-### Arguments
-
-* **glob**: TODO: Will later accept a glob.
-
-### Returns
-
-A map of {path: struct()} where the struct has a string field action and a
-function new_line().
-
-## shac.scm.all_files
-
-Returns all files found in the current workspace.
-
-It considers all files "added".
-
-### Example
-
-```python
-def all_todos(cb):
-  for path, meta in shac.scm.all_files().items():
-    for num, line in meta.new_lines():
-      m = shac.re.match("TODO\(([^)]+)\).*", line)
-      print(path + "(" + str(num) + "): " + m.groups[0])
-
-register_check(all_todos)
-```
-
-### Arguments
-
-* **glob**: TODO: Will later accept a glob.
-
-### Returns
-
-A map of {path: struct()} where the struct has a string field action and a
-function new_line().
-
-## shac.exec
-
-Runs a command as a subprocess.
-
-### Example
-
-```python
-def cb(shac):
-  if shac.exec("echo", "hello world", cwd="."):
-    fail("echo failed")
-
-register_check(cb)
-```
-
-### Arguments
-
-* **cmd**: Subprocess command line.
-* **cwd**: Relative path to cwd for the subprocess.
-
-### Returns
-
-An integer corresponding to the subprocess exit code.
+* **cb**: Starlark function that is called back to implement the check. Passed a single argument ctx(...).
 
 ## struct
 

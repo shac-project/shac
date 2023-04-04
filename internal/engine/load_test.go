@@ -192,7 +192,7 @@ func TestTestDataFail(t *testing.T) {
 		{
 			"exec_bad_type_in_args.star",
 			"command args must be strings",
-			"  //exec_bad_type_in_args.star:6:12: in cb\n" +
+			"  //exec_bad_type_in_args.star:6:11: in cb\n" +
 				"Error in exec: command args must be strings",
 		},
 		{
@@ -204,7 +204,7 @@ func TestTestDataFail(t *testing.T) {
 				return `exec: "this-command-does-not-exist": executable file not found in $PATH`
 			}(),
 			func() string {
-				prefix := "  //exec_command_not_in_path.star:6:12: in cb\nError in exec: "
+				prefix := "  //exec_command_not_in_path.star:6:11: in cb\nError in exec: "
 				if runtime.GOOS == "windows" {
 					return prefix + `exec: "this-command-does-not-exist": executable file not found in %PATH%`
 				}
@@ -214,7 +214,7 @@ func TestTestDataFail(t *testing.T) {
 		{
 			"exec_invalid_cwd.star",
 			"cannot escape root",
-			"  //exec_invalid_cwd.star:6:12: in cb\n" +
+			"  //exec_invalid_cwd.star:6:11: in cb\n" +
 				"Error in exec: cannot escape root",
 		},
 		{
@@ -227,13 +227,13 @@ func TestTestDataFail(t *testing.T) {
 		{
 			"io_read_file_abs.star",
 			"do not use absolute path",
-			"  //io_read_file_abs.star:6:20: in cb\n" +
+			"  //io_read_file_abs.star:6:19: in cb\n" +
 				"Error in read_file: do not use absolute path",
 		},
 		{
 			"io_read_file_escape.star",
 			"cannot escape root",
-			"  //io_read_file_escape.star:6:20: in cb\n" +
+			"  //io_read_file_escape.star:6:19: in cb\n" +
 				"Error in read_file: cannot escape root",
 		},
 		{
@@ -261,7 +261,7 @@ func TestTestDataFail(t *testing.T) {
 				// Work around the fact that path are not yet correctly handled on
 				// Windows.
 				inexistant += "/inexistant"
-				prefix := "  //io_read_file_inexistant.star:6:20: in cb\nError in read_file: "
+				prefix := "  //io_read_file_inexistant.star:6:19: in cb\nError in read_file: "
 				// TODO(maruel): This error comes from the OS, thus this is a very
 				// brittle test case.
 				if runtime.GOOS == "windows" {
@@ -273,37 +273,37 @@ func TestTestDataFail(t *testing.T) {
 		{
 			"io_read_file_missing_arg.star",
 			"read_file: missing argument for path",
-			"  //io_read_file_missing_arg.star:6:20: in cb\n" +
+			"  //io_read_file_missing_arg.star:6:19: in cb\n" +
 				"Error in read_file: read_file: missing argument for path",
 		},
 		{
 			"io_read_file_unclean.star",
 			"pass cleaned path",
-			"  //io_read_file_unclean.star:6:20: in cb\n" +
+			"  //io_read_file_unclean.star:6:19: in cb\n" +
 				"Error in read_file: pass cleaned path",
 		},
 		{
 			"io_read_file_windows.star",
 			"use POSIX style path",
-			"  //io_read_file_windows.star:6:20: in cb\n" +
+			"  //io_read_file_windows.star:6:19: in cb\n" +
 				"Error in read_file: use POSIX style path",
 		},
 		{
 			"re_allmatches_no_arg.star",
 			"allmatches: missing argument for pattern",
-			"  //re_allmatches_no_arg.star:6:21: in cb" +
+			"  //re_allmatches_no_arg.star:6:20: in cb" +
 				"\nError in allmatches: allmatches: missing argument for pattern",
 		},
 		{
 			"re_match_bad_re.star",
 			"error parsing regexp: missing closing ): `(`",
-			"  //re_match_bad_re.star:6:16: in cb\n" +
+			"  //re_match_bad_re.star:6:15: in cb\n" +
 				"Error in match: error parsing regexp: missing closing ): `(`",
 		},
 		{
 			"re_match_no_arg.star",
 			"match: missing argument for pattern",
-			"  //re_match_no_arg.star:6:16: in cb\n" +
+			"  //re_match_no_arg.star:6:15: in cb\n" +
 				"Error in match: match: missing argument for pattern",
 		},
 		{
@@ -332,25 +332,25 @@ func TestTestDataFail(t *testing.T) {
 		{
 			"scm_affected_files_arg.star",
 			"affected_files: unexpected arguments",
-			"  //scm_affected_files_arg.star:6:26: in cb\n" +
+			"  //scm_affected_files_arg.star:6:25: in cb\n" +
 				"Error in affected_files: affected_files: unexpected arguments",
 		},
 		{
 			"scm_affected_files_kwarg.star",
 			"affected_files: unexpected keyword arguments",
-			"  //scm_affected_files_kwarg.star:6:26: in cb\n" +
+			"  //scm_affected_files_kwarg.star:6:25: in cb\n" +
 				"Error in affected_files: affected_files: unexpected keyword arguments",
 		},
 		{
 			"scm_all_files_arg.star",
 			"all_files: unexpected arguments",
-			"  //scm_all_files_arg.star:6:21: in cb\n" +
+			"  //scm_all_files_arg.star:6:20: in cb\n" +
 				"Error in all_files: all_files: unexpected arguments",
 		},
 		{
 			"scm_all_files_kwarg.star",
 			"all_files: unexpected keyword arguments",
-			"  //scm_all_files_kwarg.star:6:21: in cb\n" +
+			"  //scm_all_files_kwarg.star:6:20: in cb\n" +
 				"Error in all_files: all_files: unexpected keyword arguments",
 		},
 		{
@@ -410,12 +410,12 @@ func TestTestDataSimple(t *testing.T) {
 		want string
 	}{
 		{
-			"dir_native.star",
-			"[//dir_native.star:5] [\"commitHash\", \"version\"]\n",
+			"dir_ctx.star",
+			"[//dir_ctx.star:6] [\"exec\", \"io\", \"re\", \"result\", \"scm\"]\n",
 		},
 		{
-			"dir_shac.star",
-			"[//dir_shac.star:6] [\"exec\", \"io\", \"re\", \"result\", \"scm\"]\n",
+			"dir_native.star",
+			"[//dir_native.star:5] [\"commitHash\", \"version\"]\n",
 		},
 		{
 			"exec_success.star",

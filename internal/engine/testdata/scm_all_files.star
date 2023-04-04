@@ -2,9 +2,9 @@
 # Use of this source code is governed by a BSD-style
 # license that can be found in the LICENSE file.
 
-def cb(shac):
+def cb(ctx):
   out = "\n"
-  for path, meta in shac.scm.all_files().items():
+  for path, meta in ctx.scm.all_files().items():
     out += path + ": " + meta.action + "\n"
   print(out)
 

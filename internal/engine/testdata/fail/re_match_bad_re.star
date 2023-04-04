@@ -2,7 +2,7 @@
 # Use of this source code is governed by a BSD-style
 # license that can be found in the LICENSE file.
 
-def cb(shac):
-  shac.re.match("(", "")
+def cb(ctx):
+  ctx.re.match("(", "")
 
 register_check(cb)

@@ -2,12 +2,12 @@
 # Use of this source code is governed by a BSD-style
 # license that can be found in the LICENSE file.
 
-def cb(shac):
+def cb(ctx):
   # No match.
-  print(shac.re.allmatches("something", "else"))
+  print(ctx.re.allmatches("something", "else"))
   # Both matches.
-  print(shac.re.allmatches("TODO\\([^)]+\\)", "foo TODO(foo) TODO(bar)"))
+  print(ctx.re.allmatches("TODO\\([^)]+\\)", "foo TODO(foo) TODO(bar)"))
   # Two capture groups.
-  print(shac.re.allmatches("a(.)(.)", "ancient"))
+  print(ctx.re.allmatches("a(.)(.)", "ancient"))
 
 register_check(cb)

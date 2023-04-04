@@ -2,7 +2,7 @@
 # Use of this source code is governed by a BSD-style
 # license that can be found in the LICENSE file.
 
-def cb(shac):
-  shac.scm.affected_files(unexpected=True)
+def cb(ctx):
+  ctx.scm.affected_files(unexpected=True)
 
 register_check(cb)

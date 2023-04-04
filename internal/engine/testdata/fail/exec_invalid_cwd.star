@@ -2,7 +2,7 @@
 # Use of this source code is governed by a BSD-style
 # license that can be found in the LICENSE file.
 
-def cb(shac):
-  shac.exec(["echo", "hello world"], cwd = "../foo")
+def cb(ctx):
+  ctx.exec(["echo", "hello world"], cwd = "../foo")
 
 register_check(cb)

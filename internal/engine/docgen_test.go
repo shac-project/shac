@@ -95,7 +95,7 @@ def _affected_files():
   """
   pass
 
-shac = struct(
+ctx = struct(
   scm = struct(
     affected_files = _affected_files,
   ),
@@ -108,9 +108,9 @@ file = struct(
 			return src, nil
 		},
 	}
-	common := `{{ $af := Symbol "main.star" "shac.scm.affected_files" }}` +
+	common := `{{ $af := Symbol "main.star" "ctx.scm.affected_files" }}` +
 		`{{- $file := Symbol "main.star" "file" }}` +
-		`{{- $shac := Symbol "main.star" "shac" }}`
+		`{{- $ctx := Symbol "main.star" "ctx" }}`
 	data := []struct {
 		in   string
 		want string
@@ -149,12 +149,12 @@ file = struct(
 				"function new_line().",
 		},
 		{"{{ $af.Module }}", "main.star"},
-		{"{{ $af.FullName }}", "shac.scm.affected_files"},
-		{"{{ $af.Anchor }}", "shac.scm.affected-files"},
+		{"{{ $af.FullName }}", "ctx.scm.affected_files"},
+		{"{{ $af.Anchor }}", "ctx.scm.affected-files"},
 		{"{{ $af.Flavor }}", "func"},
-		{"{{ $af.InvocationSnippet }}", "shac.scm.affected_files(glob = None)"},
-		{"{{ $shac.Flavor }}", "struct"},
-		{"{{ range $shac.Symbols }}{{ .Name }}\n{{ end }}", "scm\n"},
+		{"{{ $af.InvocationSnippet }}", "ctx.scm.affected_files(glob = None)"},
+		{"{{ $ctx.Flavor }}", "struct"},
+		{"{{ range $ctx.Symbols }}{{ .Name }}\n{{ end }}", "scm\n"},
 	}
 	for i, line := range data {
 		line := line

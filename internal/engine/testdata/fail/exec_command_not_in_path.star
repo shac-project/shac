@@ -2,7 +2,7 @@
 # Use of this source code is governed by a BSD-style
 # license that can be found in the LICENSE file.
 
-def cb(shac):
-  shac.exec(["this-command-does-not-exist"])
+def cb(ctx):
+  ctx.exec(["this-command-does-not-exist"])
 
 register_check(cb)

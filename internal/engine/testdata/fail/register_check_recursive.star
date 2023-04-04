@@ -2,10 +2,10 @@
 # Use of this source code is governed by a BSD-style
 # license that can be found in the LICENSE file.
 
-def cb2(shac):
+def cb2(ctx):
   pass
 
-def cb1(shac):
+def cb1(ctx):
   register_check(cb2)
 
 register_check(cb1)
