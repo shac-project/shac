@@ -14,6 +14,7 @@ require (
 	go.chromium.org/luci v0.0.0-20230404224156-3e7ffff8aa93
 	go.starlark.net v0.0.0-20230302034142-4b1e35fe2254
 	golang.org/x/sync v0.1.0
+	google.golang.org/protobuf v1.30.0
 )
 
 require golang.org/x/sys v0.7.0 // indirect

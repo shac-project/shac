@@ -1,0 +1,18 @@
+// Copyright 2023 The Shac Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
+
+syntax = "proto3";
+
+package engine;
+
+option go_package = "go.fuchsia.dev/shac-project/shac/internal/engine;engine";
+
+// Document is the root message being decoded in a shac.textproto.
+message Document {
+  // Minimum shac version that is required to run this check. This enables
+  // printing a better error message. It is a semver string.
+  string min_shac_version = 1;
+  // When set to true, it is allowed to have checks that access the network.
+  bool allow_network = 2;
+}

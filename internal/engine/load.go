@@ -4,6 +4,9 @@
 
 package engine
 
+//go:generate go install github.com/golang/protobuf/protoc-gen-go@v1.5.3
+//go:generate cproto
+
 import (
 	"context"
 	"errors"
