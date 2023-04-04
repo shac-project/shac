@@ -213,7 +213,7 @@ Runs a command as a subprocess.
 
 ```python
 def cb(ctx):
-  if ctx.exec("echo", "hello world", cwd="."):
+  if ctx.exec(["echo", "hello world"], cwd="."):
     fail("echo failed")
 
 register_check(cb)

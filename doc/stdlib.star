@@ -37,7 +37,7 @@ def _ctx_exec(cmd, cwd = None):
   Example:
     ```python
     def cb(ctx):
-      if ctx.exec("echo", "hello world", cwd="."):
+      if ctx.exec(["echo", "hello world"], cwd="."):
         fail("echo failed")
 
     register_check(cb)
