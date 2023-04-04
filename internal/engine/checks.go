@@ -110,7 +110,7 @@ func toValue(name string, d starlark.StringDict) starlark.Value {
 	return starlarkstruct.FromStringDict(starlark.String(name), d)
 }
 
-// registerCheck implements native function register_check().
+// registerCheck implements native function shac.register_check().
 //
 // Make sure to update stdlib.star whenever this function is modified.
 func registerCheck(th *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {

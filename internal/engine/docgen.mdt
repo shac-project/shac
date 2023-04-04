@@ -32,6 +32,12 @@ and Gitiles, which is super annoying.
 {{- template "gen-struct" . }}
 {{- else if eq $flavor "var" }}
 {{- template "gen-var" . }}
+{{- else if eq $flavor "inv" }}
+Inv.
+{{- else if eq $flavor "unknown" }}
+Unknown.
+{{- else }}
+No idea.
 {{- end }}
 {{- end }}
 
@@ -56,7 +62,6 @@ Fields:
 {{ template "gen-struct" . }}
 {{- end }}
 {{- range .Symbols "var" }}
-
 {{ template "gen-var" . }}
 {{- end }}
 {{- range .Symbols "func" }}
@@ -103,4 +108,7 @@ to the source code that doesn't end up in the documentation.
 {{- /* gen-var generates the documentation for a variable. */}}
 {{- define "gen-var" }}
 ## {{ .FullName }}
+{{- if .Def }}
+
+{{ .Def.Comments | LinkifySymbols }}{{ end }}
 {{- end }}

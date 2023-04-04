@@ -14,4 +14,4 @@ def cb(ctx):
   out += str(num) + ": " + line
   print(out)
 
-register_check(cb)
+shac.register_check(cb)

@@ -42,7 +42,7 @@ def _ctx_io_read_file(path):
       # processing.
       print(content)
 
-    register_check(cb)
+    shac.register_check(cb)
     ```
 
   Args:
@@ -64,7 +64,7 @@ def _ctx_os_exec(cmd, cwd = None):
       if ctx.os.exec(["echo", "hello world"], cwd="."):
         fail("echo failed")
 
-    register_check(cb)
+    shac.register_check(cb)
     ```
 
   Args:
@@ -87,7 +87,7 @@ def _ctx_re_allmatches(pattern, str):
       for match in ctx.re.allmatches("TODO\\(([^)]+)\\).*", content):
         print(match)
 
-    register_check(cb)
+    shac.register_check(cb)
     ```
 
   Args:
@@ -112,7 +112,7 @@ def _ctx_re_match(pattern, str):
       match = ctx.re.match("TODO\\(([^)]+)\\).*", "content/true")
       print(match)
 
-    register_check(cb)
+    shac.register_check(cb)
     ```
 
   Args:
@@ -148,7 +148,7 @@ def _ctx_scm_affected_files(glob = None):
           m = ctx.re.match("TODO\\(([^)]+)\\).*", line)
           print(path + "(" + str(num) + "): " + m.groups[0])
 
-    register_check(new_todos)
+    shac.register_check(new_todos)
     ```
 
   Args:
@@ -174,7 +174,7 @@ def _ctx_scm_all_files(glob = None):
           m = ctx.re.match("TODO\\(([^)]+)\\).*", line)
           print(path + "(" + str(num) + "): " + m.groups[0])
 
-    register_check(all_todos)
+    shac.register_check(all_todos)
     ```
 
   Args:
@@ -192,7 +192,7 @@ def _not_implemented():
   pass
 
 
-# ctx is the object passed to register_check(...) callback.
+# ctx is the object passed to shac.register_check(...) callback.
 ctx = struct(
   # ctx.io is the object that exposes the API to interact with the file system.
   io = struct(
@@ -256,7 +256,7 @@ def dir(x):
       print_attributes("set", set())
       print_attributes("struct", struct(foo = "bar", p = print_attributes))
 
-    register_check(cb)
+    shac.register_check(cb)
     ```
 
   Returns:
@@ -310,7 +310,7 @@ def _json_decode(x):
       decoded = ctx.io.read_file("config.json")
       print(decoded["version"])
 
-    register_check(cb)
+    shac.register_check(cb)
     ```
 
   Args:
@@ -432,7 +432,10 @@ def print(*args, sep=" "):
   pass
 
 
-def register_check(cb):
+## Methods inside the shac object.
+
+
+def _shac_register_check(cb):
   """Registers a shac check.
 
   It must be called at least once for the starlark file be a valid check file.
@@ -443,7 +446,7 @@ def register_check(cb):
     def cb(ctx):
       fail("implement me")
 
-    register_check(cb)
+    shac.register_check(cb)
     ```
 
   Args:
@@ -451,6 +454,16 @@ def register_check(cb):
       single argument ctx(...).
   """
   pass
+
+
+# shac is the global available at runtime when loading your starlark code.
+shac = struct(
+  # The git hash of shac.git where shac was built.
+  commit_hash = "<hash>",
+  register_check = _shac_register_check,
+  # The semver version number of shac.
+  version = (0, 0, 1),
+)
 
 
 def struct_():

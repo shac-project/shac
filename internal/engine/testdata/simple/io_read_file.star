@@ -6,4 +6,4 @@ def cb(ctx):
   d = json.decode(str(ctx.io.read_file("content.json")))
   print(d)
 
-register_check(cb)
+shac.register_check(cb)

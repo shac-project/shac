@@ -5,4 +5,4 @@
 def cb(ctx):
   ctx.os.exec(["this-command-does-not-exist"])
 
-register_check(cb)
+shac.register_check(cb)

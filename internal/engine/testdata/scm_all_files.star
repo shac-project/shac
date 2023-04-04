@@ -8,4 +8,4 @@ def cb(ctx):
     out += path + ": " + meta.action + "\n"
   print(out)
 
-register_check(cb)
+shac.register_check(cb)

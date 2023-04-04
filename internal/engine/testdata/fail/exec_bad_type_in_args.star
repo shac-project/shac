@@ -5,4 +5,4 @@
 def cb(ctx):
   ctx.os.exec(["echo", 1])
 
-register_check(cb)
+shac.register_check(cb)

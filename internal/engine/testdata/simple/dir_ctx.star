@@ -5,4 +5,4 @@
 def cb(ctx):
   print(dir(ctx))
 
-register_check(cb)
+shac.register_check(cb)

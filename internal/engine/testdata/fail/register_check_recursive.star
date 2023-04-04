@@ -6,6 +6,6 @@ def cb2(ctx):
   pass
 
 def cb1(ctx):
-  register_check(cb2)
+  shac.register_check(cb2)
 
-register_check(cb1)
+shac.register_check(cb1)

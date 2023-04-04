@@ -186,7 +186,7 @@ func TestTestDataFail(t *testing.T) {
 		},
 		{
 			"empty.star",
-			"did you forget to call register_check?",
+			"did you forget to call shac.register_check?",
 			"",
 		},
 		{
@@ -309,19 +309,19 @@ func TestTestDataFail(t *testing.T) {
 		{
 			"register_check_kwargs.star",
 			"register_check: unexpected keyword argument \"callback\"",
-			`  //register_check_kwargs.star:8:15: in <toplevel>` + "\n" +
+			`  //register_check_kwargs.star:8:20: in <toplevel>` + "\n" +
 				`Error in register_check: register_check: unexpected keyword argument "callback"`,
 		},
 		{
 			"register_check_no_arg.star",
 			"register_check: missing argument for cb",
-			`  //register_check_no_arg.star:5:15: in <toplevel>` + "\n" +
+			`  //register_check_no_arg.star:5:20: in <toplevel>` + "\n" +
 				`Error in register_check: register_check: missing argument for cb`,
 		},
 		{
 			"register_check_recursive.star",
 			"can't register checks after done loading",
-			"  //register_check_recursive.star:9:17: in cb1\n" +
+			"  //register_check_recursive.star:9:22: in cb1\n" +
 				"Error in register_check: can't register checks after done loading",
 		},
 		{
@@ -414,8 +414,8 @@ func TestTestDataSimple(t *testing.T) {
 			"[//dir_ctx.star:6] [\"io\", \"os\", \"re\", \"result\", \"scm\"]\n",
 		},
 		{
-			"dir_native.star",
-			"[//dir_native.star:5] [\"commitHash\", \"version\"]\n",
+			"dir_shac.star",
+			"[//dir_shac.star:5] [\"commit_hash\", \"register_check\", \"version\"]\n",
 		},
 		{
 			"exec_success.star",
@@ -426,8 +426,8 @@ func TestTestDataSimple(t *testing.T) {
 			"[//io_read_file.star:7] {\"key\": \"value\"}\n",
 		},
 		{
-			"minimal.star",
-			"[//minimal.star:5] " + v + "\n",
+			"print_version.star",
+			"[//print_version.star:5] " + v + "\n",
 		},
 		{
 			"re_allmatches.star",

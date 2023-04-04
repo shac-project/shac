@@ -10,4 +10,4 @@ def cb(ctx):
   # Two capture groups.
   print(ctx.re.allmatches("a(.)(.)", "ancient"))
 
-register_check(cb)
+shac.register_check(cb)

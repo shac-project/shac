@@ -5,4 +5,4 @@
 def cb(ctx):
   print("running")
 
-register_check(cb)
+shac.register_check(cb)

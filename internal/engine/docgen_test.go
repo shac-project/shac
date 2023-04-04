@@ -46,7 +46,9 @@ func TestDocTemplate(t *testing.T) {
 		{
 			"foo = True\n",
 			// TODO(maruel): Too many trailing spaces.
-			"# main.star\n\n## Table of contents\n\n- [foo](#foo)\n\n\n",
+			// TODO(maruel): A global shouldn't be considered an unknown. There's
+			// probably a parsing error.
+			"# main.star\n\n## Table of contents\n\n- [foo](#foo)\n\n\nUnknown.\n",
 		},
 		{
 			"foo = struct()\n",

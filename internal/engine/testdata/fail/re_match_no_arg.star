@@ -5,4 +5,4 @@
 def cb(ctx):
   ctx.re.match()
 
-register_check(cb)
+shac.register_check(cb)

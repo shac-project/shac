@@ -27,12 +27,12 @@ Note: The shac runtime standard library is implemented in native Go.
 - [json](#json)
 - [load](#load)
 - [print](#print)
-- [register_check](#register_check)
+- [shac](#shac)
 - [struct](#struct)
 
 ## ctx
 
-ctx is the object passed to register_check(...) callback.
+ctx is the object passed to [shac.register_check(...)](#shac.register-check) callback.
 
 Fields:
 
@@ -63,7 +63,7 @@ def cb(ctx):
   # processing.
   print(content)
 
-register_check(cb)
+shac.register_check(cb)
 ```
 
 ### Arguments
@@ -94,7 +94,7 @@ def cb(ctx):
   if ctx.os.exec(["echo", "hello world"], cwd="."):
     fail("echo failed")
 
-register_check(cb)
+shac.register_check(cb)
 ```
 
 ### Arguments
@@ -128,7 +128,7 @@ def cb(ctx):
   for match in ctx.re.allmatches("TODO\(([^)]+)\).*", content):
     print(match)
 
-register_check(cb)
+shac.register_check(cb)
 ```
 
 ### Arguments
@@ -153,7 +153,7 @@ def cb(ctx):
   match = ctx.re.match("TODO\(([^)]+)\).*", "content/true")
   print(match)
 
-register_check(cb)
+shac.register_check(cb)
 ```
 
 ### Arguments
@@ -224,7 +224,7 @@ def new_todos(cb):
       m = ctx.re.match("TODO\(([^)]+)\).*", line)
       print(path + "(" + str(num) + "): " + m.groups[0])
 
-register_check(new_todos)
+shac.register_check(new_todos)
 ```
 
 ### Arguments
@@ -251,7 +251,7 @@ def all_todos(cb):
       m = ctx.re.match("TODO\(([^)]+)\).*", line)
       print(path + "(" + str(num) + "): " + m.groups[0])
 
-register_check(all_todos)
+shac.register_check(all_todos)
 ```
 
 ### Arguments
@@ -294,7 +294,7 @@ def cb(ctx):
   print_attributes("set", set())
   print_attributes("struct", struct(foo = "bar", p = print_attributes))
 
-register_check(cb)
+shac.register_check(cb)
 ```
 
 ### Arguments
@@ -366,7 +366,7 @@ def cb(ctx):
   decoded = ctx.io.read_file("config.json")
   print(decoded["version"])
 
-register_check(cb)
+shac.register_check(cb)
 ```
 
 ### Arguments
@@ -466,7 +466,25 @@ print("shac", "is", "great")
 * **args**: arguments to print out.
 * **sep**: separator between the items in args, defaults to " ".
 
-## register_check
+## shac
+
+shac is the global available at runtime when loading your starlark code.
+
+Fields:
+
+- commit_hash
+- register_check
+- version
+
+## shac.commit_hash
+
+The git hash of shac.git where shac was built.
+
+## shac.version
+
+The semver version number of shac.
+
+## shac.register_check
 
 Registers a shac check.
 
@@ -479,7 +497,7 @@ Each callback will be run in parallel.
 def cb(ctx):
   fail("implement me")
 
-register_check(cb)
+shac.register_check(cb)
 ```
 
 ### Arguments

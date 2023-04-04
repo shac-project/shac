@@ -12,4 +12,4 @@ def cb(ctx):
   # Optional group with no match.
   print(ctx.re.match(r"a(b)?", "a"))
 
-register_check(cb)
+shac.register_check(cb)

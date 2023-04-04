@@ -2,13 +2,15 @@
 # Use of this source code is governed by a BSD-style
 # license that can be found in the LICENSE file.
 
-load("//doc/stdlib.star", doc_ctx = "ctx")
+load("//doc/stdlib.star", doc_ctx = "ctx", doc_shac = "shac")
 
-def check_ctx_docs(ctx):
-  """Validates that the `ctx` struct in //doc/stdlib.star is up-to-date.
+def check_docs(ctx):
+  """Validates that the `ctx` and `shac` structs in //doc/stdlib.star are
+  up-to-date.
 
   Specifically, it should (recursively) have all the same fields with all the
-  same types as the actual `ctx` object that gets passed to checks.
+  same types as the `shac` global and the `ctx` object that gets passed to
+  checks.
 
   Function signatures are not validated.
 
@@ -20,6 +22,10 @@ def check_ctx_docs(ctx):
   """
   want = _struct_signature(ctx)
   got = _struct_signature(doc_ctx)
+  if want != got:
+    fail("stdlib.star needs to be updated. Want:\n%s\nGot:\n%s" % (want, got))
+  want = _struct_signature(shac)
+  got = _struct_signature(doc_shac)
   if want != got:
     fail("stdlib.star needs to be updated. Want:\n%s\nGot:\n%s" % (want, got))
 

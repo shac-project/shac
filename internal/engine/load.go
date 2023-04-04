@@ -54,7 +54,7 @@ func Load(ctx context.Context, root, main string, allFiles bool, r Report) error
 		return err
 	}
 	if len(s.checks.c) == 0 && !s.printCalled {
-		return errors.New("did you forget to call register_check?")
+		return errors.New("did you forget to call shac.register_check?")
 	}
 	ctx = context.WithValue(ctx, &stateCtxKey, s)
 	if err := s.checks.callAll(ctx, s.intr); err != nil {
@@ -143,21 +143,17 @@ func parse(ctx context.Context, inputs *inputs, r Report) (*state, error) {
 
 // getPredeclared returns the predeclared starlark symbols in the runtime.
 func getPredeclared() starlark.StringDict {
-	// TODO(maruel): Add more native symbols.
-	native := starlark.StringDict{
-		"commitHash": starlark.String(getCommitHash()),
-		"version": starlark.Tuple{
-			starlark.MakeInt(version[0]), starlark.MakeInt(version[1]), starlark.MakeInt(version[2]),
-		},
-	}
 	// The upstream starlark interpreter includes all the symbols described at
 	// https://github.com/google/starlark-go/blob/HEAD/doc/spec.md#built-in-constants-and-functions
 	// See https://pkg.go.dev/go.starlark.net/starlark#Universe for the default list.
 	return starlark.StringDict{
-		// register_check is the only function that is exposed by the runtime that
-		// is specific to shac. The rest is hidden inside the __native__ struct.
-		"register_check": starlark.NewBuiltin("register_check", registerCheck),
-		"__native__":     toValue("__native__", native),
+		"shac": toValue("shac", starlark.StringDict{
+			"register_check": starlark.NewBuiltin("register_check", registerCheck),
+			"commit_hash":    starlark.String(getCommitHash()),
+			"version": starlark.Tuple{
+				starlark.MakeInt(version[0]), starlark.MakeInt(version[1]), starlark.MakeInt(version[2]),
+			},
+		}),
 
 		// Add https://bazel.build/rules/lib/json so it feels more natural to bazel
 		// users.

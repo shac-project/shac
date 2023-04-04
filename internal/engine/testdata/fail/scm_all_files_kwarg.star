@@ -5,4 +5,4 @@
 def cb(ctx):
   ctx.scm.all_files(unexpected=True)
 
-register_check(cb)
+shac.register_check(cb)

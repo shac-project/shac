@@ -5,4 +5,4 @@
 def cb(ctx):
   print("retcode: %d" % ctx.os.exec(["echo", "hello world"]))
 
-register_check(cb)
+shac.register_check(cb)

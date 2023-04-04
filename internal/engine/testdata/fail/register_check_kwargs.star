@@ -5,4 +5,4 @@
 def cb():
   pass
 
-register_check(callback=cb)
+shac.register_check(callback=cb)

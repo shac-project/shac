@@ -5,4 +5,4 @@
 def cb(ctx):
   ctx.io.read_file("/dev/null")
 
-register_check(cb)
+shac.register_check(cb)
