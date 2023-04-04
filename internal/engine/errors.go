@@ -22,26 +22,4 @@ type BacktracableError interface {
 var (
 	_ BacktracableError = (*starlark.EvalError)(nil)
 	_ BacktracableError = (*builtins.Failure)(nil)
-	_ BacktracableError = (*configError)(nil)
 )
-
-// configError is a single error message emitted by the config generator.
-//
-// It holds a stack trace responsible for the error.
-type configError struct {
-	msg   string
-	stack *builtins.CapturedStacktrace
-}
-
-// Error is part of 'error' interface.
-func (e *configError) Error() string {
-	return e.msg
-}
-
-// Backtrace is part of BacktracableError interface.
-func (e *configError) Backtrace() string {
-	if e.stack == nil {
-		return e.msg
-	}
-	return e.stack.String() + "Error: " + e.msg
-}
