@@ -1,8 +1,8 @@
-# Contributing to Fuchsia
+# Contributing to Shac
 
-Fuchsia lets anyone contribute to the project, regardless of their employer.
-The Fuchsia project reviews and encourages well-tested, high-quality
-contributions from anyone who wants to contribute to Fuchsia.
+Shac lets anyone contribute to the project, regardless of their employer.
+The Shac project reviews and encourages well-tested, high-quality contributions
+from anyone who wants to contribute to Shac.
 
 ## Contributor License Agreement
 
@@ -25,10 +25,3 @@ see [Contribute changes](/docs/development/source_code/contribute_changes.md).
 This project observes the following community guidelines:
 
   * [Google's Open Source Community Guidelines](https://opensource.google/conduct/)
-
-  * [Fuchsia Code of Conduct](/docs/CODE_OF_CONDUCT.md)
-
-## Governance
-
-Review Fuchsia's [Governance](/docs/contribute/governance/governance.md)
-statement.

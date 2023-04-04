@@ -1,8 +1,5 @@
-# More details about OWNERS in Fuchsia can be found at:
-# https://fuchsia.dev/fuchsia-src/development/source_code/owners
-#
 # Syntax for OWNERS files can be found at:
-# https://fuchsia-review.googlesource.com/plugins/code-owners/Documentation/backend-find-owners.html#syntax
+# https://gerrit.googlesource.com/plugins/code-owners/+/HEAD/resources/Documentation/backend-find-owners.md
 
 maruel@google.com
 olivernewman@google.com
