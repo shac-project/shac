@@ -9,6 +9,7 @@ This file will evolve as new shac functionality is being added.
 
 load("go.star", "gosec")
 load("licenses.star", "check_license_headers")
+load("check_doc.star", "check_ctx_docs")
 
 
 def new_todos(ctx):
@@ -33,3 +34,4 @@ def new_todos(ctx):
 register_check(new_todos)
 register_check(gosec)
 register_check(check_license_headers)
+register_check(check_ctx_docs)

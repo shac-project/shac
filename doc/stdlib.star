@@ -187,6 +187,11 @@ def _ctx_scm_all_files(glob = None):
   pass
 
 
+def _not_implemented():
+  """Not implemented."""
+  pass
+
+
 # ctx is the object passed to register_check(...) callback.
 ctx = struct(
   # ctx.io is the object that exposes the API to interact with the file system.
@@ -203,6 +208,12 @@ ctx = struct(
   re = struct(
     allmatches = _ctx_re_allmatches,
     match = _ctx_re_match,
+  ),
+  # ctx.result is the object that exposes the API to emit results for checks.
+  result = struct(
+    emit_comment = _not_implemented,
+    emit_row = _not_implemented,
+    emit_artifact = _not_implemented,
   ),
   # ctx.scm is the object exposes the API to query the source control
   # management (e.g. git).
@@ -442,7 +453,7 @@ def register_check(cb):
   pass
 
 
-def struct():
+def struct_():
   """Creates and return a structure instance.
 
   This a non-standard function that enables creating an "object" that has

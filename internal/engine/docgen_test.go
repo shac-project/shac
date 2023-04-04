@@ -57,7 +57,7 @@ func TestDocTemplate(t *testing.T) {
 	for i, line := range data {
 		line := line
 		t.Run(strconv.Itoa(i), func(t *testing.T) {
-			got, err := genDoc("main.star", line.in)
+			got, err := genDoc("main.star", line.in, false)
 			if err != nil {
 				t.Fatal(err)
 			}

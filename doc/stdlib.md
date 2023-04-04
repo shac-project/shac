@@ -39,6 +39,7 @@ Fields:
 - io
 - os
 - re
+- result
 - scm
 
 ## ctx.io
@@ -163,6 +164,31 @@ register_check(cb)
 ### Returns
 
 struct(offset=bytes_offset, groups=list(matches))
+
+## ctx.result
+
+ctx.result is the object that exposes the API to emit results for checks.
+
+Fields:
+
+- emit_comment
+- emit_row
+- emit_artifact
+
+## ctx.result.emit_comment
+
+Not implemented.
+
+
+## ctx.result.emit_row
+
+Not implemented.
+
+
+## ctx.result.emit_artifact
+
+Not implemented.
+
 
 ## ctx.scm
 

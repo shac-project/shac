@@ -72,7 +72,7 @@ It is intentional that .Def.Comments is not used. This permits adding comments
 to the source code that doesn't end up in the documentation.
 */}}
 {{- define "gen-func" -}}
-## {{ if eq .FullName "load_" }}load{{ else }}{{ .FullName }}{{ end }}
+## {{ if eq .FullName "load_" }}load{{ else if eq .FullName "struct_" }}struct{{ else }}{{ .FullName }}{{ end }}
 
 {{- if .Doc.Description }}
 

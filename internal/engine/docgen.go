@@ -24,7 +24,9 @@ var docgenTpl string
 // Doc returns the documentation for a source file.
 func Doc(src string) (string, error) {
 	content := ""
+	isStdlib := false
 	if src == "stdlib" {
+		isStdlib = true
 		src = "stdlib.star"
 		content = doc.StdlibSrc
 	} else {
@@ -37,10 +39,10 @@ func Doc(src string) (string, error) {
 		}
 		content = string(b)
 	}
-	return genDoc(src, content)
+	return genDoc(src, content, isStdlib)
 }
 
-func genDoc(src, content string) (string, error) {
+func genDoc(src, content string, isStdlib bool) (string, error) {
 	// It's unfortunate that we parse the source file twice. We need to fix the
 	// upstream API.
 	m, err := ast.ParseModule(src, content)
@@ -89,8 +91,11 @@ func genDoc(src, content string) (string, error) {
 		// TODO(maruel): Use "{{ template \"gen-toc\" }}"
 		for _, n := range syms {
 			name := n.Name()
-			if name == "load_" {
-				name = "load"
+			if isStdlib {
+				// To avoid overriding stdlib built-in functions, their
+				// docstrings are attached to dummy functions of the same name
+				// but with a trailing underscore.
+				name = strings.TrimSuffix(name, "_")
 			}
 			// Anchor works here because top-level symbols are generally simple. It
 			// is brittle, especially with the different anchor generation algorithm
