@@ -22,7 +22,7 @@ func (*docCmd) Name() string {
 }
 
 func (*docCmd) Description() string {
-	return "Prints out documentation for a starlark file. Use \"stdlib\" to print out the standard library documentation."
+	return "Prints out documentation for a starlark file.\nUse \"stdlib\" to print out the standard library documentation."
 }
 
 func (*docCmd) SetFlags(f *flag.FlagSet) {
