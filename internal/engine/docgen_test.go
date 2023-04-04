@@ -11,7 +11,7 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
-	"go.chromium.org/luci/lucicfg/docgen"
+	"go.chromium.org/luci/starlark/docgen"
 )
 
 func TestDocStdlib(t *testing.T) {

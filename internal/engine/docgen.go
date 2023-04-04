@@ -13,8 +13,8 @@ import (
 	"os"
 	"strings"
 
-	"go.chromium.org/luci/lucicfg/docgen"
-	"go.chromium.org/luci/lucicfg/docgen/ast"
+	"go.chromium.org/luci/starlark/docgen"
+	"go.chromium.org/luci/starlark/docgen/ast"
 	"go.fuchsia.dev/shac-project/shac/doc"
 )
 
