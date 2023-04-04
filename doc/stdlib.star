@@ -8,15 +8,176 @@
 """shac runtime standard library
 
 The starlark language specification is documented at
-https://github.com/google/starlark-go/blob/HEAD/doc/spec.md. It is a python
-derivative.
+https://github.com/google/starlark-go/blob/HEAD/doc/spec.md. Starlark is a
+python derivative. While [starlark-go's built-in constants and functions are
+available](https://github.com/google/starlark-go/blob/HEAD/doc/spec.md#built-in-constants-and-functions),
+a few are explicitly documented here to highlight them.
 
-Note: The standard library is implemented in native Go.
+These [experimental
+features](https://pkg.go.dev/go.starlark.net/resolve#pkg-variables) are enabled:
+
+- AllowSet: "set" built-in is enabled.
+- AllowRecursion: allow while statements and recursion. This allows potentially
+  unbounded runtime.
+
+Note: The shac runtime standard library is implemented in native Go.
 """
+
+
+def dir(x):
+  """Starlark builtin that returns all the attributes of an object.
+
+  Primarily used to explore and debug a starlark file.
+
+  See the official documentation at
+  https://github.com/google/starlark-go/blob/HEAD/doc/spec.md#dir.
+
+  Args:
+    x: object that will have its properties enumerated.
+
+  Example:
+    ```python
+    def print_attributes(name, obj):
+      for attrname in dir(obj):
+        attrval = getattr(obj, attrname)
+        attrtype = type(attrval)
+        fullname = name + "." + attrname
+        if attrtype in ("builtin_function_or_method", "function"):
+          print(fullname + "()")
+        elif attrtype == "struct":
+          print_attributes(fullname, attrval)
+        else:
+          print(fullname + "=" + repr(attrval))
+
+    def cb(shac):
+      print_attributes("shac", shac)
+      print_attributes("str", "")
+      print_attributes("dict", {})
+      print_attributes("set", set())
+      print_attributes("struct", struct(foo = "bar", p = print_attributes))
+
+    register_check(cb)
+    ```
+
+  Returns:
+    list of x object properties as strings. You can use getattr() to retrieve
+    each attributes in a loop.
+  """
+  pass
+
+
+def fail(*args, sep=" "):
+  """Starlark builtin that fails immediately the execution.
+
+  This function should not be used normally. It can be used as a quick debugging
+  tool or when there is an irrecoverable failure that should immediately stop
+  all execution.
+
+  See the official documentation at
+  https://github.com/google/starlark-go/blob/HEAD/doc/spec.md#fail.
+
+  Example:
+    ```python
+    fail("implement me")
+    ```
+
+  Args:
+    *args: arguments to print out.
+    sep: separator between the items in args, defaults to " ".
+  """
+  pass
+
+
+# It is illegal to have a function named load(). Use a hack that the document
+# processor detects to rename the function from load_() to load().
+def load_(module, *symbols, **kwsymbols):
+  """Starlark builtin that loads an additional shac starlark package and make
+  symbols (var, struct, functions) from this file accessible.
+
+  See the official documentation at
+  https://github.com/google/starlark-go/blob/HEAD/doc/spec.md#name-binding-and-variables
+  and at
+  https://github.com/google/starlark-go/blob/HEAD/doc/spec.md#load-statements.
+
+  After a starlark module is loaded, its values are frozen as described at
+  https://github.com/google/starlark-go/blob/HEAD/doc/spec.md#freezing-a-value.
+
+  Example:
+    ```python
+    load("go.star", "gosec")
+
+    def _gosec(shac):
+      # Use a specific gosec version, instead of upstream's default version.
+      gosec(shac, version="v2.9.6")
+
+    register_checks(_gosec)
+    ```
+
+  Args:
+    module: path to a local module to load. In the future, a remote path will be
+      allowed.
+    *symbols: symbols to load from the module.
+    **kwsymbols: symbols to load from the module that will be accessible under a
+      new name.
+  """
+  pass
+
+
+def print(*args, sep=" "):
+  """Starlark builtin that prints a debug log.
+
+  This function should only be used while debugging the starlark code.
+
+  Example:
+    ```python
+    print("shac", "is", "great")
+    ```
+
+  See the official documentation at
+  https://github.com/google/starlark-go/blob/HEAD/doc/spec.md#print.
+
+  Args:
+    args: arguments to print out.
+    sep: separator between the items in args, defaults to " ".
+  """
+  pass
+
+
+def register_check(cb):
+  """Registers a shac check.
+
+  It must be called at least once for the starlark file be a valid check file.
+  Each callback will be run in parallel.
+
+  Example:
+    ```python
+    def cb(shac):
+      fail("implement me")
+
+    register_check(cb)
+    ```
+
+  Args:
+    cb: Starlark function that is called back to implement the check. Passed a
+      single argument shac(...).
+  """
+  pass
+
+
+## Methods inside the shac object.
 
 
 def _exec(cmd, cwd = None):
   """Runs a command as a subprocess.
+
+  Example:
+    ```python
+    def cb(shac):
+      if shac.exec("echo", "hello world", cwd="."):
+        fail("echo failed")
+
+    register_check(cb)
+    ```
 
   Args:
     cmd: Subprocess command line.
@@ -31,6 +192,17 @@ def _exec(cmd, cwd = None):
 def _io_read_file(path):
   """Returns the content of a file.
 
+  Example:
+    ```python
+    def cb(shac):
+      content = str(shac.io_read_file("path/to/file.txt"))
+      # Usually run a regexp via shac.re.match(), or other simple text
+      # processing.
+      print(content)
+
+    register_check(cb)
+    ```
+
   Args:
     path: path of the file to read. The file must be within the workspace. The
       path must be relative and in POSIX format, using / separator.
@@ -43,6 +215,16 @@ def _io_read_file(path):
 
 def _re_allmatches(pattern, str):
   """Returns all the matches of the regexp pattern onto content.
+
+  Example:
+    ```python
+    def cb(shac):
+      content = str(shac.io_read_file("path/to/file.txt"))
+      for match in shac.re.allmatches("TODO\\(([^)]+)\\).*", content):
+        print(match)
+
+    register_check(cb)
+    ```
 
   Args:
     pattern: regexp to run. It must use the syntax as described at
@@ -57,6 +239,17 @@ def _re_allmatches(pattern, str):
 
 def _re_match(pattern, str):
   """Returns the first match of the regexp pattern onto content.
+
+  Example:
+    ```python
+    def cb(shac):
+      content = str(shac.io_read_file("path/to/file.txt"))
+      # Only print the first match, if any.
+      match = shac.re.match("TODO\\(([^)]+)\\).*", "content/true")
+      print(match)
+
+    register_check(cb)
+    ```
 
   Args:
     pattern: regexp to run. It must use the syntax as described at
@@ -82,6 +275,18 @@ def _scm_affected_files(glob = None):
   If shac is run with the --all options, all files are considered "added" to do
   a full run on all files.
 
+  Example:
+    ```python
+    def new_todos(cb):
+      # Prints only the TODO that were added compared to upstream.
+      for path, meta in shac.scm.affected_files().items():
+        for num, line in meta.new_lines():
+          m = shac.re.match("TODO\\(([^)]+)\\).*", line)
+          print(path + "(" + str(num) + "): " + m.groups[0])
+
+    register_check(new_todos)
+    ```
+
   Args:
     glob: TODO: Will later accept a glob.
 
@@ -97,22 +302,23 @@ def _scm_all_files(glob = None):
 
   It considers all files "added".
 
+  Example:
+    ```python
+    def all_todos(cb):
+      for path, meta in shac.scm.all_files().items():
+        for num, line in meta.new_lines():
+          m = shac.re.match("TODO\\(([^)]+)\\).*", line)
+          print(path + "(" + str(num) + "): " + m.groups[0])
+
+    register_check(all_todos)
+    ```
+
   Args:
     glob: TODO: Will later accept a glob.
 
   Returns:
     A map of {path: struct()} where the struct has a string field action and a
     function new_line().
-  """
-  pass
-
-
-def register_check(cb):
-  """Registers a shac check.
-
-  Args:
-    cb: Starlark function that is called back to implement the check. Passed a
-      single argument shac(...).
   """
   pass
 
@@ -137,3 +343,30 @@ shac = struct(
     all_files = _scm_all_files,
   ),
 )
+
+
+def struct():
+  """Creates and return a structure instance.
+
+  This a non-standard function that enables creating an "object" that has
+  immutable properties. It is intentionally not as powerful as a python class
+  instance.
+
+  Example:
+    ```python
+    def _do():
+      print("it works")
+
+    obj = struct(
+      value = "a value",
+      do = _do,
+    )
+
+    print(obj.value)
+    obj.do()
+    ```
+
+  Args:
+    **kwargs: structure's fields.
+  """
+  pass

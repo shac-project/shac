@@ -14,6 +14,7 @@ import (
 )
 
 func main() {
+	log.SetFlags(0)
 	cwd, err := os.Getwd()
 	if err != nil {
 		log.Fatal(err)
@@ -23,7 +24,7 @@ func main() {
 	c.Dir = base
 	o, err := c.CombinedOutput()
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalf("failed to run \"go run . doc\": %s\n%s", err, o)
 	}
 	if err := os.WriteFile(filepath.Join(base, "doc", "stdlib.md"), o, 0o644); err != nil {
 		log.Fatal(err)

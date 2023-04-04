@@ -24,8 +24,7 @@ var docgenTpl string
 // Doc returns the documentation for a source file.
 func Doc(src string) (string, error) {
 	content := ""
-	isStd := src == "stdlib"
-	if isStd {
+	if src == "stdlib" {
 		src = "stdlib.star"
 		content = doc.StdlibSrc
 	} else {
@@ -38,7 +37,10 @@ func Doc(src string) (string, error) {
 		}
 		content = string(b)
 	}
+	return genDoc(src, content)
+}
 
+func genDoc(src, content string) (string, error) {
 	// It's unfortunate that we parse the source file twice. We need to fix the
 	// upstream API.
 	m, err := ast.ParseModule(src, content)
@@ -47,12 +49,10 @@ func Doc(src string) (string, error) {
 	}
 
 	// Parse once to get all the global symbols and top level docstring.
-	var syms []string
-	//:= []string{"register_check", "shac"}
+	var syms []ast.Node
 	for _, node := range m.Nodes {
-		name := node.Name()
-		if !strings.HasPrefix(name, "_") {
-			syms = append(syms, name)
+		if !strings.HasPrefix(node.Name(), "_") {
+			syms = append(syms, node)
 		}
 	}
 	d := m.Doc()
@@ -70,8 +70,8 @@ func Doc(src string) (string, error) {
 	// Appends all the global symbols to the template to render them.
 	gen := ""
 	// First, "load" the symbols.
-	for i, s := range syms {
-		gen += fmt.Sprintf("{{- $sym%d := Symbol %q %q}}", i, src, s)
+	for i, n := range syms {
+		gen += fmt.Sprintf("{{- $sym%d := Symbol %q %q }}", i, src, n.Name())
 	}
 
 	// Header and main comment if any.
@@ -82,7 +82,22 @@ func Doc(src string) (string, error) {
 		// TODO(maruel): Maybe the absolute path? Or a module docstring?
 		gen += "# " + src
 	}
-	gen += "\n"
+
+	// Generate the table of content.
+	if len(syms) != 0 {
+		gen += "\n\n## Table of contents\n\n"
+		// TODO(maruel): Use "{{ template \"gen-toc\" }}"
+		for _, n := range syms {
+			name := n.Name()
+			if name == "load_" {
+				name = "load"
+			}
+			// Anchor works here because top-level symbols are generally simple. It
+			// is brittle, especially with the different anchor generation algorithm
+			// between GitHub and Gitiles.
+			gen += "- [" + name + "](#" + name + ")\n"
+		}
+	}
 
 	// Each of the symbol.
 	for i := range syms {

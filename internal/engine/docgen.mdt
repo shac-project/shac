@@ -11,8 +11,20 @@ docgen_test.go on how to use the template.
 */}}
 
 
+{{- /* gen-toc generates a table of contents for a list of symbols.
+
+TODO(maruel): Use an anchor. The anchor formatting is different between GitHub
+and Gitiles, which is super annoying.
+*/}}
+{{- define "gen-toc"}}
+{{- range . }}
+- {{ .Name }}
+{{- end }}
+{{- end }}
+
+
 {{- /* gen-any generates the documentation for a func, struct or var. It is recursive. */}}
-{{- define "gen-any"}}
+{{- define "gen-any" }}
 {{- $flavor := .Flavor }}
 {{- if eq $flavor "func" }}
 {{- template "gen-func" . }}
@@ -24,52 +36,71 @@ docgen_test.go on how to use the template.
 {{- end }}
 
 
-{{- /* gen-struct generates the documentation for a struct. It is recursive. */}}
-{{- define "gen-struct" -}}
-## {{.FullName}}
+{{- /* gen-struct generates the documentation for a struct. It is recursive.
 
-{{ if .Def }}{{ .Def.Comments | LinkifySymbols }}{{ end }}
-{{- range .Symbols "struct"}}
+There is no way to assign a docstring to a struct, so use the comment just
+before the definition instead.
+*/}}
+{{- define "gen-struct" -}}
+## {{ .FullName }}
+{{- if .Def }}
+
+{{ .Def.Comments | LinkifySymbols }}{{ end }}
+{{- if .Symbols }}
+
+Fields:
+{{ template "gen-toc" .Symbols }}
+{{- end }}
+{{- range .Symbols "struct" }}
 
 {{ template "gen-struct" . }}
 {{- end }}
-{{- range .Symbols "var"}}
+{{- range .Symbols "var" }}
 
 {{ template "gen-var" . }}
 {{- end }}
-{{- range .Symbols "func"}}
+{{- range .Symbols "func" }}
 
 {{ template "gen-func" . }}
-{{- end}}
-{{- end}}
+{{- end }}
+{{- end }}
 
 
-{{- /* gen-func generates the documentation for a func. */}}
+{{- /* gen-func generates the documentation for a func.
+
+It is intentional that .Def.Comments is not used. This permits adding comments
+to the source code that doesn't end up in the documentation.
+*/}}
 {{- define "gen-func" -}}
-## {{.FullName}}
+## {{ if eq .FullName "load_" }}load{{ else }}{{ .FullName }}{{ end }}
 
-```python
-{{.InvocationSnippet}}
-```
+{{- if .Doc.Description }}
 
-{{.Doc.Description | LinkifySymbols}}
-{{- if .Doc.Args}}
+{{ .Doc.Description | LinkifySymbols }}
+{{ end }}
+{{- range .Doc.Remarks }}
+{{- if ne .Title "Returns" }}
+### {{ .Title }}
 
+{{ .Body }}
+{{ end }}
+{{- end }}
+{{- if .Doc.Args }}
 ### Arguments
-{{ range .Doc.Args}}
-* **{{.Name | EscapeMD}}**: {{.Desc | LinkifySymbols}}
-{{- end}}
-{{- end}}
-{{- if .Doc.Returns}}
+{{ range .Doc.Args }}
+* **{{ .Name | EscapeMD }}**: {{ .Desc | LinkifySymbols }}
+{{- end }}
+{{- end }}
+{{- if .Doc.Returns }}
 
 ### Returns
 
-{{.Doc.Returns | LinkifySymbols}}
-{{- end}}
-{{- end}}
+{{ .Doc.Returns | LinkifySymbols }}
+{{- end }}
+{{- end }}
 
 
 {{- /* gen-var generates the documentation for a variable. */}}
-{{- define "gen-var"}}
-## {{.FullName}}
-{{- end}}
+{{- define "gen-var" }}
+## {{ .FullName }}
+{{- end }}

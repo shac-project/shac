@@ -29,6 +29,45 @@ func TestDocStdlib(t *testing.T) {
 	}
 }
 
+func TestDocTemplate(t *testing.T) {
+	data := []struct {
+		in   string
+		want string
+	}{
+		{
+			"def foo():\n  pass\n",
+			"# main.star\n\n## Table of contents\n\n- [foo](#foo)\n\n## foo\n",
+		},
+		{
+			"\n",
+			// TODO(maruel): Unexpected LF placement.
+			"\n# main.star",
+		},
+		{
+			"foo = True\n",
+			// TODO(maruel): Too many trailing spaces.
+			"# main.star\n\n## Table of contents\n\n- [foo](#foo)\n\n\n",
+		},
+		{
+			"foo = struct()\n",
+			// TODO(maruel): Too many trailing spaces.
+			"# main.star\n\n## Table of contents\n\n- [foo](#foo)\n\n## foo\n\n\n",
+		},
+	}
+	for i, line := range data {
+		line := line
+		t.Run(strconv.Itoa(i), func(t *testing.T) {
+			got, err := genDoc("main.star", line.in)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if diff := cmp.Diff(line.want, got); diff != "" {
+				t.Fatalf("mismatch (+want -got):\n%s\n%s", line.in, diff)
+			}
+		})
+	}
+}
+
 func TestDocgenGenerator(t *testing.T) {
 	// It's not really a unit test, it's more to document parts of what is
 	// available in the template engine.
