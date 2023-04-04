@@ -59,7 +59,14 @@ func reAllMatches(th *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple
 func matchToGroup(s string, groups []int) starlark.Value {
 	g := make(starlark.Tuple, len(groups)/2)
 	for j := 0; j < len(groups)/2; j++ {
-		g[j] = starlark.String(s[groups[2*j]:groups[2*j+1]])
+		start, end := groups[2*j], groups[2*j+1]
+		// Group indices will be -1 if a capture group was optional and did not
+		// match, e.g. `ctx.re.match(r"a(b)?", "a")`.
+		if start < 0 && end < 0 {
+			g[j] = starlark.None
+		} else {
+			g[j] = starlark.String(s[start:end])
+		}
 	}
 	return starlarkstruct.FromStringDict(starlark.String("match"),
 		starlark.StringDict{

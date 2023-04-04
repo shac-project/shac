@@ -439,7 +439,8 @@ func TestTestDataSimple(t *testing.T) {
 			"re_match.star",
 			`[//re_match.star:7] None` + "\n" +
 				`[//re_match.star:9] match(groups = ("TODO(foo)",), offset = 4)` + "\n" +
-				`[//re_match.star:11] match(groups = ("anc", "n", "c"), offset = 0)` + "\n",
+				`[//re_match.star:11] match(groups = ("anc", "n", "c"), offset = 0)` + "\n" +
+				`[//re_match.star:13] match(groups = ("a", None), offset = 0)` + "\n",
 		},
 		{
 			"register_check.star",

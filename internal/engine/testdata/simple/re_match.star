@@ -9,5 +9,7 @@ def cb(ctx):
   print(ctx.re.match("TODO\\([^)]+\\)", "foo TODO(foo) TODO(bar)"))
   # Two capture groups.
   print(ctx.re.match("a(.)(.)", "ancient"))
+  # Optional group with no match.
+  print(ctx.re.match(r"a(b)?", "a"))
 
 register_check(cb)
