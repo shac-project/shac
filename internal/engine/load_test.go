@@ -192,7 +192,7 @@ func TestTestDataFail(t *testing.T) {
 		{
 			"exec_bad_type_in_args.star",
 			"command args must be strings",
-			"  //exec_bad_type_in_args.star:6:11: in cb\n" +
+			"  //exec_bad_type_in_args.star:6:14: in cb\n" +
 				"Error in exec: command args must be strings",
 		},
 		{
@@ -204,7 +204,7 @@ func TestTestDataFail(t *testing.T) {
 				return `exec: "this-command-does-not-exist": executable file not found in $PATH`
 			}(),
 			func() string {
-				prefix := "  //exec_command_not_in_path.star:6:11: in cb\nError in exec: "
+				prefix := "  //exec_command_not_in_path.star:6:14: in cb\nError in exec: "
 				if runtime.GOOS == "windows" {
 					return prefix + `exec: "this-command-does-not-exist": executable file not found in %PATH%`
 				}
@@ -214,7 +214,7 @@ func TestTestDataFail(t *testing.T) {
 		{
 			"exec_invalid_cwd.star",
 			"cannot escape root",
-			"  //exec_invalid_cwd.star:6:11: in cb\n" +
+			"  //exec_invalid_cwd.star:6:14: in cb\n" +
 				"Error in exec: cannot escape root",
 		},
 		{
@@ -411,7 +411,7 @@ func TestTestDataSimple(t *testing.T) {
 	}{
 		{
 			"dir_ctx.star",
-			"[//dir_ctx.star:6] [\"exec\", \"io\", \"re\", \"result\", \"scm\"]\n",
+			"[//dir_ctx.star:6] [\"io\", \"os\", \"re\", \"result\", \"scm\"]\n",
 		},
 		{
 			"dir_native.star",

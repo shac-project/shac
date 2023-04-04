@@ -3,6 +3,6 @@
 # license that can be found in the LICENSE file.
 
 def cb(ctx):
-  ctx.exec(["echo", 1])
+  ctx.os.exec(["echo", 1])
 
 register_check(cb)

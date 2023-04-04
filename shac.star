@@ -26,7 +26,7 @@ def new_todos(ctx):
         out += "\n" + path + "(" + str(num) + "): " + m.groups[0]
   if out:
     print(out)
-  if ctx.exec(["echo", "hello world"]) != 0:
+  if ctx.os.exec(["echo", "hello world"]) != 0:
     fail("failed to run echo")
 
 

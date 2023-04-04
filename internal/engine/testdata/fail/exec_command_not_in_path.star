@@ -3,6 +3,6 @@
 # license that can be found in the LICENSE file.
 
 def cb(ctx):
-  ctx.exec(["this-command-does-not-exist"])
+  ctx.os.exec(["this-command-does-not-exist"])
 
 register_check(cb)

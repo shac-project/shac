@@ -83,9 +83,11 @@ func (c *checks) callAll(ctx context.Context, intr *interpreter.Interpreter) err
 // Make sure to update stdlib.star whenever this object is modified.
 func getCtx() starlark.Value {
 	return toValue("ctx", starlark.StringDict{
-		"exec": starlark.NewBuiltin("exec", execSubprocess),
 		"io": toValue("io", starlark.StringDict{
 			"read_file": starlark.NewBuiltin("read_file", readFile),
+		}),
+		"os": toValue("os", starlark.StringDict{
+			"exec": starlark.NewBuiltin("exec", execSubprocess),
 		}),
 		"re": toValue("re", starlark.StringDict{
 			"match":      starlark.NewBuiltin("match", reMatch),
@@ -179,7 +181,7 @@ func absPath(rel, rootDir string) (string, error) {
 	return res, nil
 }
 
-// execSubprocess implements the native function ctx.exec().
+// execSubprocess implements the native function ctx.os.exec().
 //
 // TODO(olivernewman): Return a struct with stdout and stderr in addition to the
 // exit code.

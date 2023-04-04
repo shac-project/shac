@@ -14,8 +14,8 @@ def gosec(ctx, version = "v2.15.0"):
       be rolled from time to time.
   """
   # TODO(maruel): Always install locally with GOBIN=.tools
-  if ctx.exec(["go", "install", "github.com/securego/gosec/v2/cmd/gosec@" + version]):
+  if ctx.os.exec(["go", "install", "github.com/securego/gosec/v2/cmd/gosec@" + version]):
     fail("failed to install")
-  if ctx.exec(["gosec", "-fmt=golint", "-quiet", "-exclude=G304", "-exclude-dir=.tools", "./..."]):
+  if ctx.os.exec(["gosec", "-fmt=golint", "-quiet", "-exclude=G304", "-exclude-dir=.tools", "./..."]):
     # TODO(maruel): Emits lines.
     fail("failed gosec")

@@ -31,28 +31,6 @@ Note: The shac runtime standard library is implemented in native Go.
 ## Methods inside ctx object.
 
 
-def _ctx_exec(cmd, cwd = None):
-  """Runs a command as a subprocess.
-
-  Example:
-    ```python
-    def cb(ctx):
-      if ctx.exec(["echo", "hello world"], cwd="."):
-        fail("echo failed")
-
-    register_check(cb)
-    ```
-
-  Args:
-    cmd: Subprocess command line.
-    cwd: Relative path to cwd for the subprocess.
-
-  Returns:
-    An integer corresponding to the subprocess exit code.
-  """
-  pass
-
-
 def _ctx_io_read_file(path):
   """Returns the content of a file.
 
@@ -73,6 +51,28 @@ def _ctx_io_read_file(path):
 
   Returns:
     Content of the file as bytes.
+  """
+  pass
+
+
+def _ctx_os_exec(cmd, cwd = None):
+  """Runs a command as a subprocess.
+
+  Example:
+    ```python
+    def cb(ctx):
+      if ctx.os.exec(["echo", "hello world"], cwd="."):
+        fail("echo failed")
+
+    register_check(cb)
+    ```
+
+  Args:
+    cmd: Subprocess command line.
+    cwd: Relative path to cwd for the subprocess.
+
+  Returns:
+    An integer corresponding to the subprocess exit code.
   """
   pass
 
@@ -189,10 +189,14 @@ def _ctx_scm_all_files(glob = None):
 
 # ctx is the object passed to register_check(...) callback.
 ctx = struct(
-  exec = _ctx_exec,
   # ctx.io is the object that exposes the API to interact with the file system.
   io = struct(
     read_file = _ctx_io_read_file,
+  ),
+  # ctx.io is the object that exposes the API to interact with the operating
+  # system.
+  os = struct(
+    exec = _ctx_os_exec,
   ),
   # ctx.re is the object that exposes the API to run regular expressions on
   # starlark strings.

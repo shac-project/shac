@@ -3,6 +3,6 @@
 # license that can be found in the LICENSE file.
 
 def cb(ctx):
-  ctx.exec(["echo", "hello world"], cwd = "../foo")
+  ctx.os.exec(["echo", "hello world"], cwd = "../foo")
 
 register_check(cb)

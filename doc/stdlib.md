@@ -36,8 +36,8 @@ ctx is the object passed to register_check(...) callback.
 
 Fields:
 
-- exec
 - io
+- os
 - re
 - scm
 
@@ -72,6 +72,38 @@ register_check(cb)
 ### Returns
 
 Content of the file as bytes.
+
+## ctx.os
+
+ctx.io is the object that exposes the API to interact with the operating
+system.
+
+Fields:
+
+- exec
+
+## ctx.os.exec
+
+Runs a command as a subprocess.
+
+### Example
+
+```python
+def cb(ctx):
+  if ctx.os.exec(["echo", "hello world"], cwd="."):
+    fail("echo failed")
+
+register_check(cb)
+```
+
+### Arguments
+
+* **cmd**: Subprocess command line.
+* **cwd**: Relative path to cwd for the subprocess.
+
+### Returns
+
+An integer corresponding to the subprocess exit code.
 
 ## ctx.re
 
@@ -204,29 +236,6 @@ register_check(all_todos)
 
 A map of {path: struct()} where the struct has a string field action and a
 function new_line().
-
-## ctx.exec
-
-Runs a command as a subprocess.
-
-### Example
-
-```python
-def cb(ctx):
-  if ctx.exec(["echo", "hello world"], cwd="."):
-    fail("echo failed")
-
-register_check(cb)
-```
-
-### Arguments
-
-* **cmd**: Subprocess command line.
-* **cwd**: Relative path to cwd for the subprocess.
-
-### Returns
-
-An integer corresponding to the subprocess exit code.
 
 ## dir
 
