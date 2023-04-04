@@ -1,0 +1,20 @@
+# Copyright 2023 The Fuchsia Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style
+# license that can be found in the LICENSE file.
+
+# https://docs.codecov.io/docs/codecovyml-reference
+# and
+# https://docs.codecov.io/docs/coverage-configuration
+coverage:
+  precision: 1
+  range: "20...80"
+  round: nearest
+  status:
+    patch:
+      default:
+        target: 40%
+        threshold: 10%
+    project:
+      default:
+        target: 40%
+        threshold: 10%
