@@ -1,8 +1,12 @@
 # shac runtime standard library
 
-The starlark language specification is documented at
-https://github.com/google/starlark-go/blob/HEAD/doc/spec.md. Starlark is a
-python derivative. While [starlark-go's built-in constants and functions are
+shac uses the starlark language. Starlark is a python derivative.
+https://bazel.build/rules/language is a great resource if the language is new to
+you, just ignore the bazel references. The starlark language formal
+specification is documented at
+https://github.com/google/starlark-go/blob/HEAD/doc/spec.md.
+
+While all [starlark-go's built-in constants and functions are
 available](https://github.com/google/starlark-go/blob/HEAD/doc/spec.md#built-in-constants-and-functions),
 a few are explicitly documented here to highlight them.
 
@@ -19,6 +23,7 @@ Note: The shac runtime standard library is implemented in native Go.
 
 - [dir](#dir)
 - [fail](#fail)
+- [json](#json)
 - [load](#load)
 - [print](#print)
 - [register_check](#register_check)
@@ -89,6 +94,94 @@ fail("implement me")
 
 * **\*args**: arguments to print out.
 * **sep**: separator between the items in args, defaults to " ".
+
+## json
+
+json is a global module that exposes json functions.
+
+The documentation here is listed as a struct instead of a module. The two are
+functionally equivalent.
+
+The implementation matches the official bazel's documentation at
+https://bazel.build/rules/lib/json except that encode_indent is not
+implemented.
+
+Fields:
+
+- decode
+- encode
+- indent
+
+## json.decode
+
+Decodes a JSON encoded string into the Starlark value that the string
+denotes.
+
+Supported types include null, bool, int, float, str, dict and list.
+
+See the full documentation at https://bazel.build/rules/lib/json#decode.
+
+### Example
+
+```python
+data = json.decode('{"foo":"bar}')
+print(data["foo"])
+
+def cb(shac):
+  # Load a configuration from a json file in the tree, containing a
+  # dict with a "version" key.
+  decoded = shac.io.read_file("config.json")
+  print(decoded["version"])
+
+register_check(cb)
+```
+
+### Arguments
+
+* **x**: string or bytes of JSON encoded data to convert back to starlark.
+
+## json.encode
+
+Encodes the starlark value into a JSON encoded string.
+
+Supported types include null, bool, int, float, str, dict, list and struct.
+
+See the full documentation at https://bazel.build/rules/lib/json#encode.
+
+### Example
+
+```python
+config = struct(
+  foo = "bar",
+)
+print(json.encode(config))
+```
+
+### Arguments
+
+* **x**: starlark value to encode to a JSON encoded string.
+
+## json.indent
+
+Returns the indented form of a valid JSON-encoded string.
+
+See the full documentation at https://bazel.build/rules/lib/json#indent.
+
+### Example
+
+```python
+config = struct(
+  foo = "bar",
+)
+d = json.encode(config)
+print(json.indent(d))
+```
+
+### Arguments
+
+* **x**: string or bytes of JSON encoded data to reformat.
+* **prefix**: prefix for each new line.
+* **indent**: indent for nested fields.
 
 ## load
 

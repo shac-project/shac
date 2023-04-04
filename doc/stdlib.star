@@ -7,9 +7,13 @@
 
 """shac runtime standard library
 
-The starlark language specification is documented at
-https://github.com/google/starlark-go/blob/HEAD/doc/spec.md. Starlark is a
-python derivative. While [starlark-go's built-in constants and functions are
+shac uses the starlark language. Starlark is a python derivative.
+https://bazel.build/rules/language is a great resource if the language is new to
+you, just ignore the bazel references. The starlark language formal
+specification is documented at
+https://github.com/google/starlark-go/blob/HEAD/doc/spec.md.
+
+While all [starlark-go's built-in constants and functions are
 available](https://github.com/google/starlark-go/blob/HEAD/doc/spec.md#built-in-constants-and-functions),
 a few are explicitly documented here to highlight them.
 
@@ -86,6 +90,95 @@ def fail(*args, sep=" "):
     sep: separator between the items in args, defaults to " ".
   """
   pass
+
+
+## Methods inside the json object.
+
+
+def _json_decode(x):
+  """Decodes a JSON encoded string into the Starlark value that the string
+  denotes.
+
+  Supported types include null, bool, int, float, str, dict and list.
+
+  See the full documentation at https://bazel.build/rules/lib/json#decode.
+
+  Example:
+    ```python
+    data = json.decode('{"foo":"bar}')
+    print(data["foo"])
+
+    def cb(shac):
+      # Load a configuration from a json file in the tree, containing a
+      # dict with a "version" key.
+      decoded = shac.io.read_file("config.json")
+      print(decoded["version"])
+
+    register_check(cb)
+    ```
+
+  Args:
+    x: string or bytes of JSON encoded data to convert back to starlark.
+  """
+  pass
+
+
+def _json_encode(x):
+  """Encodes the starlark value into a JSON encoded string.
+
+  Supported types include null, bool, int, float, str, dict, list and struct.
+
+  See the full documentation at https://bazel.build/rules/lib/json#encode.
+
+  Example:
+    ```python
+    config = struct(
+      foo = "bar",
+    )
+    print(json.encode(config))
+    ```
+
+  Args:
+    x: starlark value to encode to a JSON encoded string.
+  """
+  pass
+
+
+def _json_indent(s, *, prefix="", indent="\t"):
+  """Returns the indented form of a valid JSON-encoded string.
+
+  See the full documentation at https://bazel.build/rules/lib/json#indent.
+
+  Example:
+    ```python
+    config = struct(
+      foo = "bar",
+    )
+    d = json.encode(config)
+    print(json.indent(d))
+    ```
+
+  Args:
+    x: string or bytes of JSON encoded data to reformat.
+    prefix: prefix for each new line.
+    indent: indent for nested fields.
+  """
+  pass
+
+
+# json is a global module that exposes json functions.
+#
+# The documentation here is listed as a struct instead of a module. The two are
+# functionally equivalent.
+#
+# The implementation matches the official bazel's documentation at
+# https://bazel.build/rules/lib/json except that encode_indent is not
+# implemented.
+json = struct(
+  decode = _json_decode,
+  encode = _json_encode,
+  indent = _json_indent,
+)
 
 
 # It is illegal to have a function named load(). Use a hack that the document
@@ -167,7 +260,7 @@ def register_check(cb):
 ## Methods inside the shac object.
 
 
-def _exec(cmd, cwd = None):
+def _shac_exec(cmd, cwd = None):
   """Runs a command as a subprocess.
 
   Example:
@@ -189,7 +282,7 @@ def _exec(cmd, cwd = None):
   pass
 
 
-def _io_read_file(path):
+def _shac_io_read_file(path):
   """Returns the content of a file.
 
   Example:
@@ -213,7 +306,7 @@ def _io_read_file(path):
   pass
 
 
-def _re_allmatches(pattern, str):
+def _shac_re_allmatches(pattern, str):
   """Returns all the matches of the regexp pattern onto content.
 
   Example:
@@ -237,7 +330,7 @@ def _re_allmatches(pattern, str):
   pass
 
 
-def _re_match(pattern, str):
+def _shac_re_match(pattern, str):
   """Returns the first match of the regexp pattern onto content.
 
   Example:
@@ -262,7 +355,7 @@ def _re_match(pattern, str):
   pass
 
 
-def _scm_affected_files(glob = None):
+def _shac_scm_affected_files(glob = None):
   """Returns affected files as determined by the SCM.
 
   If shac detected that the tree is managed by a source control management
@@ -297,7 +390,7 @@ def _scm_affected_files(glob = None):
   pass
 
 
-def _scm_all_files(glob = None):
+def _shac_scm_all_files(glob = None):
   """Returns all files found in the current workspace.
 
   It considers all files "added".
@@ -325,22 +418,22 @@ def _scm_all_files(glob = None):
 
 # shac is the object passed to register_check(...) callback.
 shac = struct(
-  exec = _exec,
+  exec = _shac_exec,
   # shac.io is the object that exposes the API to interact with the file system.
   io = struct(
-    read_file = _io_read_file,
+    read_file = _shac_io_read_file,
   ),
   # shac.re is the object that exposes the API to run regular expressions on
   # starlark strings.
   re = struct(
-    allmatches = _re_allmatches,
-    match = _re_match,
+    allmatches = _shac_re_allmatches,
+    match = _shac_re_match,
   ),
   # shac.scm is the object exposes the API to query the source control
   # management (e.g. git).
   scm = struct(
-    affected_files = _scm_affected_files,
-    all_files = _scm_all_files,
+    affected_files = _shac_scm_affected_files,
+    all_files = _shac_scm_all_files,
   ),
 )
 

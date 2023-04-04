@@ -163,11 +163,11 @@ func getPredeclared() starlark.StringDict {
 		// users.
 		"json": json.Module,
 
-		// luci-go's starlark additional features.
 		// Override fail to include additional functionality.
-		"fail":       builtins.Fail,
-		"stacktrace": builtins.Stacktrace,
-		"struct":     builtins.Struct,
+		"fail": builtins.Fail,
+		// struct is an helper function that enables users to create seamless
+		// object instances.
+		"struct": builtins.Struct,
 	}
 }
 
