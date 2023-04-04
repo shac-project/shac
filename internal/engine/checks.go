@@ -61,7 +61,7 @@ func (c *checks) callAll(ctx context.Context, intr *interpreter.Interpreter) err
 				fc.Clear()
 			}
 			// TODO(maruel): Set a context for the subdirectory.
-			args := starlark.Tuple{getShac()}
+			args := starlark.Tuple{getCtx()}
 			args.Freeze()
 			if r, err := starlark.Call(th, c.c[i].cb, args, nil); err != nil {
 				if fc != nil && fc.LatestFailure() != nil {
@@ -78,11 +78,11 @@ func (c *checks) callAll(ctx context.Context, intr *interpreter.Interpreter) err
 	return eg.Wait()
 }
 
-// getShac returns the shac object.
+// getCtx returns the ctx object to pass to a registered check callback.
 //
 // Make sure to update stdlib.star whenever this object is modified.
-func getShac() starlark.Value {
-	return toValue("shac", starlark.StringDict{
+func getCtx() starlark.Value {
+	return toValue("ctx", starlark.StringDict{
 		"exec": starlark.NewBuiltin("exec", execSubprocess),
 		"io": toValue("io", starlark.StringDict{
 			"read_file": starlark.NewBuiltin("read_file", readFile),
