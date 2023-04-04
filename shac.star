@@ -14,7 +14,7 @@ def new_todos(ctx):
   """Prints the added TODOs.
 
   Args:
-    shac: A shac instance.
+    ctx: A ctx instance.
   """
   out = ""
   for path, meta in ctx.scm.affected_files().items():

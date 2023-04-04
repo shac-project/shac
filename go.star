@@ -9,7 +9,7 @@ def gosec(ctx, version = "v2.15.0"):
   See https://github.com/securego/gosec for more details.
 
   Args:
-    shac: A shac instance.
+    ctx: A ctx instance.
     version: gosec version to install. Defaults to a recent version, that will
       be rolled from time to time.
   """
