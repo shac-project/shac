@@ -8,6 +8,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path"
@@ -84,14 +85,14 @@ func (c *checks) callAll(ctx context.Context, intr *interpreter.Interpreter) err
 func getCtx() starlark.Value {
 	return toValue("ctx", starlark.StringDict{
 		"io": toValue("io", starlark.StringDict{
-			"read_file": starlark.NewBuiltin("read_file", readFile),
+			"read_file": starlark.NewBuiltin("read_file", ctxIoReadFile),
 		}),
 		"os": toValue("os", starlark.StringDict{
-			"exec": starlark.NewBuiltin("exec", execSubprocess),
+			"exec": starlark.NewBuiltin("exec", ctxOsExec),
 		}),
 		"re": toValue("re", starlark.StringDict{
-			"match":      starlark.NewBuiltin("match", reMatch),
-			"allmatches": starlark.NewBuiltin("allmatches", reAllMatches),
+			"match":      starlark.NewBuiltin("match", ctxReMatch),
+			"allmatches": starlark.NewBuiltin("allmatches", ctxReAllMatches),
 		}),
 		"result": toValue("result", starlark.StringDict{
 			"emit_comment":  builtins.Fail,
@@ -99,8 +100,8 @@ func getCtx() starlark.Value {
 			"emit_artifact": builtins.Fail,
 		}),
 		"scm": toValue("scm", starlark.StringDict{
-			"affected_files": starlark.NewBuiltin("affected_files", scmAffectedFiles),
-			"all_files":      starlark.NewBuiltin("all_files", scmAllFiles),
+			"affected_files": starlark.NewBuiltin("affected_files", ctxScmAffectedFiles),
+			"all_files":      starlark.NewBuiltin("all_files", ctxScmAllFiles),
 		}),
 	})
 }
@@ -120,9 +121,6 @@ func registerCheck(th *starlark.Thread, fn *starlark.Builtin, args starlark.Tupl
 	); err != nil {
 		return nil, err
 	}
-	if len(kwargs) != 0 {
-		return nil, errors.New("unexpected arguments")
-	}
 	// TODO(maruel): Inspect cb to verify that it accepts one argument.
 	ctx := interpreter.Context(th)
 	s := ctxState(ctx)
@@ -132,17 +130,23 @@ func registerCheck(th *starlark.Thread, fn *starlark.Builtin, args starlark.Tupl
 	return starlark.None, s.checks.add(cb)
 }
 
-// readFile implements native function ctx.io.read_file().
+// ctxIoReadFile implements native function ctx.io.read_file().
 //
 // Use POSIX style relative path. "..", "\" and absolute paths are denied.
 //
 // Make sure to update stdlib.star whenever this function is modified.
-func readFile(th *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+func ctxIoReadFile(th *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	var argpath starlark.String
+	var argsize starlark.Int
 	if err := starlark.UnpackArgs(fn.Name(), args, kwargs,
 		"path", &argpath,
+		"size?", &argsize,
 	); err != nil {
 		return nil, err
+	}
+	size, ok := argsize.Int64()
+	if !ok {
+		return nil, errors.New("invalid size")
 	}
 	ctx := interpreter.Context(th)
 	s := ctxState(ctx)
@@ -150,12 +154,50 @@ func readFile(th *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kw
 	if err != nil {
 		return starlark.None, err
 	}
-	b, err := os.ReadFile(dst)
+	b, err := readFile(dst, size)
 	if err != nil {
 		return starlark.None, err
 	}
 	// TODO(maruel): Use unsafe conversion to save a memory copy.
 	return starlark.Bytes(b), nil
+}
+
+// readFile is similar to os.ReadFile() albeit it limits the amount of data
+// returned to max bytes when specified.
+//
+// On 32 bits, max defaults to 128Mib. On 64 bits, max defaults to 4Gib.
+func readFile(name string, max int64) ([]byte, error) {
+	f, err := os.Open(name)
+	if err != nil {
+		return nil, err
+	}
+	//#nosec G307
+	defer f.Close()
+	info, err := f.Stat()
+	if err != nil {
+		return nil, err
+	}
+	size := info.Size()
+	if max > 0 && size > max {
+		size = max
+	}
+	if uintSize := 32 << (^uint(0) >> 63); uintSize == 32 {
+		if hardMax := int64(128 * 1024 * 1024); size > hardMax {
+			size = hardMax
+		}
+	} else if hardMax := int64(4 * 1024 * 1024 * 1024); size > hardMax {
+		size = hardMax
+	}
+	for data := make([]byte, 0, int(size)); ; {
+		n, err := f.Read(data[len(data):cap(data)])
+		data = data[:len(data)+n]
+		if err != nil || len(data) == cap(data) {
+			if err == io.EOF {
+				err = nil
+			}
+			return data, err
+		}
+	}
 }
 
 // absPath makes a source-relative path absolute, validating it along the way.
@@ -181,13 +223,13 @@ func absPath(rel, rootDir string) (string, error) {
 	return res, nil
 }
 
-// execSubprocess implements the native function ctx.os.exec().
+// ctxOsExec implements the native function ctx.os.exec().
 //
 // TODO(olivernewman): Return a struct with stdout and stderr in addition to the
 // exit code.
 //
 // Make sure to update stdlib.star whenever this function is modified.
-func execSubprocess(th *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+func ctxOsExec(th *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	var rawCmd *starlark.List
 	var cwd starlark.String
 	if err := starlark.UnpackArgs(fn.Name(), args, kwargs,

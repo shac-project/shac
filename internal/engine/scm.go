@@ -162,7 +162,15 @@ func (g *gitCheckout) affectedFiles(ctx context.Context) ([]file, error) {
 				if i = strings.IndexByte(o, 0); i != -1 {
 					path = o[:i]
 					o = o[i+1:]
-					if action == "R" {
+					if action == "C" {
+						if i = strings.IndexByte(o, 0); i != -1 {
+							// Ignore the source for now.
+							path = o[:i]
+							o = o[i+1:]
+						} else {
+							path = ""
+						}
+					} else if action == "R" {
 						if i = strings.IndexByte(o, 0); i != -1 {
 							// Ignore the source for now.
 							path = o[:i]
@@ -214,11 +222,8 @@ func (g *gitCheckout) newLines(path string) starlarkFunc {
 	// TODO(maruel): Revisit the design, it is likely not performance efficient
 	// to use a stack context.
 	return func(th *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
-		if len(args) > 0 {
-			return starlark.None, fmt.Errorf("%s: unexpected arguments", fn.Name())
-		}
-		if len(kwargs) > 0 {
-			return starlark.None, fmt.Errorf("%s: unexpected keyword arguments", fn.Name())
+		if err := starlark.UnpackArgs(fn.Name(), args, kwargs); err != nil {
+			return nil, err
 		}
 		ctx := interpreter.Context(th)
 		s := ctxState(ctx)
@@ -315,11 +320,8 @@ func (r *rawTree) allFiles(ctx context.Context) ([]file, error) {
 func (r *rawTree) newLines(path string) starlarkFunc {
 	// TODO(maruel): Revisit the design, it is likely not performance efficient.
 	return func(th *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
-		if len(args) > 0 {
-			return starlark.None, fmt.Errorf("%s: unexpected arguments", fn.Name())
-		}
-		if len(kwargs) > 0 {
-			return starlark.None, fmt.Errorf("%s: unexpected keyword arguments", fn.Name())
+		if err := starlark.UnpackArgs(fn.Name(), args, kwargs); err != nil {
+			return nil, err
 		}
 		ctx := interpreter.Context(th)
 		s := ctxState(ctx)
@@ -329,12 +331,9 @@ func (r *rawTree) newLines(path string) starlarkFunc {
 
 // Starlark adapter code.
 
-func scmFilesCommon(th *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple, all bool) (starlark.Value, error) {
-	if len(args) > 0 {
-		return starlark.None, fmt.Errorf("%s: unexpected arguments", fn.Name())
-	}
-	if len(kwargs) > 0 {
-		return starlark.None, fmt.Errorf("%s: unexpected keyword arguments", fn.Name())
+func ctxScmFilesCommon(th *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple, all bool) (starlark.Value, error) {
+	if err := starlark.UnpackArgs(fn.Name(), args, kwargs); err != nil {
+		return nil, err
 	}
 	ctx := interpreter.Context(th)
 	s := ctxState(ctx)
@@ -361,22 +360,22 @@ func scmFilesCommon(th *starlark.Thread, fn *starlark.Builtin, args starlark.Tup
 	return out, nil
 }
 
-// scmAffectedFiles implements native function ctx.scm.affected_files().
+// ctxScmAffectedFiles implements native function ctx.scm.affected_files().
 //
 // It returns a dictionary.
 //
 // Make sure to update stdlib.star whenever this function is modified.
-func scmAffectedFiles(th *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
-	return scmFilesCommon(th, fn, args, kwargs, false)
+func ctxScmAffectedFiles(th *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+	return ctxScmFilesCommon(th, fn, args, kwargs, false)
 }
 
-// scmAllFiles implements native function ctx.scm.all_files().
+// ctxScmAllFiles implements native function ctx.scm.all_files().
 //
 // It returns a dictionary.
 //
 // Make sure to update stdlib.star whenever this function is modified.
-func scmAllFiles(th *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
-	return scmFilesCommon(th, fn, args, kwargs, true)
+func ctxScmAllFiles(th *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+	return ctxScmFilesCommon(th, fn, args, kwargs, true)
 }
 
 // newLinesWhole returns the whole file as new lines.

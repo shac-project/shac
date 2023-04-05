@@ -170,6 +170,10 @@ func TestLoad_SCM_Git_Upstream_Staged(t *testing.T) {
 func TestTestDataFail(t *testing.T) {
 	t.Parallel()
 	p, got := enumDir(t, "fail")
+	fail, err := filepath.Abs(filepath.Join("testdata", "fail"))
+	if err != nil {
+		t.Fatal(err)
+	}
 	data := []struct {
 		name  string
 		err   string
@@ -185,67 +189,43 @@ func TestTestDataFail(t *testing.T) {
 				`Error: inner`,
 		},
 		{
-			"empty.star",
-			"did you forget to call shac.register_check?",
-			"",
-		},
-		{
-			"exec_bad_type_in_args.star",
-			"command args must be strings",
-			"  //exec_bad_type_in_args.star:6:14: in cb\n" +
-				"Error in exec: command args must be strings",
-		},
-		{
-			"exec_command_not_in_path.star",
-			func() string {
-				if runtime.GOOS == "windows" {
-					return `exec: "this-command-does-not-exist": executable file not found in %PATH%`
-				}
-				return `exec: "this-command-does-not-exist": executable file not found in $PATH`
-			}(),
-			func() string {
-				prefix := "  //exec_command_not_in_path.star:6:14: in cb\nError in exec: "
-				if runtime.GOOS == "windows" {
-					return prefix + `exec: "this-command-does-not-exist": executable file not found in %PATH%`
-				}
-				return prefix + `exec: "this-command-does-not-exist": executable file not found in $PATH`
-			}(),
-		},
-		{
-			"exec_invalid_cwd.star",
-			"cannot escape root",
-			"  //exec_invalid_cwd.star:6:14: in cb\n" +
-				"Error in exec: cannot escape root",
-		},
-		{
-			"fail.star",
-			"an expected failure",
-			`  //fail.star:5:5: in <toplevel>` + "\n" +
-				`  <builtin>: in fail` + "\n" +
-				`Error: an expected failure`,
-		},
-		{
-			"io_read_file_abs.star",
+			"ctx-io-read_file-abs.star",
 			"do not use absolute path",
-			"  //io_read_file_abs.star:6:19: in cb\n" +
+			"  //ctx-io-read_file-abs.star:6:19: in cb\n" +
 				"Error in read_file: do not use absolute path",
 		},
 		{
-			"io_read_file_escape.star",
+			"ctx-io-read_file-dir.star",
+			func() string {
+				// TODO(maruel): This error comes from the OS, thus this is a very
+				// brittle test case.
+				if runtime.GOOS == "windows" {
+					return "read " + fail + ": Incorrect function."
+				}
+				return "read " + fail + ": is a directory"
+			}(),
+			func() string {
+				// TODO(maruel): This error comes from the OS, thus this is a very
+				// brittle test case.
+				prefix := "  //ctx-io-read_file-dir.star:6:19: in cb\nError in read_file: "
+				if runtime.GOOS == "windows" {
+					return prefix + "read " + fail + ": Incorrect function."
+				}
+				return prefix + "read " + fail + ": is a directory"
+			}(),
+		},
+		{
+			"ctx-io-read_file-escape.star",
 			"cannot escape root",
-			"  //io_read_file_escape.star:6:19: in cb\n" +
+			"  //ctx-io-read_file-escape.star:6:19: in cb\n" +
 				"Error in read_file: cannot escape root",
 		},
 		{
-			"io_read_file_inexistant.star",
+			"ctx-io-read_file-inexistant.star",
 			func() string {
-				inexistant, err := filepath.Abs(filepath.Join("testdata", "fail"))
-				if err != nil {
-					t.Fatal(err)
-				}
 				// Work around the fact that path are not yet correctly handled on
 				// Windows.
-				inexistant += "/inexistant"
+				inexistant := fail + "/inexistant"
 				// TODO(maruel): This error comes from the OS, thus this is a very
 				// brittle test case.
 				if runtime.GOOS == "windows" {
@@ -254,14 +234,10 @@ func TestTestDataFail(t *testing.T) {
 				return "open " + inexistant + ": no such file or directory"
 			}(),
 			func() string {
-				inexistant, err := filepath.Abs(filepath.Join("testdata", "fail"))
-				if err != nil {
-					t.Fatal(err)
-				}
 				// Work around the fact that path are not yet correctly handled on
 				// Windows.
-				inexistant += "/inexistant"
-				prefix := "  //io_read_file_inexistant.star:6:19: in cb\nError in read_file: "
+				inexistant := fail + "/inexistant"
+				prefix := "  //ctx-io-read_file-inexistant.star:6:19: in cb\nError in read_file: "
 				// TODO(maruel): This error comes from the OS, thus this is a very
 				// brittle test case.
 				if runtime.GOOS == "windows" {
@@ -271,87 +247,151 @@ func TestTestDataFail(t *testing.T) {
 			}(),
 		},
 		{
-			"io_read_file_missing_arg.star",
+			"ctx-io-read_file-missing_arg.star",
 			"read_file: missing argument for path",
-			"  //io_read_file_missing_arg.star:6:19: in cb\n" +
+			"  //ctx-io-read_file-missing_arg.star:6:19: in cb\n" +
 				"Error in read_file: read_file: missing argument for path",
 		},
 		{
-			"io_read_file_unclean.star",
+			"ctx-io-read_file-size_big.star",
+			"invalid size",
+			"  //ctx-io-read_file-size_big.star:6:19: in cb\n" +
+				"Error in read_file: invalid size",
+		},
+		{
+			"ctx-io-read_file-size_type.star",
+			"read_file: for parameter \"size\": got string, want int",
+			"  //ctx-io-read_file-size_type.star:6:19: in cb\n" +
+				"Error in read_file: read_file: for parameter \"size\": got string, want int",
+		},
+		{
+			"ctx-io-read_file-unclean.star",
 			"pass cleaned path",
-			"  //io_read_file_unclean.star:6:19: in cb\n" +
+			"  //ctx-io-read_file-unclean.star:6:19: in cb\n" +
 				"Error in read_file: pass cleaned path",
 		},
 		{
-			"io_read_file_windows.star",
+			"ctx-io-read_file-windows.star",
 			"use POSIX style path",
-			"  //io_read_file_windows.star:6:19: in cb\n" +
+			"  //ctx-io-read_file-windows.star:6:19: in cb\n" +
 				"Error in read_file: use POSIX style path",
 		},
 		{
-			"re_allmatches_no_arg.star",
+			"ctx-os-exec-bad_arg.star",
+			"exec: unexpected keyword argument \"unknown\"",
+			"  //ctx-os-exec-bad_arg.star:6:14: in cb\n" +
+				"Error in exec: exec: unexpected keyword argument \"unknown\"",
+		},
+		{
+			"ctx-os-exec-bad_type_in_args.star",
+			"command args must be strings",
+			"  //ctx-os-exec-bad_type_in_args.star:6:14: in cb\n" +
+				"Error in exec: command args must be strings",
+		},
+		{
+			"ctx-os-exec-command_not_in_path.star",
+			func() string {
+				if runtime.GOOS == "windows" {
+					return `exec: "this-command-does-not-exist": executable file not found in %PATH%`
+				}
+				return `exec: "this-command-does-not-exist": executable file not found in $PATH`
+			}(),
+			func() string {
+				prefix := "  //ctx-os-exec-command_not_in_path.star:6:14: in cb\nError in exec: "
+				if runtime.GOOS == "windows" {
+					return prefix + `exec: "this-command-does-not-exist": executable file not found in %PATH%`
+				}
+				return prefix + `exec: "this-command-does-not-exist": executable file not found in $PATH`
+			}(),
+		},
+		{
+			"ctx-os-exec-invalid_cwd.star",
+			"cannot escape root",
+			"  //ctx-os-exec-invalid_cwd.star:6:14: in cb\n" +
+				"Error in exec: cannot escape root",
+		},
+		{
+			"ctx-os-exec-no_cmd.star",
+			"cmdline must not be an empty list",
+			"  //ctx-os-exec-no_cmd.star:6:14: in cb\n" +
+				"Error in exec: cmdline must not be an empty list",
+		},
+		{
+			"ctx-re-allmatches-no_arg.star",
 			"allmatches: missing argument for pattern",
-			"  //re_allmatches_no_arg.star:6:20: in cb" +
+			"  //ctx-re-allmatches-no_arg.star:6:20: in cb" +
 				"\nError in allmatches: allmatches: missing argument for pattern",
 		},
 		{
-			"re_match_bad_re.star",
+			"ctx-re-match-bad_re.star",
 			"error parsing regexp: missing closing ): `(`",
-			"  //re_match_bad_re.star:6:15: in cb\n" +
+			"  //ctx-re-match-bad_re.star:6:15: in cb\n" +
 				"Error in match: error parsing regexp: missing closing ): `(`",
 		},
 		{
-			"re_match_no_arg.star",
+			"ctx-re-match-no_arg.star",
 			"match: missing argument for pattern",
-			"  //re_match_no_arg.star:6:15: in cb\n" +
+			"  //ctx-re-match-no_arg.star:6:15: in cb\n" +
 				"Error in match: match: missing argument for pattern",
 		},
 		{
-			"register_check_kwargs.star",
-			"register_check: unexpected keyword argument \"callback\"",
-			`  //register_check_kwargs.star:8:20: in <toplevel>` + "\n" +
-				`Error in register_check: register_check: unexpected keyword argument "callback"`,
+			"ctx-scm-affected_files-arg.star",
+			"affected_files: got 1 arguments, want at most 0",
+			"  //ctx-scm-affected_files-arg.star:6:25: in cb\n" +
+				"Error in affected_files: affected_files: got 1 arguments, want at most 0",
 		},
 		{
-			"register_check_no_arg.star",
-			"register_check: missing argument for cb",
-			`  //register_check_no_arg.star:5:20: in <toplevel>` + "\n" +
-				`Error in register_check: register_check: missing argument for cb`,
+			"ctx-scm-affected_files-kwarg.star",
+			"affected_files: unexpected keyword argument \"unexpected\"",
+			"  //ctx-scm-affected_files-kwarg.star:6:25: in cb\n" +
+				"Error in affected_files: affected_files: unexpected keyword argument \"unexpected\"",
 		},
 		{
-			"register_check_recursive.star",
-			"can't register checks after done loading",
-			"  //register_check_recursive.star:9:22: in cb1\n" +
-				"Error in register_check: can't register checks after done loading",
+			"ctx-scm-all_files-arg.star",
+			"all_files: got 1 arguments, want at most 0",
+			"  //ctx-scm-all_files-arg.star:6:20: in cb\n" +
+				"Error in all_files: all_files: got 1 arguments, want at most 0",
 		},
 		{
-			"register_check_return.star",
-			`check "cb" returned an object of type string, expected None`,
+			"ctx-scm-all_files-kwarg.star",
+			"all_files: unexpected keyword argument \"unexpected\"",
+			"  //ctx-scm-all_files-kwarg.star:6:20: in cb\n" +
+				"Error in all_files: all_files: unexpected keyword argument \"unexpected\"",
+		},
+		{
+			"empty.star",
+			"did you forget to call shac.register_check?",
 			"",
 		},
 		{
-			"scm_affected_files_arg.star",
-			"affected_files: unexpected arguments",
-			"  //scm_affected_files_arg.star:6:25: in cb\n" +
-				"Error in affected_files: affected_files: unexpected arguments",
+			"fail.star",
+			"an expected failure",
+			`  //fail.star:5:5: in <toplevel>` + "\n" +
+				`  <builtin>: in fail` + "\n" +
+				`Error: an expected failure`,
 		},
 		{
-			"scm_affected_files_kwarg.star",
-			"affected_files: unexpected keyword arguments",
-			"  //scm_affected_files_kwarg.star:6:25: in cb\n" +
-				"Error in affected_files: affected_files: unexpected keyword arguments",
+			"shac-register_check-kwarg.star",
+			"register_check: unexpected keyword argument \"callback\"",
+			`  //shac-register_check-kwarg.star:8:20: in <toplevel>` + "\n" +
+				`Error in register_check: register_check: unexpected keyword argument "callback"`,
 		},
 		{
-			"scm_all_files_arg.star",
-			"all_files: unexpected arguments",
-			"  //scm_all_files_arg.star:6:20: in cb\n" +
-				"Error in all_files: all_files: unexpected arguments",
+			"shac-register_check-no_arg.star",
+			"register_check: missing argument for cb",
+			`  //shac-register_check-no_arg.star:5:20: in <toplevel>` + "\n" +
+				`Error in register_check: register_check: missing argument for cb`,
 		},
 		{
-			"scm_all_files_kwarg.star",
-			"all_files: unexpected keyword arguments",
-			"  //scm_all_files_kwarg.star:6:20: in cb\n" +
-				"Error in all_files: all_files: unexpected keyword arguments",
+			"shac-register_check-recursive.star",
+			"can't register checks after done loading",
+			"  //shac-register_check-recursive.star:9:22: in cb1\n" +
+				"Error in register_check: can't register checks after done loading",
+		},
+		{
+			"shac-register_check-return.star",
+			`check "cb" returned an object of type string, expected None`,
+			"",
 		},
 		{
 			"syntax_error.star",
@@ -410,41 +450,49 @@ func TestTestDataSimple(t *testing.T) {
 		want string
 	}{
 		{
-			"dir_ctx.star",
-			"[//dir_ctx.star:6] [\"io\", \"os\", \"re\", \"result\", \"scm\"]\n",
+			"ctx-io-read_file-size.star",
+			"[//ctx-io-read_file-size.star:6] {\n  \"key\":\n",
 		},
 		{
-			"dir_shac.star",
-			"[//dir_shac.star:5] [\"commit_hash\", \"register_check\", \"version\"]\n",
+			"ctx-io-read_file.star",
+			"[//ctx-io-read_file.star:7] {\"key\": \"value\"}\n",
 		},
 		{
-			"exec_success.star",
-			"[//exec_success.star:6] retcode: 0\n",
+			"ctx-os-exec-false.star",
+			"[//ctx-os-exec-false.star:6] retcode: 1\n",
 		},
 		{
-			"io_read_file.star",
-			"[//io_read_file.star:7] {\"key\": \"value\"}\n",
+			"ctx-os-exec-success.star",
+			"[//ctx-os-exec-success.star:6] retcode: 0\n",
 		},
 		{
-			"print_version.star",
-			"[//print_version.star:5] " + v + "\n",
+			"ctx-re-allmatches.star",
+			`[//ctx-re-allmatches.star:7] ()` + "\n" +
+				`[//ctx-re-allmatches.star:9] (match(groups = ("TODO(foo)",), offset = 4), match(groups = ("TODO(bar)",), offset = 14))` + "\n" +
+				`[//ctx-re-allmatches.star:11] (match(groups = ("anc", "n", "c"), offset = 0),)` + "\n",
 		},
 		{
-			"re_allmatches.star",
-			`[//re_allmatches.star:7] ()` + "\n" +
-				`[//re_allmatches.star:9] (match(groups = ("TODO(foo)",), offset = 4), match(groups = ("TODO(bar)",), offset = 14))` + "\n" +
-				`[//re_allmatches.star:11] (match(groups = ("anc", "n", "c"), offset = 0),)` + "\n",
+			"ctx-re-match.star",
+			`[//ctx-re-match.star:7] None` + "\n" +
+				`[//ctx-re-match.star:9] match(groups = ("TODO(foo)",), offset = 4)` + "\n" +
+				`[//ctx-re-match.star:11] match(groups = ("anc", "n", "c"), offset = 0)` + "\n" +
+				`[//ctx-re-match.star:13] match(groups = ("a", None), offset = 0)` + "\n",
 		},
 		{
-			"re_match.star",
-			`[//re_match.star:7] None` + "\n" +
-				`[//re_match.star:9] match(groups = ("TODO(foo)",), offset = 4)` + "\n" +
-				`[//re_match.star:11] match(groups = ("anc", "n", "c"), offset = 0)` + "\n" +
-				`[//re_match.star:13] match(groups = ("a", None), offset = 0)` + "\n",
+			"dir-ctx.star",
+			"[//dir-ctx.star:6] [\"io\", \"os\", \"re\", \"result\", \"scm\"]\n",
 		},
 		{
-			"register_check.star",
-			"[//register_check.star:6] running\n",
+			"dir-shac.star",
+			"[//dir-shac.star:5] [\"commit_hash\", \"register_check\", \"version\"]\n",
+		},
+		{
+			"print-shac-version.star",
+			"[//print-shac-version.star:5] " + v + "\n",
+		},
+		{
+			"shac-register_check.star",
+			"[//shac-register_check.star:6] running\n",
 		},
 	}
 	want := make([]string, len(data))

@@ -56,7 +56,8 @@ Returns the content of a file.
 
 ```python
 def cb(ctx):
-  content = str(ctx.io_read_file("path/to/file.txt"))
+  # Read at most 4Kib of "path/to/file.txt".
+  content = str(ctx.io_read_file("path/to/file.txt", size=4096))
   # Usually run a regexp via ctx.re.match(), or other simple text
   # processing.
   print(content)
@@ -67,6 +68,7 @@ shac.register_check(cb)
 ### Arguments
 
 * **path**: path of the file to read. The file must be within the workspace. The path must be relative and in POSIX format, using / separator.
+* **size?**: optional value to limit the maximum number of bytes to return. On 32 bits, size defaults to 128Mib. On 64 bits, size defaults to 4Gib.
 
 ### Returns
 

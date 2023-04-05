@@ -31,13 +31,14 @@ features](https://pkg.go.dev/go.starlark.net/resolve#pkg-variables) are enabled:
 ## Methods inside ctx object.
 
 
-def _ctx_io_read_file(path):
+def _ctx_io_read_file(path, size):
   """Returns the content of a file.
 
   Example:
     ```python
     def cb(ctx):
-      content = str(ctx.io_read_file("path/to/file.txt"))
+      # Read at most 4Kib of "path/to/file.txt".
+      content = str(ctx.io_read_file("path/to/file.txt", size=4096))
       # Usually run a regexp via ctx.re.match(), or other simple text
       # processing.
       print(content)
@@ -48,6 +49,8 @@ def _ctx_io_read_file(path):
   Args:
     path: path of the file to read. The file must be within the workspace. The
       path must be relative and in POSIX format, using / separator.
+    size?: optional value to limit the maximum number of bytes to return. On 32
+      bits, size defaults to 128Mib. On 64 bits, size defaults to 4Gib.
 
   Returns:
     Content of the file as bytes.
