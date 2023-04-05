@@ -115,6 +115,12 @@ jobs:
         echo ""
         echo $ ls -l $HOME/go/bin
         ls -la $HOME/go/bin
+    - name: Install protoc
+      # See https://github.com/arduino/setup-protoc/issues/33
+      if: ${{ false }}
+      uses: arduino/setup-protoc@v1
+      with:
+        version: '21.12'
     - name: 'go install necessary tools'
       if: always()
       run: |
@@ -201,7 +207,9 @@ jobs:
           rm ../_comments.txt
         fi
     - name: "Check: go generate doesn't modify files"
-      if: always()
+      # See https://github.com/arduino/setup-protoc/issues/33
+      if: ${{ false }}
+      #if: always()
       run: |
         go generate ./...
         # Also test for untracked files. go generate should not generate ignored

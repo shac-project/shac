@@ -4,8 +4,8 @@
 
 package engine
 
-//go:generate go install github.com/golang/protobuf/protoc-gen-go@v1.5.3
-//go:generate cproto
+//go:generate go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.30.0
+//go:generate protoc --go_out=. --go_opt=paths=source_relative shac.proto
 
 import (
 	"context"

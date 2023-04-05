@@ -6,7 +6,7 @@ syntax = "proto3";
 
 package engine;
 
-option go_package = "go.fuchsia.dev/shac-project/shac/internal/engine;engine";
+option go_package = "go.fuchsia.dev/shac-project/shac/internal/engine";
 
 // Document is the root message being decoded in a shac.textproto.
 message Document {
