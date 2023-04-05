@@ -27,8 +27,6 @@ def new_todos(ctx):
         out += "\n" + path + "(" + str(num) + "): " + m.groups[0]
   if out:
     print(out)
-  if ctx.os.exec(["echo", "hello world"]) != 0:
-    fail("failed to run echo")
 
 
 shac.register_check(check_docs)

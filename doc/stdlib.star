@@ -5,9 +5,9 @@
 # This file contains pseudo-code that represents shac's runtime standard
 # library solely for documentation purpose.
 
-"""shac runtime standard library
+"""Shac runtime standard library
 
-shac uses the starlark language. Starlark is a python derivative.
+Shac uses the starlark language. Starlark is a python derivative.
 https://bazel.build/rules/language is a great resource if the language is new to
 you, just ignore the bazel references. The starlark language formal
 specification is documented at
@@ -23,9 +23,9 @@ features](https://pkg.go.dev/go.starlark.net/resolve#pkg-variables) are enabled:
 - AllowSet: "set" built-in is enabled.
 - AllowRecursion: allow while statements and recursion. This allows potentially
   unbounded runtime.
-
-Note: The shac runtime standard library is implemented in native Go.
 """
+
+# Note: The shac runtime standard library is implemented in native Go.
 
 
 ## Methods inside ctx object.
