@@ -10,15 +10,17 @@ package engine
 import (
 	"context"
 	"errors"
+	"fmt"
 	"path/filepath"
-	"runtime/debug"
+	"runtime"
+	"strings"
 	"sync"
 
 	"go.chromium.org/luci/starlark/builtins"
 	"go.chromium.org/luci/starlark/interpreter"
-	"go.starlark.net/lib/json"
 	"go.starlark.net/resolve"
 	"go.starlark.net/starlark"
+	"golang.org/x/sync/errgroup"
 )
 
 func init() {
@@ -144,41 +146,59 @@ func parse(ctx context.Context, inputs *inputs, r Report) (*state, error) {
 	return s, nil
 }
 
-// getPredeclared returns the predeclared starlark symbols in the runtime.
-func getPredeclared() starlark.StringDict {
-	// The upstream starlark interpreter includes all the symbols described at
-	// https://github.com/google/starlark-go/blob/HEAD/doc/spec.md#built-in-constants-and-functions
-	// See https://pkg.go.dev/go.starlark.net/starlark#Universe for the default list.
-	return starlark.StringDict{
-		"shac": toValue("shac", starlark.StringDict{
-			"register_check": starlark.NewBuiltin("register_check", registerCheck),
-			"commit_hash":    starlark.String(getCommitHash()),
-			"version": starlark.Tuple{
-				starlark.MakeInt(version[0]), starlark.MakeInt(version[1]), starlark.MakeInt(version[2]),
-			},
-		}),
-
-		// Add https://bazel.build/rules/lib/json so it feels more natural to bazel
-		// users.
-		"json": json.Module,
-
-		// Override fail to include additional functionality.
-		"fail": builtins.Fail,
-		// struct is an helper function that enables users to create seamless
-		// object instances.
-		"struct": builtins.Struct,
-	}
+// checks is a list of registered checks callbacks.
+//
+// It lives in state. Checks are executed sequentially after all Starlark
+// code is loaded. They run checks and emit results (results and comments).
+type checks struct {
+	c []check
 }
 
-// getCommitHash return the git commit hash that was used to build this
-// executable.
-func getCommitHash() string {
-	if info, ok := debug.ReadBuildInfo(); ok {
-		for _, s := range info.Settings {
-			if s.Key == "vcs.revision" {
-				return s.Value
+type check struct {
+	cb starlark.Callable
+}
+
+// add registers a new callback.
+func (c *checks) add(cb starlark.Callable) error {
+	c.c = append(c.c, check{cb: cb})
+	return nil
+}
+
+func (c *check) name() string {
+	return strings.TrimPrefix(c.cb.Name(), "_")
+}
+
+// callAll calls all the checks.
+//
+// It creates a separate thread per check, limited by the number of CPU cores +
+// 2. This permits to run them concurrently.
+func (c *checks) callAll(ctx context.Context, intr *interpreter.Interpreter) error {
+	eg, ctx := errgroup.WithContext(ctx)
+	eg.SetLimit(runtime.NumCPU() + 2)
+	for i := range c.c {
+		i := i
+		eg.Go(func() error {
+			n := c.c[i].name()
+			th := intr.Thread(ctx)
+			th.Name = n
+			fc := builtins.GetFailureCollector(th)
+			if fc != nil {
+				fc.Clear()
 			}
-		}
+			// TODO(maruel): Set a context for the subdirectory.
+			args := starlark.Tuple{getCtx()}
+			args.Freeze()
+			if r, err := starlark.Call(th, c.c[i].cb, args, nil); err != nil {
+				if fc != nil && fc.LatestFailure() != nil {
+					// Prefer this error, it has custom stack trace.
+					return fc.LatestFailure()
+				}
+				return err
+			} else if r != starlark.None {
+				return fmt.Errorf("check %q returned an object of type %s, expected None", n, r.Type())
+			}
+			return nil
+		})
 	}
-	return ""
+	return eg.Wait()
 }

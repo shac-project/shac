@@ -85,6 +85,8 @@ func reCommonPreamble(fn *starlark.Builtin, args starlark.Tuple, kwargs []starla
 	return string(argstr), r, err
 }
 
+// Support functions.
+
 var reCache = reCacheImpl{r: map[string]*regexp.Regexp{}}
 
 type reCacheImpl struct {
