@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"go.chromium.org/luci/starlark/docgen"
@@ -22,6 +23,8 @@ import (
 var docgenTpl string
 
 // Doc returns the documentation for a source file.
+//
+// src must be either a path to a source file or the string "stdlib".
 func Doc(src string) (string, error) {
 	content := ""
 	isStdlib := false
@@ -30,8 +33,15 @@ func Doc(src string) (string, error) {
 		src = "stdlib.star"
 		content = doc.StdlibSrc
 	} else {
+		if strings.HasPrefix(src, "@") {
+			return "", errors.New("todo: implement @module")
+		}
 		if !strings.HasSuffix(src, ".star") {
 			return "", errors.New("invalid source file name, expecting .star suffix")
+		}
+		var err error
+		if src, err = filepath.Abs(src); err != nil {
+			return "", err
 		}
 		b, err := os.ReadFile(src)
 		if err != nil {
@@ -58,14 +68,24 @@ func genDoc(src, content string, isStdlib bool) (string, error) {
 		}
 	}
 	d := m.Doc()
-
+	root := filepath.Dir(src)
 	g := docgen.Generator{
 		Starlark: func(m string) (string, error) {
-			// 'module' here is something like "@stdlib//path".
-			if m != src {
-				return "", fmt.Errorf("unknown module %q", m)
+			if m == src {
+				return content, nil
 			}
-			return content, nil
+			if strings.HasPrefix(m, "@") {
+				return "", fmt.Errorf("todo: implement @module; unknown module %q", m)
+			}
+			// TODO(maruel): Correctly manage "//" prefix.
+			if strings.HasPrefix(m, "//") {
+				m = m[2:]
+			}
+			b, err := os.ReadFile(filepath.Join(root, m))
+			if err != nil {
+				return "", fmt.Errorf("failed to load module %q: %w", m, err)
+			}
+			return string(b), nil
 		},
 	}
 

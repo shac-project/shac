@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -26,6 +27,20 @@ func TestDocStdlib(t *testing.T) {
 	}
 	if diff := cmp.Diff(string(b), got); diff != "" {
 		t.Fatalf("mismatch (+want -got):\n%s", diff)
+	}
+}
+
+func TestDoc(t *testing.T) {
+	p, err := filepath.Abs("../../shac.star")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := Doc(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(got, "# Checks for shac itself\n\n") {
+		t.Fatal(got)
 	}
 }
 

@@ -7,9 +7,9 @@
 This file will evolve as new shac functionality is being added.
 """
 
-load("check_doc.star", "check_docs")
-load("go.star", "gosec")
-load("licenses.star", "check_license_headers")
+load("//check_doc.star", "check_docs")
+load("//go.star", "gosec")
+load("//licenses.star", "check_license_headers")
 
 
 def new_todos(ctx):

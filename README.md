@@ -2,13 +2,19 @@
 
 Scalable Hermetic Analysis and Checks.
 
+## Usage
+
+```
+go install go.fuchsia.dev/shac-project/shac@latest
+shac check
+shac doc shac.star | less
+```
 
 ## Documentation
 
 * [doc/stdlib.md](doc/stdlib.md): shac runtime standard library documentation.
 * [doc/stdlib.star](doc/stdlib.star): shac runtime standard library starlark
   pseudo code.
-
 
 ## Contributing
 
