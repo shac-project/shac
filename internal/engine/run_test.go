@@ -166,6 +166,46 @@ func TestRun_SCM_Git_Upstream_Staged(t *testing.T) {
 	})
 }
 
+func TestRun_SCM_Git_Submodule(t *testing.T) {
+	t.Parallel()
+	root := makeGit(t)
+
+	submoduleRoot := filepath.Join(root, "submodule")
+	if err := os.Mkdir(submoduleRoot, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, submoduleRoot, "init")
+	runGit(t, submoduleRoot, "commit", "--allow-empty", "-m", "Initial commit")
+	runGit(t, root, "submodule", "add", submoduleRoot)
+
+	copySCM(t, root)
+	runGit(t, root, "add", "scm_*.star")
+
+	t.Run("affected", func(t *testing.T) {
+		t.Parallel()
+		want := "[//scm_affected_files.star:9] \n" +
+			".gitmodules: A\n" +
+			"scm_affected_files.star: A\n" +
+			"scm_affected_files_new_lines.star: A\n" +
+			"scm_all_files.star: A\n" +
+			"\n"
+		testStarlark(t, root, "scm_affected_files.star", false, want)
+	})
+
+	t.Run("all", func(t *testing.T) {
+		t.Parallel()
+		want := "[//scm_all_files.star:9] \n" +
+			".gitmodules: A\n" +
+			"file1.txt: A\n" +
+			"file2.txt: A\n" +
+			"scm_affected_files.star: A\n" +
+			"scm_affected_files_new_lines.star: A\n" +
+			"scm_all_files.star: A\n" +
+			"\n"
+		testStarlark(t, root, "scm_all_files.star", false, want)
+	})
+}
+
 // TestTestDataFail runs all the files under testdata/fail/.
 func TestTestDataFail(t *testing.T) {
 	t.Parallel()

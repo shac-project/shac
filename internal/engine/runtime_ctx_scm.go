@@ -185,7 +185,9 @@ func (g *gitCheckout) affectedFiles(ctx context.Context) ([]file, error) {
 				g.err = fmt.Errorf("missing trailing NUL character from git diff --name-status -z -C %s", g.upstream.hash)
 				break
 			}
-			g.modified = append(g.modified, file{action: action, path: path})
+			if !g.isSubmodule(ctx, path) {
+				g.modified = append(g.modified, file{action: action, path: path})
+			}
 		}
 		if g.modified == nil {
 			g.modified = []file{}
@@ -206,9 +208,11 @@ func (g *gitCheckout) allFiles(ctx context.Context) ([]file, error) {
 		if o := g.run(ctx, "ls-files", "-z"); len(o) != 0 {
 			items := strings.Split(o[:len(o)-1], "\x00")
 			g.all = make([]file, 0, len(items))
-			for i := 0; i < len(items); i++ {
-				// TODO(maruel): Still include action from affectedFiles()?
-				g.all = append(g.all, file{action: "A", path: items[i]})
+			for _, path := range items {
+				if !g.isSubmodule(ctx, path) {
+					// TODO(maruel): Still include action from affectedFiles()?
+					g.all = append(g.all, file{action: "A", path: path})
+				}
 			}
 			sort.Slice(g.all, func(i, j int) bool { return g.all[i].path < g.all[j].path })
 		} else {
@@ -216,6 +220,19 @@ func (g *gitCheckout) allFiles(ctx context.Context) ([]file, error) {
 		}
 	}
 	return g.all, g.err
+}
+
+func (g *gitCheckout) isSubmodule(ctx context.Context, path string) bool {
+	s := ctxState(ctx)
+	fi, err := os.Stat(filepath.Join(s.inputs.root, path))
+	if err != nil {
+		g.err = err
+		return false
+	}
+	// TODO(olivernewman): Actually check the git object mode to determine if
+	// it's a submodule. It would be nice to get the object mode from the git
+	// command to avoid unnecessary syscalls.
+	return fi.IsDir()
 }
 
 func (g *gitCheckout) newLines(path string) starlarkFunc {
