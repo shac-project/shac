@@ -15,14 +15,22 @@ import (
 	"go.starlark.net/starlarkstruct"
 )
 
+var (
+	// version is the current tool version.
+	//
+	// TODO(maruel): Add proper version, preferably from git tag.
+	version = [...]int{0, 0, 1}
+)
+
 // getPredeclared returns the predeclared starlark symbols in the runtime.
+//
+// The upstream starlark interpreter includes all the symbols described at
+// https://github.com/google/starlark-go/blob/HEAD/doc/spec.md#built-in-constants-and-functions
+// See https://pkg.go.dev/go.starlark.net/starlark#Universe for the default list.
 func getPredeclared() starlark.StringDict {
-	// The upstream starlark interpreter includes all the symbols described at
-	// https://github.com/google/starlark-go/blob/HEAD/doc/spec.md#built-in-constants-and-functions
-	// See https://pkg.go.dev/go.starlark.net/starlark#Universe for the default list.
 	return starlark.StringDict{
 		"shac": toValue("shac", starlark.StringDict{
-			"register_check": starlark.NewBuiltin("register_check", registerCheck),
+			"register_check": starlark.NewBuiltin("register_check", shacRegisterCheck),
 			"commit_hash":    starlark.String(getCommitHash()),
 			"version": starlark.Tuple{
 				starlark.MakeInt(version[0]), starlark.MakeInt(version[1]), starlark.MakeInt(version[2]),
@@ -41,10 +49,10 @@ func getPredeclared() starlark.StringDict {
 	}
 }
 
-// registerCheck implements native function shac.register_check().
+// shacRegisterCheck implements native function shac.register_check().
 //
-// Make sure to update stdlib.star whenever this function is modified.
-func registerCheck(th *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+// Make sure to update //doc/stdlib.star whenever this function is modified.
+func shacRegisterCheck(th *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	var cb starlark.Callable
 	if err := starlark.UnpackArgs(fn.Name(), args, kwargs,
 		"cb", &cb,
@@ -62,6 +70,9 @@ func registerCheck(th *starlark.Thread, fn *starlark.Builtin, args starlark.Tupl
 
 // getCommitHash return the git commit hash that was used to build this
 // executable.
+//
+// Since shac is currently tracked in a git repository and git currently uses
+// SHA-1, it is a 40 characters hex encoded string.
 func getCommitHash() string {
 	if info, ok := debug.ReadBuildInfo(); ok {
 		for _, s := range info.Settings {

@@ -19,7 +19,7 @@ import (
 
 // getCtx returns the ctx object to pass to a registered check callback.
 //
-// Make sure to update stdlib.star whenever this object is modified.
+// Make sure to update //doc/stdlib.star whenever this function is modified.
 func getCtx() starlark.Value {
 	return toValue("ctx", starlark.StringDict{
 		"io": toValue("io", starlark.StringDict{
@@ -50,7 +50,7 @@ func getCtx() starlark.Value {
 //
 // Use POSIX style relative path. "..", "\" and absolute paths are denied.
 //
-// Make sure to update stdlib.star whenever this function is modified.
+// Make sure to update //doc/stdlib.star whenever this function is modified.
 func ctxIoReadFile(th *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	var argpath starlark.String
 	var argsize starlark.Int
@@ -83,7 +83,7 @@ func ctxIoReadFile(th *starlark.Thread, fn *starlark.Builtin, args starlark.Tupl
 // TODO(olivernewman): Return a struct with stdout and stderr in addition to the
 // exit code.
 //
-// Make sure to update stdlib.star whenever this function is modified.
+// Make sure to update //doc/stdlib.star whenever this function is modified.
 func ctxOsExec(th *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	var rawCmd *starlark.List
 	var cwd starlark.String

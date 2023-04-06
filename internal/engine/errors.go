@@ -11,7 +11,7 @@ import (
 
 // BacktracableError is an error that has a starlark backtrace attached to it.
 //
-// Implemented by Error here and by starlark.EvalError.
+// Implemented by builtins.Failure and by starlark.EvalError.
 type BacktracableError interface {
 	error
 	// Backtrace returns a user-friendly error message describing the stack

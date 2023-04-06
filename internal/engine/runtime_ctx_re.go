@@ -18,6 +18,8 @@ import (
 // otherwise.
 //
 // It uses the RE2 engine as specified at https://golang.org/s/re2syntax.
+//
+// Make sure to update //doc/stdlib.star whenever this function is modified.
 func ctxReMatch(th *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	s, r, err := reCommonPreamble(fn, args, kwargs)
 	if err != nil {
@@ -37,6 +39,8 @@ func ctxReMatch(th *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, 
 // ctx.re.match instead.
 //
 // It uses the RE2 engine as specified at https://golang.org/s/re2syntax.
+//
+// Make sure to update //doc/stdlib.star whenever this function is modified.
 func ctxReAllMatches(th *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	s, r, err := reCommonPreamble(fn, args, kwargs)
 	if err != nil {
@@ -56,6 +60,8 @@ func ctxReAllMatches(th *starlark.Thread, fn *starlark.Builtin, args starlark.Tu
 // matchToGroup creates a struct for the match.
 //
 // It expects the return value from regexp.Regexp.FindStringSubmatchIndex.
+//
+// Make sure to update //doc/stdlib.star whenever this function is modified.
 func matchToGroup(s string, groups []int) starlark.Value {
 	g := make(starlark.Tuple, len(groups)/2)
 	for j := 0; j < len(groups)/2; j++ {
@@ -76,6 +82,9 @@ func matchToGroup(s string, groups []int) starlark.Value {
 		})
 }
 
+// reCommonPreamble implements the common code for functions in ctx.re.*.
+//
+// Make sure to update //doc/stdlib.star whenever this function is modified.
 func reCommonPreamble(fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (string, *regexp.Regexp, error) {
 	var argpattern, argstr starlark.String
 	if err := starlark.UnpackArgs(fn.Name(), args, kwargs, "pattern", &argpattern, "str", &argstr); err != nil {

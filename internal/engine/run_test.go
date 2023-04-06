@@ -21,7 +21,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 )
 
-func TestLoad_SCM_Raw(t *testing.T) {
+func TestRun_SCM_Raw(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
 	writeFile(t, root, "file1.txt", "First file")
@@ -53,7 +53,7 @@ func TestLoad_SCM_Raw(t *testing.T) {
 	})
 }
 
-func TestLoad_SCM_Git_NoUpstream_Pristine(t *testing.T) {
+func TestRun_SCM_Git_NoUpstream_Pristine(t *testing.T) {
 	// No upstream branch set, pristine checkout.
 	t.Parallel()
 	root := makeGit(t)
@@ -93,7 +93,7 @@ func TestLoad_SCM_Git_NoUpstream_Pristine(t *testing.T) {
 	})
 }
 
-func TestLoad_SCM_Git_NoUpstream_Staged(t *testing.T) {
+func TestRun_SCM_Git_NoUpstream_Staged(t *testing.T) {
 	// No upstream branch set, staged changes.
 	t.Parallel()
 	root := makeGit(t)
@@ -133,7 +133,7 @@ func TestLoad_SCM_Git_NoUpstream_Staged(t *testing.T) {
 	})
 }
 
-func TestLoad_SCM_Git_Upstream_Staged(t *testing.T) {
+func TestRun_SCM_Git_Upstream_Staged(t *testing.T) {
 	// Upstream set, staged changes.
 	t.Parallel()
 	root := makeGit(t)
@@ -415,7 +415,7 @@ func TestTestDataFail(t *testing.T) {
 		i := i
 		t.Run(data[i].name, func(t *testing.T) {
 			t.Parallel()
-			err := Load(context.Background(), p, data[i].name, false, &reportNoPrint{t: t})
+			err := Run(context.Background(), p, data[i].name, false, &reportNoPrint{t: t})
 			if err == nil {
 				t.Fatal("expecting an error")
 			}
@@ -514,7 +514,7 @@ func TestTestDataSimple(t *testing.T) {
 
 func testStarlark(t *testing.T, root, name string, all bool, want string) {
 	r := reportPrint{t: t}
-	if err := Load(context.Background(), root, name, all, &r); err != nil {
+	if err := Run(context.Background(), root, name, all, &r); err != nil {
 		t.Helper()
 		t.Fatal(err)
 	}

@@ -37,5 +37,5 @@ func (c *checkCmd) Execute(ctx context.Context, args []string) error {
 	if len(args) != 0 {
 		return errors.New("unsupported arguments")
 	}
-	return engine.Load(ctx, c.root, c.main, c.allFiles, reporting.Get())
+	return engine.Run(ctx, c.root, c.main, c.allFiles, reporting.Get())
 }

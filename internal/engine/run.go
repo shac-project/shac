@@ -38,10 +38,8 @@ type Report interface {
 	Print(ctx context.Context, file string, line int, message string)
 }
 
-// Load loads a main shac.star file from a root directory.
-//
-// main is normally ctx.star.
-func Load(ctx context.Context, root, main string, allFiles bool, r Report) error {
+// Run loads a main shac.star file from a root directory and runs it.
+func Run(ctx context.Context, root, main string, allFiles bool, r Report) error {
 	if filepath.IsAbs(main) {
 		return errors.New("main file must not be an absolute path")
 	}
@@ -97,13 +95,6 @@ func ctxState(ctx context.Context) *state {
 }
 
 var stateCtxKey = "shac.State"
-
-var (
-	// version is the current tool version.
-	//
-	// TODO(maruel): Add proper version, preferably from git tag.
-	version = [...]int{0, 0, 1}
-)
 
 func parse(ctx context.Context, inputs *inputs, r Report) (*state, error) {
 	failures := builtins.FailureCollector{}
