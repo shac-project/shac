@@ -19,3 +19,21 @@ def gosec(ctx, version = "v2.15.0"):
   if ctx.os.exec(["gosec", "-fmt=golint", "-quiet", "-exclude=G304", "-exclude-dir=.tools", "./..."]):
     # TODO(maruel): Emits lines.
     fail("failed gosec")
+
+
+def staticcheck(ctx, version = "v0.4.3"):
+  """Runs staticcheck on a Go code base.
+
+  See https://github.com/dominikh/go-tools for more details.
+
+  Args:
+    ctx: A ctx instance.
+    version: staticcheck version to install. Defaults to a recent version, that
+    will be rolled from time to time.
+  """
+  # TODO(maruel): Always install locally with GOBIN=.tools
+  if ctx.os.exec(["go", "install", "honnef.co/go/tools/cmd/staticcheck@" + version]):
+    fail("failed to install")
+  if ctx.os.exec(["staticcheck", "./..."]):
+    # TODO(maruel): Emits lines.
+    fail("failed staticcheck")

@@ -8,7 +8,7 @@ This file will evolve as new shac functionality is being added.
 """
 
 load("//check_doc.star", "check_docs")
-load("//go.star", "gosec")
+load("//go.star", "gosec", "staticcheck")
 load("//licenses.star", "check_license_headers")
 
 
@@ -33,3 +33,4 @@ shac.register_check(check_docs)
 shac.register_check(check_license_headers)
 shac.register_check(gosec)
 shac.register_check(new_todos)
+shac.register_check(staticcheck)

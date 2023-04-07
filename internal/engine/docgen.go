@@ -78,12 +78,10 @@ func genDoc(src, content string, isStdlib bool) (string, error) {
 				return "", fmt.Errorf("todo: implement @module; unknown module %q", m)
 			}
 			// TODO(maruel): Correctly manage "//" prefix.
-			if strings.HasPrefix(m, "//") {
-				m = m[2:]
-			}
-			b, err := os.ReadFile(filepath.Join(root, m))
-			if err != nil {
-				return "", fmt.Errorf("failed to load module %q: %w", m, err)
+			m = strings.TrimPrefix(m, "//")
+			b, err2 := os.ReadFile(filepath.Join(root, m))
+			if err2 != nil {
+				return "", fmt.Errorf("failed to load module %q: %w", m, err2)
 			}
 			return string(b), nil
 		},

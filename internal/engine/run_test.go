@@ -174,7 +174,7 @@ func TestRun_SCM_Git_Submodule(t *testing.T) {
 	if err := os.Mkdir(submoduleRoot, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	runGit(t, submoduleRoot, "init")
+	initGit(t, submoduleRoot)
 	runGit(t, submoduleRoot, "commit", "--allow-empty", "-m", "Initial commit")
 	runGit(t, root, "submodule", "add", submoduleRoot)
 
@@ -584,9 +584,7 @@ func makeGit(t *testing.T) string {
 	// scm.go requires two commits. Not really worth fixing yet, it's only
 	// annoying in unit tests.
 	root := t.TempDir()
-	runGit(t, root, "init")
-	runGit(t, root, "config", "user.email", "test@example.com")
-	runGit(t, root, "config", "user.name", "engine test")
+	initGit(t, root)
 
 	writeFile(t, root, "file.txt", "First file\nIt doesn't contain\na lot of lines.\n")
 	runGit(t, root, "add", "file.txt")
@@ -599,6 +597,12 @@ func makeGit(t *testing.T) string {
 	runGit(t, root, "add", "file2.txt")
 	runGit(t, root, "commit", "-m", "Second commit")
 	return root
+}
+
+func initGit(t *testing.T, dir string) {
+	runGit(t, dir, "init")
+	runGit(t, dir, "config", "user.email", "test@example.com")
+	runGit(t, dir, "config", "user.name", "engine test")
 }
 
 func copySCM(t *testing.T, dst string) {
