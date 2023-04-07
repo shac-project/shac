@@ -10,8 +10,12 @@ def cb(ctx):
   path, meta = ctx.scm.affected_files().items()[0]
   out += path + "\n"
   # Only print the first line.
-  num, line = meta.new_lines()[0]
-  out += str(num) + ": " + line
-  print(out)
+  new_lines = meta.new_lines()
+  if new_lines:
+    num, line = new_lines[0]
+    out += str(num) + ": " + line
+    print(out)
+  else:
+    print("no new lines")
 
 shac.register_check(cb)

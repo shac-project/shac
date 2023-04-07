@@ -37,7 +37,7 @@ func TestRun_SCM_Raw(t *testing.T) {
 	})
 	t.Run("affected_new_lines", func(t *testing.T) {
 		t.Parallel()
-		want := "[//scm_affected_files_new_lines.star:15] file1.txt\n" +
+		want := "[//scm_affected_files_new_lines.star:17] file1.txt\n" +
 			"1: First file\n"
 		testStarlark(t, root, "scm_affected_files_new_lines.star", false, want)
 	})
@@ -110,13 +110,13 @@ func TestRun_SCM_Git_NoUpstream_Staged(t *testing.T) {
 	})
 	t.Run("affected_new_lines", func(t *testing.T) {
 		t.Parallel()
-		want := "[//scm_affected_files_new_lines.star:15] scm_affected_files.star\n" +
+		want := "[//scm_affected_files_new_lines.star:17] scm_affected_files.star\n" +
 			"1: # Copyright 2023 The Shac Authors. All rights reserved.\n"
 		testStarlark(t, root, "scm_affected_files_new_lines.star", false, want)
 	})
 	t.Run("affected_new_lines/all", func(t *testing.T) {
 		t.Parallel()
-		want := "[//scm_affected_files_new_lines.star:15] file1.txt\n" +
+		want := "[//scm_affected_files_new_lines.star:17] file1.txt\n" +
 			"1: First file\n"
 		testStarlark(t, root, "scm_affected_files_new_lines.star", true, want)
 	})
@@ -203,6 +203,39 @@ func TestRun_SCM_Git_Submodule(t *testing.T) {
 			"scm_all_files.star: A\n" +
 			"\n"
 		testStarlark(t, root, "scm_all_files.star", false, want)
+	})
+}
+
+func TestRun_SCM_Git_Binary_File(t *testing.T) {
+	t.Parallel()
+	root := makeGit(t)
+
+	copySCM(t, root)
+
+	// Git considers a file to be binary if it contains a null byte.
+	writeFileBytes(t, root, "a.bin", []byte{0, 1, 2, 3})
+	runGit(t, root, "add", "a.bin")
+
+	t.Run("affected", func(t *testing.T) {
+		t.Parallel()
+		want := "[//scm_affected_files.star:9] \n" +
+			"a.bin: A\n" +
+			"\n"
+		testStarlark(t, root, "scm_affected_files.star", false, want)
+	})
+
+	t.Run("affected_new_lines", func(t *testing.T) {
+		t.Parallel()
+		// Only a binary file is touched, no lines should be considered
+		// affected.
+		want := "[//scm_affected_files_new_lines.star:19] no new lines\n"
+		testStarlark(t, root, "scm_affected_files_new_lines.star", false, want)
+	})
+
+	t.Run("affected_new_lines/all", func(t *testing.T) {
+		t.Parallel()
+		want := "[//scm_affected_files_new_lines.star:19] no new lines\n"
+		testStarlark(t, root, "scm_affected_files_new_lines.star", true, want)
 	})
 }
 
@@ -620,7 +653,11 @@ func copySCM(t *testing.T, dst string) {
 }
 
 func writeFile(t *testing.T, root, path, content string) {
-	if err := os.WriteFile(filepath.Join(root, path), []byte(content), 0o600); err != nil {
+	writeFileBytes(t, root, path, []byte(content))
+}
+
+func writeFileBytes(t *testing.T, root, path string, content []byte) {
+	if err := os.WriteFile(filepath.Join(root, path), content, 0o600); err != nil {
 		t.Fatal(err)
 	}
 }

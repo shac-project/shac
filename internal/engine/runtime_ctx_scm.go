@@ -5,6 +5,7 @@
 package engine
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -259,6 +260,11 @@ func (g *gitCheckout) newLines(path string) starlarkFunc {
 			done := strings.HasPrefix(o, "+++ ")
 			if i := strings.Index(o, "\n"); i >= 0 {
 				o = o[i+1:]
+			} else {
+				// Reached the end of the diff header without finding any
+				// changed lines. This is probably because the file is binary,
+				// so there's no meaning of "new lines" for it anyway.
+				return make(starlark.Tuple, 0), nil
 			}
 			if done {
 				break
@@ -402,6 +408,11 @@ func newLinesWhole(root, path string) (starlark.Value, error) {
 	b, err := os.ReadFile(filepath.Join(root, path))
 	if err != nil {
 		return starlark.None, err
+	}
+	// If the file contains a null byte we'll assume it's binary and not try to
+	// parse its lines.
+	if bytes.Contains(b, []byte{0}) {
+		return make(starlark.Tuple, 0), nil
 	}
 	// TODO(maruel): unsafeString()
 	items := strings.Split(string(b), "\n")
