@@ -21,13 +21,13 @@ func Get() engine.Report {
 	// On LUCI/Swarming. ResultDB!
 	if os.Getenv("SWARMING_TASK_ID") != "" {
 		// TODO(maruel): Emits LUCI_CONTEXT.
-		return &basic{}
+		return &basic{out: os.Stdout}
 	}
 
 	// On GitHub Actions.
 	if os.Getenv("GITHUB_RUN_ID") != "" {
 		// Emits GitHub Workflows commands.
-		return &github{}
+		return &github{out: os.Stdout}
 	}
 
 	// Active terminal. Colors! This includes VSCode's integrated terminal.
@@ -40,18 +40,19 @@ func Get() engine.Report {
 	// VSCode extension.
 	if os.Getenv("VSCODE_GIT_IPC_HANDLE") != "" {
 		// TODO(maruel): Return SARIF.
-		return &basic{}
+		return &basic{out: os.Stdout}
 	}
 
 	// Anything else, e.g. redirected output.
-	return &basic{}
+	return &basic{out: os.Stdout}
 }
 
 type basic struct {
+	out io.Writer
 }
 
-func (basic) Print(ctx context.Context, file string, line int, message string) {
-	fmt.Fprintf(os.Stderr, "[%s:%d] %s\n", file, line, message)
+func (b *basic) Print(ctx context.Context, file string, line int, message string) {
+	fmt.Fprintf(b.out, "[%s:%d] %s\n", file, line, message)
 }
 
 // github is the Report implementation when running inside a GitHub Actions
@@ -59,17 +60,21 @@ func (basic) Print(ctx context.Context, file string, line int, message string) {
 //
 // See https://docs.github.com/en/actions/using-workflows/workflow-commands-for-github-actions
 type github struct {
+	out io.Writer
 }
 
-func (github) Print(ctx context.Context, file string, line int, message string) {
-	fmt.Fprintf(os.Stdout, "::notice file=%s,line=%d::%s\n", file, line, message)
+func (g *github) Print(ctx context.Context, file string, line int, message string) {
+	// Use debug here instead of notice since the file/line reference comes from
+	// starlark, which will likely not be in the delta or even in your source
+	// tree for load()'ed packages. This means GitHub may not be able to
+	// reference it anyway.
+	fmt.Fprintf(g.out, "::debug::[%s:%d] %s\n", file, line, message)
 }
 
 type interactive struct {
 	out io.Writer
 }
 
-func (interactive) Print(ctx context.Context, file string, line int, message string) {
-	// https://en.wikipedia.org/wiki/ANSI_escape_code#SGR_.28Select_Graphic_Rendition.29_parameters
-	fmt.Fprintf(os.Stderr, "\x1b[0m[\x1b[32m%s:%d\x1b[0m] \x1b[1m%s\x1b[0m\n", file, line, message)
+func (i *interactive) Print(ctx context.Context, file string, line int, message string) {
+	fmt.Fprintf(i.out, "%s[%s%s:%d%s] %s%s%s\n", reset, fgHiBlue, file, line, reset, bold, message, reset)
 }
