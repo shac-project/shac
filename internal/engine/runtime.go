@@ -7,6 +7,7 @@ package engine
 import (
 	"errors"
 	"runtime/debug"
+	"strings"
 
 	"go.chromium.org/luci/starlark/builtins"
 	"go.chromium.org/luci/starlark/interpreter"
@@ -55,7 +56,7 @@ func getPredeclared() starlark.StringDict {
 func shacRegisterCheck(th *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	var cb starlark.Callable
 	if err := starlark.UnpackArgs(fn.Name(), args, kwargs,
-		"cb", &cb,
+		"callback", &cb,
 	); err != nil {
 		return nil, err
 	}
@@ -65,7 +66,9 @@ func shacRegisterCheck(th *starlark.Thread, fn *starlark.Builtin, args starlark.
 	if s.doneLoading {
 		return nil, errors.New("can't register checks after done loading")
 	}
-	return starlark.None, s.checks.add(cb)
+	// Register the new callback.
+	s.checks = append(s.checks, check{cb: cb, name: strings.TrimPrefix(cb.Name(), "_")})
+	return starlark.None, nil
 }
 
 // getCommitHash return the git commit hash that was used to build this

@@ -438,7 +438,7 @@ def print(*args, sep=" "):
 ## Methods inside the shac object.
 
 
-def _shac_register_check(cb):
+def _shac_register_check(callback):
   """Registers a shac check.
 
   It must be called at least once for the starlark file be a valid check file.
@@ -453,8 +453,8 @@ def _shac_register_check(cb):
     ```
 
   Args:
-    cb: Starlark function that is called back to implement the check. Passed a
-      single argument ctx(...).
+    callback: Starlark function that is called back to implement the check.
+      Passed a single argument ctx(...).
   """
   pass
 

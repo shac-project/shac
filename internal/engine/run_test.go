@@ -239,6 +239,32 @@ func TestRun_SCM_Git_Binary_File(t *testing.T) {
 	})
 }
 
+func TestRun_SCM_Git_Broken(t *testing.T) {
+	t.Parallel()
+	root := makeGit(t)
+	// Break the git checkout so getSCM() fails.
+	dotGit := filepath.Join(root, ".git")
+	err := os.RemoveAll(dotGit)
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, root, ".git", "broken")
+	// On macOS, the path is replaced with the symlink.
+	if dotGit, err = filepath.EvalSymlinks(dotGit); err != nil {
+		t.Fatal(err)
+	}
+	// Git reports paths separated with "/" even on Windows.
+	dotGit = strings.ReplaceAll(dotGit, string(os.PathSeparator), "/")
+	r := reportNoPrint{t: t}
+	if err = Run(context.Background(), root, "scm_affected_files.star", false, &r); err == nil {
+		t.Fatal("expected error")
+	}
+	want := "error running git --no-optional-locks rev-parse --show-toplevel: exit status 128\nfatal: invalid gitfile format: " + dotGit + "\n"
+	if diff := cmp.Diff(want, err.Error()); diff != "" {
+		t.Fatalf("mismatch (+want -got):\n%s", diff)
+	}
+}
+
 // TestTestDataFail runs all the files under testdata/fail/.
 func TestTestDataFail(t *testing.T) {
 	t.Parallel()
@@ -260,6 +286,12 @@ func TestTestDataFail(t *testing.T) {
 				`  //backtrace.star:6:7: in fn2` + "\n" +
 				`  <builtin>: in fail` + "\n" +
 				`Error: inner`,
+		},
+		{
+			"ctx-immutable.star",
+			"can't assign to .key field of struct",
+			"  //ctx-immutable.star:7:6: in cb\n" +
+				"Error: can't assign to .key field of struct",
 		},
 		{
 			"ctx-io-read_file-abs.star",
@@ -444,16 +476,22 @@ func TestTestDataFail(t *testing.T) {
 				`Error: an expected failure`,
 		},
 		{
+			"shac-immutable.star",
+			"can't assign to .key field of struct",
+			"  //shac-immutable.star:6:5: in <toplevel>\n" +
+				"Error: can't assign to .key field of struct",
+		},
+		{
 			"shac-register_check-kwarg.star",
-			"register_check: unexpected keyword argument \"callback\"",
+			"register_check: unexpected keyword argument \"invalid\"",
 			`  //shac-register_check-kwarg.star:8:20: in <toplevel>` + "\n" +
-				`Error in register_check: register_check: unexpected keyword argument "callback"`,
+				`Error in register_check: register_check: unexpected keyword argument "invalid"`,
 		},
 		{
 			"shac-register_check-no_arg.star",
-			"register_check: missing argument for cb",
+			"register_check: missing argument for callback",
 			`  //shac-register_check-no_arg.star:5:20: in <toplevel>` + "\n" +
-				`Error in register_check: register_check: missing argument for cb`,
+				`Error in register_check: register_check: missing argument for callback`,
 		},
 		{
 			"shac-register_check-recursive.star",

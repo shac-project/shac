@@ -2,7 +2,5 @@
 # Use of this source code is governed by a BSD-style
 # license that can be found in the LICENSE file.
 
-def cb():
-  pass
-
-shac.register_check(invalid=cb)
+# The shac global variable is immutable.
+shac.key = "value"

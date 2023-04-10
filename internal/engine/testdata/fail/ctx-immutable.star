@@ -2,7 +2,8 @@
 # Use of this source code is governed by a BSD-style
 # license that can be found in the LICENSE file.
 
-def cb():
-  pass
+def cb(ctx):
+  # The ctx variable is immutable.
+  ctx.key = "value"
 
-shac.register_check(invalid=cb)
+shac.register_check(cb)

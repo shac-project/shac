@@ -47,16 +47,16 @@ type starlarkFunc func(th *starlark.Thread, fn *starlark.Builtin, args starlark.
 type scmCheckout interface {
 	affectedFiles(ctx context.Context) ([]file, error)
 	allFiles(ctx context.Context) ([]file, error)
-	newLines(path string) starlarkFunc
+	newLines(path string, allFiles bool) starlarkFunc
 }
 
 // Git support.
 
-func getSCM(ctx context.Context, root string) scmCheckout {
+func getSCM(ctx context.Context, root string) (scmCheckout, error) {
 	g := &gitCheckout{}
 	err := g.init(ctx, root)
 	if err == nil {
-		return g
+		return g, nil
 	}
 	if errors.Is(err, exec.ErrNotFound) {
 		log.Printf("git not detected on $PATH")
@@ -65,29 +65,35 @@ func getSCM(ctx context.Context, root string) scmCheckout {
 	} else {
 		// Any other error is fatal, `g.err` will be set and cause execution to
 		// stop the next time `g.run` is called.
-		return g
+		return nil, g.err
 	}
 	// TODO(maruel): Add the scm of your choice.
-	return &rawTree{root: root}
+	return &rawTree{root: root}, nil
 }
 
 // gitCheckout represents a git checkout.
 type gitCheckout struct {
-	head     commitRef
-	upstream commitRef
-	root     string // root path may differ from the check's root!
-	env      []string
+	// Configuration.
+	originalRoot string
+	env          []string
 
+	// Detected environment at initialization.
+	checkoutRoot string
+	head         commitRef
+	upstream     commitRef
+
+	// Late initialized information.
 	mu       sync.Mutex
-	modified []file // modified files in this checkout
+	modified []file // modified files in this checkout.
 	all      []file // all files in the repo.
 	err      error  // save error.
 }
 
 func (g *gitCheckout) init(ctx context.Context, root string) error {
+	g.originalRoot = root
 	// Find root.
-	g.root = root
-	g.root = g.run(ctx, "rev-parse", "--show-toplevel")
+	g.checkoutRoot = root
+	g.checkoutRoot = g.run(ctx, "rev-parse", "--show-toplevel")
 	g.head.hash = g.run(ctx, "rev-parse", "HEAD")
 	g.head.ref = g.run(ctx, "rev-parse", "--abbrev-ref=strict", "--symbolic-full-name", "HEAD")
 	if g.err != nil {
@@ -129,7 +135,7 @@ func (g *gitCheckout) run(ctx context.Context, args ...string) string {
 		"--no-optional-locks",
 	}, args...)
 	cmd := exec.CommandContext(ctx, "git", args...)
-	cmd.Dir = g.root
+	cmd.Dir = g.checkoutRoot
 	if g.env == nil {
 		// First is for git version before 2.32, the rest are to skip the user and system config.
 		g.env = append(os.Environ(), "GIT_CONFIG_NOGLOBAL=true", "GIT_CONFIG_GLOBAL=", "GIT_CONFIG_SYSTEM=", "LANG=C")
@@ -186,7 +192,8 @@ func (g *gitCheckout) affectedFiles(ctx context.Context) ([]file, error) {
 				g.err = fmt.Errorf("missing trailing NUL character from git diff --name-status -z -C %s", g.upstream.hash)
 				break
 			}
-			if !g.isSubmodule(ctx, path) {
+			if !g.isSubmodule(path) {
+				// TODO(maruel): Filter on g.originalRoot.
 				g.modified = append(g.modified, file{action: action, path: path})
 			}
 		}
@@ -210,8 +217,9 @@ func (g *gitCheckout) allFiles(ctx context.Context) ([]file, error) {
 			items := strings.Split(o[:len(o)-1], "\x00")
 			g.all = make([]file, 0, len(items))
 			for _, path := range items {
-				if !g.isSubmodule(ctx, path) {
+				if !g.isSubmodule(path) {
 					// TODO(maruel): Still include action from affectedFiles()?
+					// TODO(maruel): Filter on g.originalRoot.
 					g.all = append(g.all, file{action: "A", path: path})
 				}
 			}
@@ -223,9 +231,8 @@ func (g *gitCheckout) allFiles(ctx context.Context) ([]file, error) {
 	return g.all, g.err
 }
 
-func (g *gitCheckout) isSubmodule(ctx context.Context, path string) bool {
-	s := ctxState(ctx)
-	fi, err := os.Stat(filepath.Join(s.inputs.root, path))
+func (g *gitCheckout) isSubmodule(path string) bool {
+	fi, err := os.Stat(filepath.Join(g.checkoutRoot, path))
 	if err != nil {
 		g.err = err
 		return false
@@ -236,7 +243,7 @@ func (g *gitCheckout) isSubmodule(ctx context.Context, path string) bool {
 	return fi.IsDir()
 }
 
-func (g *gitCheckout) newLines(path string) starlarkFunc {
+func (g *gitCheckout) newLines(path string, allFiles bool) starlarkFunc {
 	// TODO(maruel): Revisit the design, it is likely not performance efficient
 	// to use a stack context.
 	return func(th *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
@@ -244,16 +251,15 @@ func (g *gitCheckout) newLines(path string) starlarkFunc {
 			return nil, err
 		}
 		ctx := interpreter.Context(th)
-		s := ctxState(ctx)
-		if s.inputs.allFiles {
+		if allFiles {
 			// Include all lines when processing all files independent if the file
 			// was modified or not.
-			return newLinesWhole(s.inputs.root, path)
+			return newLinesWhole(g.checkoutRoot, path)
 		}
 		o := g.run(ctx, "diff", "--no-prefix", "-C", "-U0", g.upstream.hash, "--", path)
 		if o == "" {
 			// TODO(maruel): This is not normal. For now fallback to the whole file.
-			return newLinesWhole(s.inputs.root, path)
+			return newLinesWhole(g.checkoutRoot, path)
 		}
 		// Skip the header.
 		for len(o) != 0 {
@@ -340,15 +346,13 @@ func (r *rawTree) allFiles(ctx context.Context) ([]file, error) {
 	return r.all, err
 }
 
-func (r *rawTree) newLines(path string) starlarkFunc {
+func (r *rawTree) newLines(path string, allFiles bool) starlarkFunc {
 	// TODO(maruel): Revisit the design, it is likely not performance efficient.
 	return func(th *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 		if err := starlark.UnpackArgs(fn.Name(), args, kwargs); err != nil {
 			return nil, err
 		}
-		ctx := interpreter.Context(th)
-		s := ctxState(ctx)
-		return newLinesWhole(s.inputs.root, path)
+		return newLinesWhole(r.root, path)
 	}
 }
 
@@ -376,7 +380,7 @@ func ctxScmFilesCommon(th *starlark.Thread, fn *starlark.Builtin, args starlark.
 		// Make sure to update //doc/stdlib.star whenever this function is modified.
 		_ = out.SetKey(starlark.String(f.path), toValue("file", starlark.StringDict{
 			"action":    starlark.String(f.action),
-			"new_lines": starlark.NewBuiltin("new_lines", s.scm.newLines(f.path)),
+			"new_lines": starlark.NewBuiltin("new_lines", s.scm.newLines(f.path, s.inputs.allFiles)),
 		}))
 	}
 	out.Freeze()

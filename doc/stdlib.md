@@ -502,7 +502,7 @@ shac.register_check(cb)
 
 ### Arguments
 
-* **cb**: Starlark function that is called back to implement the check. Passed a single argument ctx(...).
+* **callback**: Starlark function that is called back to implement the check. Passed a single argument ctx(...).
 
 ## struct
 
