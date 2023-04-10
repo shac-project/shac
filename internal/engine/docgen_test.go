@@ -26,7 +26,7 @@ func TestDocStdlib(t *testing.T) {
 		t.Fatal(err)
 	}
 	if diff := cmp.Diff(string(b), got); diff != "" {
-		t.Fatalf("mismatch (+want -got):\n%s", diff)
+		t.Fatalf("mismatch (-want +got):\n%s", diff)
 	}
 }
 
@@ -79,7 +79,7 @@ func TestDocTemplate(t *testing.T) {
 				t.Fatal(err)
 			}
 			if diff := cmp.Diff(line.want, got); diff != "" {
-				t.Fatalf("mismatch (+want -got):\n%s\n%s", line.in, diff)
+				t.Fatalf("mismatch (-want +got):\n%s", diff)
 			}
 		})
 	}
@@ -181,7 +181,7 @@ file = struct(
 				t.Fatal(err)
 			}
 			if diff := cmp.Diff(line.want, string(b)); diff != "" {
-				t.Fatalf("mismatch (+want -got):\n%s\n%s", line.in, diff)
+				t.Fatalf("mismatch (-want +got):\n%s\n%s", line.in, diff)
 			}
 		})
 	}

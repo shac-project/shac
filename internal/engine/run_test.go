@@ -33,13 +33,13 @@ func TestRun_SCM_Raw(t *testing.T) {
 			"scm_affected_files_new_lines.star: \n" +
 			"scm_all_files.star: \n" +
 			"\n"
-		testStarlark(t, root, "scm_affected_files.star", false, want)
+		testStarlarkPrint(t, root, "scm_affected_files.star", false, want)
 	})
 	t.Run("affected_new_lines", func(t *testing.T) {
 		t.Parallel()
 		want := "[//scm_affected_files_new_lines.star:17] file1.txt\n" +
 			"1: First file\n"
-		testStarlark(t, root, "scm_affected_files_new_lines.star", false, want)
+		testStarlarkPrint(t, root, "scm_affected_files_new_lines.star", false, want)
 	})
 	t.Run("all", func(t *testing.T) {
 		t.Parallel()
@@ -49,7 +49,7 @@ func TestRun_SCM_Raw(t *testing.T) {
 			"scm_affected_files_new_lines.star: \n" +
 			"scm_all_files.star: \n" +
 			"\n"
-		testStarlark(t, root, "scm_all_files.star", false, want)
+		testStarlarkPrint(t, root, "scm_all_files.star", false, want)
 	})
 }
 
@@ -67,7 +67,7 @@ func TestRun_SCM_Git_NoUpstream_Pristine(t *testing.T) {
 			"scm_affected_files_new_lines.star: A\n" +
 			"scm_all_files.star: A\n" +
 			"\n"
-		testStarlark(t, root, "scm_affected_files.star", false, want)
+		testStarlarkPrint(t, root, "scm_affected_files.star", false, want)
 	})
 	t.Run("affected/all", func(t *testing.T) {
 		t.Parallel()
@@ -78,7 +78,7 @@ func TestRun_SCM_Git_NoUpstream_Pristine(t *testing.T) {
 			"scm_affected_files_new_lines.star: A\n" +
 			"scm_all_files.star: A\n" +
 			"\n"
-		testStarlark(t, root, "scm_affected_files.star", true, want)
+		testStarlarkPrint(t, root, "scm_affected_files.star", true, want)
 	})
 	t.Run("all", func(t *testing.T) {
 		t.Parallel()
@@ -89,7 +89,7 @@ func TestRun_SCM_Git_NoUpstream_Pristine(t *testing.T) {
 			"scm_affected_files_new_lines.star: A\n" +
 			"scm_all_files.star: A\n" +
 			"\n"
-		testStarlark(t, root, "scm_all_files.star", false, want)
+		testStarlarkPrint(t, root, "scm_all_files.star", false, want)
 	})
 }
 
@@ -106,19 +106,19 @@ func TestRun_SCM_Git_NoUpstream_Staged(t *testing.T) {
 			"scm_affected_files_new_lines.star: A\n" +
 			"scm_all_files.star: A\n" +
 			"\n"
-		testStarlark(t, root, "scm_affected_files.star", false, want)
+		testStarlarkPrint(t, root, "scm_affected_files.star", false, want)
 	})
 	t.Run("affected_new_lines", func(t *testing.T) {
 		t.Parallel()
 		want := "[//scm_affected_files_new_lines.star:17] scm_affected_files.star\n" +
 			"1: # Copyright 2023 The Shac Authors. All rights reserved.\n"
-		testStarlark(t, root, "scm_affected_files_new_lines.star", false, want)
+		testStarlarkPrint(t, root, "scm_affected_files_new_lines.star", false, want)
 	})
 	t.Run("affected_new_lines/all", func(t *testing.T) {
 		t.Parallel()
 		want := "[//scm_affected_files_new_lines.star:17] file1.txt\n" +
 			"1: First file\n"
-		testStarlark(t, root, "scm_affected_files_new_lines.star", true, want)
+		testStarlarkPrint(t, root, "scm_affected_files_new_lines.star", true, want)
 	})
 	t.Run("all", func(t *testing.T) {
 		t.Parallel()
@@ -129,7 +129,7 @@ func TestRun_SCM_Git_NoUpstream_Staged(t *testing.T) {
 			"scm_affected_files_new_lines.star: A\n" +
 			"scm_all_files.star: A\n" +
 			"\n"
-		testStarlark(t, root, "scm_all_files.star", false, want)
+		testStarlarkPrint(t, root, "scm_all_files.star", false, want)
 	})
 }
 
@@ -151,7 +151,7 @@ func TestRun_SCM_Git_Upstream_Staged(t *testing.T) {
 			"scm_affected_files_new_lines.star: A\n" +
 			"scm_all_files.star: A\n" +
 			"\n"
-		testStarlark(t, root, "scm_affected_files.star", false, want)
+		testStarlarkPrint(t, root, "scm_affected_files.star", false, want)
 	})
 	t.Run("all", func(t *testing.T) {
 		t.Parallel()
@@ -162,7 +162,7 @@ func TestRun_SCM_Git_Upstream_Staged(t *testing.T) {
 			"scm_affected_files_new_lines.star: A\n" +
 			"scm_all_files.star: A\n" +
 			"\n"
-		testStarlark(t, root, "scm_all_files.star", false, want)
+		testStarlarkPrint(t, root, "scm_all_files.star", false, want)
 	})
 }
 
@@ -189,7 +189,7 @@ func TestRun_SCM_Git_Submodule(t *testing.T) {
 			"scm_affected_files_new_lines.star: A\n" +
 			"scm_all_files.star: A\n" +
 			"\n"
-		testStarlark(t, root, "scm_affected_files.star", false, want)
+		testStarlarkPrint(t, root, "scm_affected_files.star", false, want)
 	})
 
 	t.Run("all", func(t *testing.T) {
@@ -202,7 +202,7 @@ func TestRun_SCM_Git_Submodule(t *testing.T) {
 			"scm_affected_files_new_lines.star: A\n" +
 			"scm_all_files.star: A\n" +
 			"\n"
-		testStarlark(t, root, "scm_all_files.star", false, want)
+		testStarlarkPrint(t, root, "scm_all_files.star", false, want)
 	})
 }
 
@@ -221,7 +221,7 @@ func TestRun_SCM_Git_Binary_File(t *testing.T) {
 		want := "[//scm_affected_files.star:9] \n" +
 			"a.bin: A\n" +
 			"\n"
-		testStarlark(t, root, "scm_affected_files.star", false, want)
+		testStarlarkPrint(t, root, "scm_affected_files.star", false, want)
 	})
 
 	t.Run("affected_new_lines", func(t *testing.T) {
@@ -229,13 +229,13 @@ func TestRun_SCM_Git_Binary_File(t *testing.T) {
 		// Only a binary file is touched, no lines should be considered
 		// affected.
 		want := "[//scm_affected_files_new_lines.star:19] no new lines\n"
-		testStarlark(t, root, "scm_affected_files_new_lines.star", false, want)
+		testStarlarkPrint(t, root, "scm_affected_files_new_lines.star", false, want)
 	})
 
 	t.Run("affected_new_lines/all", func(t *testing.T) {
 		t.Parallel()
 		want := "[//scm_affected_files_new_lines.star:19] no new lines\n"
-		testStarlark(t, root, "scm_affected_files_new_lines.star", true, want)
+		testStarlarkPrint(t, root, "scm_affected_files_new_lines.star", true, want)
 	})
 }
 
@@ -261,15 +261,17 @@ func TestRun_SCM_Git_Broken(t *testing.T) {
 	}
 	want := "error running git --no-optional-locks rev-parse --show-toplevel: exit status 128\nfatal: invalid gitfile format: " + dotGit + "\n"
 	if diff := cmp.Diff(want, err.Error()); diff != "" {
-		t.Fatalf("mismatch (+want -got):\n%s", diff)
+		t.Fatalf("mismatch (-want +got):\n%s", diff)
 	}
 }
 
-// TestTestDataFail runs all the files under testdata/fail/.
-func TestTestDataFail(t *testing.T) {
+// TestTestDataFailOrThrow runs all the files under testdata/fail_or_throw/.
+//
+// These test cases call fail() or throw an exception.
+func TestTestDataFailOrThrow(t *testing.T) {
 	t.Parallel()
-	p, got := enumDir(t, "fail")
-	fail, err := filepath.Abs(filepath.Join("testdata", "fail"))
+	p, got := enumDir(t, "fail_or_throw")
+	fail, err := filepath.Abs(filepath.Join("testdata", "fail_or_throw"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -520,7 +522,7 @@ func TestTestDataFail(t *testing.T) {
 		want[i] = data[i].name
 	}
 	if diff := cmp.Diff(want, got); diff != "" {
-		t.Fatalf("mismatch (+want -got):\n%s", diff)
+		t.Fatalf("mismatch (-want +got):\n%s", diff)
 	}
 	for i := range data {
 		i := i
@@ -531,7 +533,7 @@ func TestTestDataFail(t *testing.T) {
 				t.Fatal("expecting an error")
 			}
 			if diff := cmp.Diff(data[i].err, err.Error()); diff != "" {
-				t.Fatalf("mismatch (+want -got):\n%s", diff)
+				t.Fatalf("mismatch (-want +got):\n%s", diff)
 			}
 			expectTrace := data[i].trace != ""
 			var err2 BacktracableError
@@ -544,17 +546,19 @@ func TestTestDataFail(t *testing.T) {
 			}
 			if expectTrace {
 				if diff := cmp.Diff("Traceback (most recent call last):\n"+data[i].trace, err2.Backtrace()); diff != "" {
-					t.Fatalf("mismatch (+want -got):\n%s", diff)
+					t.Fatalf("mismatch (-want +got):\n%s", diff)
 				}
 			}
 		})
 	}
 }
 
-// TestTestDataSimple runs all the files under testdata/simple/.
-func TestTestDataSimple(t *testing.T) {
+// TestTestDataPrint runs all the files under testdata/print/.
+//
+// These test cases call print().
+func TestTestDataPrint(t *testing.T) {
 	t.Parallel()
-	p, got := enumDir(t, "simple")
+	p, got := enumDir(t, "print")
 	v := fmt.Sprintf("(%d, %d, %d)", version[0], version[1], version[2])
 	data := []struct {
 		name string
@@ -611,19 +615,20 @@ func TestTestDataSimple(t *testing.T) {
 		want[i] = data[i].name
 	}
 	if diff := cmp.Diff(want, got); diff != "" {
-		t.Fatalf("mismatch (+want -got):\n%s", diff)
+		t.Fatalf("mismatch (-want +got):\n%s", diff)
 	}
 	for i := range data {
 		i := i
 		t.Run(data[i].name, func(t *testing.T) {
-			testStarlark(t, p, data[i].name, false, data[i].want)
+			testStarlarkPrint(t, p, data[i].name, false, data[i].want)
 		})
 	}
 }
 
 // Utilities
 
-func testStarlark(t *testing.T, root, name string, all bool, want string) {
+// testStarlarkPrint test a starlark file that calls print().
+func testStarlarkPrint(t *testing.T, root, name string, all bool, want string) {
 	r := reportPrint{t: t}
 	if err := Run(context.Background(), root, name, all, &r); err != nil {
 		t.Helper()
@@ -631,7 +636,7 @@ func testStarlark(t *testing.T, root, name string, all bool, want string) {
 	}
 	if diff := cmp.Diff(want, r.b.String()); diff != "" {
 		t.Helper()
-		t.Fatalf("mismatch (+want -got):\n%s", diff)
+		t.Fatalf("mismatch (-want +got):\n%s", diff)
 	}
 }
 
