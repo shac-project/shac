@@ -34,11 +34,58 @@ ctx is the object passed to [shac.register_check(...)](#shac.register-check) cal
 
 Fields:
 
+- emit
 - io
 - os
 - re
-- result
 - scm
+
+## ctx.emit
+
+ctx.emit is the object that exposes the API to emit results for checks.
+
+Fields:
+
+- annotation
+- artifact
+- result
+
+## ctx.emit.annotation
+
+Emits an annotation from the current check.
+
+### Example
+
+```python
+def cb(ctx):
+  for path, _ in ctx.scm.affected_files().items():
+    ctx.emit.annotation(
+        level="notice",
+        message="great code",
+        file=path,
+        span=((1, 1),),
+    )
+
+shac.register_check(cb)
+```
+
+### Arguments
+
+* **level**: one of "notice", "warning" or "error".
+* **message**: message of the annotation.
+* **file?**: path to the source file to annotate.
+* **span?**: one or two pairs of (line,col) tuples that delimits the start and the end of the annotation.
+* **replacements?**: list of possible replacements.
+
+## ctx.emit.artifact
+
+Not implemented.
+
+
+## ctx.emit.result
+
+Not implemented.
+
 
 ## ctx.io
 
@@ -164,31 +211,6 @@ shac.register_check(cb)
 ### Returns
 
 struct(offset=bytes_offset, groups=list(matches))
-
-## ctx.result
-
-ctx.result is the object that exposes the API to emit results for checks.
-
-Fields:
-
-- emit_comment
-- emit_row
-- emit_artifact
-
-## ctx.result.emit_comment
-
-Not implemented.
-
-
-## ctx.result.emit_row
-
-Not implemented.
-
-
-## ctx.result.emit_artifact
-
-Not implemented.
-
 
 ## ctx.scm
 

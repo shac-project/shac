@@ -31,6 +31,34 @@ features](https://pkg.go.dev/go.starlark.net/resolve#pkg-variables) are enabled:
 ## Methods inside ctx object.
 
 
+def _ctx_emit_annotation(level, message, file, span, replacements):
+  """Emits an annotation from the current check.
+
+  Example:
+    ```python
+    def cb(ctx):
+      for path, _ in ctx.scm.affected_files().items():
+        ctx.emit.annotation(
+            level="notice",
+            message="great code",
+            file=path,
+            span=((1, 1),),
+        )
+
+    shac.register_check(cb)
+    ```
+
+  Args:
+    level: one of "notice", "warning" or "error".
+    message: message of the annotation.
+    file?: path to the source file to annotate.
+    span?: one or two pairs of (line,col) tuples that delimits the start and the end
+      of the annotation.
+    replacements?: list of possible replacements.
+  """
+  pass
+
+
 def _ctx_io_read_file(path, size):
   """Returns the content of a file.
 
@@ -197,6 +225,12 @@ def _not_implemented():
 
 # ctx is the object passed to shac.register_check(...) callback.
 ctx = struct(
+  # ctx.emit is the object that exposes the API to emit results for checks.
+  emit = struct(
+    annotation = _ctx_emit_annotation,
+    artifact = _not_implemented,
+    result = _not_implemented,
+  ),
   # ctx.io is the object that exposes the API to interact with the file system.
   io = struct(
     read_file = _ctx_io_read_file,
@@ -211,12 +245,6 @@ ctx = struct(
   re = struct(
     allmatches = _ctx_re_allmatches,
     match = _ctx_re_match,
-  ),
-  # ctx.result is the object that exposes the API to emit results for checks.
-  result = struct(
-    emit_comment = _not_implemented,
-    emit_row = _not_implemented,
-    emit_artifact = _not_implemented,
   ),
   # ctx.scm is the object exposes the API to query the source control
   # management (e.g. git).

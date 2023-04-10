@@ -18,15 +18,17 @@ def new_todos(ctx):
   Args:
     ctx: A ctx instance.
   """
-  out = ""
   for path, meta in ctx.scm.affected_files().items():
     for num, line in meta.new_lines():
       m = ctx.re.match("TODO\\(([^)]+)\\).*", line)
       if m:
-        # TODO(maruel): Validate m.groups[1] once we can emit results (errors).
-        out += "\n" + path + "(" + str(num) + "): " + m.groups[0]
-  if out:
-    print(out)
+        # TODO(maruel): Validate m.groups[1].
+        ctx.emit.annotation(
+            level="notice",
+            message=m.groups[0],
+            file=path,
+            span=((num, 1),),
+        )
 
 
 shac.register_check(check_docs)

@@ -22,6 +22,11 @@ import (
 // Make sure to update //doc/stdlib.star whenever this function is modified.
 func getCtx() starlark.Value {
 	return toValue("ctx", starlark.StringDict{
+		"emit": toValue("emit", starlark.StringDict{
+			"annotation": starlark.NewBuiltin("annotation", ctxEmitAnnotation),
+			"artifact":   builtins.Fail,
+			"result":     builtins.Fail,
+		}),
 		"io": toValue("io", starlark.StringDict{
 			"read_file": starlark.NewBuiltin("read_file", ctxIoReadFile),
 		}),
@@ -32,11 +37,6 @@ func getCtx() starlark.Value {
 		"re": toValue("re", starlark.StringDict{
 			"match":      starlark.NewBuiltin("match", ctxReMatch),
 			"allmatches": starlark.NewBuiltin("allmatches", ctxReAllMatches),
-		}),
-		"result": toValue("result", starlark.StringDict{
-			"emit_comment":  builtins.Fail,
-			"emit_row":      builtins.Fail,
-			"emit_artifact": builtins.Fail,
 		}),
 		// Implemented in runtime_ctx_scm.go
 		"scm": toValue("scm", starlark.StringDict{

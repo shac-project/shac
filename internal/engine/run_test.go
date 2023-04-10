@@ -16,6 +16,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -290,6 +291,48 @@ func TestTestDataFailOrThrow(t *testing.T) {
 				`Error: inner`,
 		},
 		{
+			"ctx-emit-annotation-kwarg.star",
+			"annotation: unexpected keyword argument \"foo\"",
+			"  //ctx-emit-annotation-kwarg.star:6:22: in cb\n" +
+				"Error in annotation: annotation: unexpected keyword argument \"foo\"",
+		},
+		{
+			"ctx-emit-annotation-level.star",
+			"a valid level is required, use one of \"notice\", \"warning\" or \"error\"",
+			"  //ctx-emit-annotation-level.star:6:22: in cb\n" +
+				"Error in annotation: a valid level is required, use one of \"notice\", \"warning\" or \"error\"",
+		},
+		{
+			"ctx-emit-annotation-message.star",
+			"a message is required",
+			"  //ctx-emit-annotation-message.star:6:22: in cb\n" +
+				"Error in annotation: a message is required",
+		},
+		{
+			"ctx-emit-annotation-replacements.star",
+			"invalid replacements, expect tuple of str",
+			"  //ctx-emit-annotation-replacements.star:6:22: in cb\n" +
+				"Error in annotation: invalid replacements, expect tuple of str",
+		},
+		{
+			"ctx-emit-annotation-span-len.star",
+			"invalid span, expect ((line, col), (line, col))",
+			"  //ctx-emit-annotation-span-len.star:6:22: in cb\n" +
+				"Error in annotation: invalid span, expect ((line, col), (line, col))",
+		},
+		{
+			"ctx-emit-annotation-span-negative.star",
+			"invalid span, expect ((line, col), (line, col))",
+			"  //ctx-emit-annotation-span-negative.star:6:22: in cb\n" +
+				"Error in annotation: invalid span, expect ((line, col), (line, col))",
+		},
+		{
+			"ctx-emit-annotation-span-str.star",
+			"invalid span, expect ((line, col), (line, col))",
+			"  //ctx-emit-annotation-span-str.star:6:22: in cb\n" +
+				"Error in annotation: invalid span, expect ((line, col), (line, col))",
+		},
+		{
 			"ctx-immutable.star",
 			"can't assign to .key field of struct",
 			"  //ctx-immutable.star:7:6: in cb\n" +
@@ -553,6 +596,56 @@ func TestTestDataFailOrThrow(t *testing.T) {
 	}
 }
 
+// TestTestDataEmit runs all the files under testdata/emit/.
+func TestTestDataEmit(t *testing.T) {
+	t.Parallel()
+	root, got := enumDir(t, "emit")
+	data := []struct {
+		name        string
+		annotations []annotation
+	}{
+		{
+			"ctx-emit-annotation.star",
+			[]annotation{
+				{
+					Check:        "cb",
+					Level:        "warning",
+					Message:      "please fix",
+					File:         "file.txt",
+					Span:         Span{Start: Cursor{Line: 1, Col: 1}, End: Cursor{Line: 10, Col: 1}},
+					Replacements: []string{"nothing", "broken code"},
+				},
+				{
+					Check:        "cb",
+					Level:        "notice",
+					Message:      "great code",
+					Span:         Span{Start: Cursor{Line: 100, Col: 2}, End: Cursor{Line: 100, Col: 2}},
+					Replacements: []string{},
+				},
+			},
+		},
+	}
+	want := make([]string, len(data))
+	for i := range data {
+		want[i] = data[i].name
+	}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Fatalf("mismatch (-want +got):\n%s", diff)
+	}
+	for i := range data {
+		i := i
+		t.Run(data[i].name, func(t *testing.T) {
+			r := reportEmit{reportNoPrint: reportNoPrint{t: t}}
+			if err := Run(context.Background(), root, data[i].name, false, &r); err != nil {
+				t.Fatal(err)
+			}
+			if diff := cmp.Diff(data[i].annotations, r.annotations); diff != "" {
+				t.Fatalf("mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
 // TestTestDataPrint runs all the files under testdata/print/.
 //
 // These test cases call print().
@@ -595,7 +688,7 @@ func TestTestDataPrint(t *testing.T) {
 		},
 		{
 			"dir-ctx.star",
-			"[//dir-ctx.star:6] [\"io\", \"os\", \"re\", \"result\", \"scm\"]\n",
+			"[//dir-ctx.star:6] [\"emit\", \"io\", \"os\", \"re\", \"scm\"]\n",
 		},
 		{
 			"dir-shac.star",
@@ -629,7 +722,7 @@ func TestTestDataPrint(t *testing.T) {
 
 // testStarlarkPrint test a starlark file that calls print().
 func testStarlarkPrint(t *testing.T, root, name string, all bool, want string) {
-	r := reportPrint{t: t}
+	r := reportPrint{reportNoPrint: reportNoPrint{t: t}}
 	if err := Run(context.Background(), root, name, all, &r); err != nil {
 		t.Helper()
 		t.Fatal(err)
@@ -728,17 +821,54 @@ type reportNoPrint struct {
 	t *testing.T
 }
 
+func (r *reportNoPrint) EmitAnnotation(ctx context.Context, check, level, message, file string, s Span, replacements []string) error {
+	r.t.Errorf("unexpected annotation: %s: %s, %q, %s, %# v, %v", check, level, message, file, s, replacements)
+	return errors.New("not implemented")
+}
+
 func (r *reportNoPrint) Print(ctx context.Context, file string, line int, message string) {
 	r.t.Errorf("unexpected print: %s(%d): %s", file, line, message)
 }
 
 type reportPrint struct {
-	t *testing.T
-	b bytes.Buffer
+	reportNoPrint
+	mu sync.Mutex
+	b  bytes.Buffer
 }
 
 func (r *reportPrint) Print(ctx context.Context, file string, line int, message string) {
+	r.mu.Lock()
 	fmt.Fprintf(&r.b, "[%s:%d] %s\n", file, line, message)
+	r.mu.Unlock()
+}
+
+type reportEmit struct {
+	reportNoPrint
+	mu          sync.Mutex
+	annotations []annotation
+}
+
+type annotation struct {
+	Check        string
+	Level        string
+	Message      string
+	File         string
+	Span         Span
+	Replacements []string
+}
+
+func (r *reportEmit) EmitAnnotation(ctx context.Context, check, level, message, file string, s Span, replacements []string) error {
+	r.mu.Lock()
+	r.annotations = append(r.annotations, annotation{
+		Check:        check,
+		Level:        level,
+		Message:      message,
+		File:         file,
+		Span:         s,
+		Replacements: replacements,
+	})
+	r.mu.Unlock()
+	return nil
 }
 
 func init() {

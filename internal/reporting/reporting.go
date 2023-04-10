@@ -51,6 +51,12 @@ type basic struct {
 	out io.Writer
 }
 
+func (b *basic) EmitAnnotation(ctx context.Context, check, level, message, file string, s engine.Span, replacements []string) error {
+	// TODO(maruel): Do not drop span and replacements!
+	_, err := fmt.Fprintf(b.out, "[%s/%s] %s(%d): %s\n", check, level, file, s.Start.Line, message)
+	return err
+}
+
 func (b *basic) Print(ctx context.Context, file string, line int, message string) {
 	fmt.Fprintf(b.out, "[%s:%d] %s\n", file, line, message)
 }
@@ -63,6 +69,13 @@ type github struct {
 	out io.Writer
 }
 
+func (g *github) EmitAnnotation(ctx context.Context, check, level, message, file string, s engine.Span, replacements []string) error {
+	// TODO(maruel): Do not drop replacements!
+	_, err := fmt.Fprintf(g.out, "::%s ::file=%s,line=%d,col=%d,endLine=%d,endCol=%d,title=%s::%s\n",
+		level, file, s.Start.Line, s.Start.Col, s.End.Line, s.End.Col, check, message)
+	return err
+}
+
 func (g *github) Print(ctx context.Context, file string, line int, message string) {
 	// Use debug here instead of notice since the file/line reference comes from
 	// starlark, which will likely not be in the delta or even in your source
@@ -73,6 +86,21 @@ func (g *github) Print(ctx context.Context, file string, line int, message strin
 
 type interactive struct {
 	out io.Writer
+}
+
+func (i *interactive) EmitAnnotation(ctx context.Context, check, level, message, file string, s engine.Span, replacements []string) error {
+	// TODO(maruel): Do not drop span and replacements!
+	l := ""
+	switch level {
+	case "notice":
+		l = fgGreen.String() + "Notice"
+	case "warning":
+		l = fgYellow.String() + "Warning"
+	case "error":
+		l = fgRed.String() + "Error"
+	}
+	_, err := fmt.Fprintf(i.out, "%s[%s%s%s/%s%s] %s(%d): %s\n", reset, fgHiCyan, check, reset, l, reset, file, s.Start.Line, message)
+	return err
 }
 
 func (i *interactive) Print(ctx context.Context, file string, line int, message string) {
