@@ -15,69 +15,65 @@
 package engine
 
 import (
+	"context"
 	"errors"
 	"fmt"
 
-	"go.chromium.org/luci/starlark/interpreter"
 	"go.starlark.net/starlark"
 )
 
-func ctxEmitAnnotation(th *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+func ctxEmitAnnotation(ctx context.Context, s *state, name string, args starlark.Tuple, kwargs []starlark.Tuple) error {
 	var arglevel starlark.String
 	var argmessage starlark.String
 	var argfilepath starlark.String
 	var argspan starlark.Tuple
 	var argreplacements starlark.Tuple
-	if err := starlark.UnpackArgs(fn.Name(), args, kwargs,
+	if err := starlark.UnpackArgs(name, args, kwargs,
 		"level", &arglevel,
 		"message", &argmessage,
 		"filepath?", &argfilepath,
 		"span?", &argspan,
 		"replacements?", &argreplacements,
 	); err != nil {
-		return nil, err
+		return err
 	}
 	level := Level(string(arglevel))
 	if !level.isValid() {
-		return nil, fmt.Errorf("a valid level is required, use one of %q, %q or %q", Notice, Warning, Error)
+		return fmt.Errorf("a valid level is required, use one of %q, %q or %q", Notice, Warning, Error)
 	}
 	message := string(argmessage)
 	if len(message) == 0 {
-		return nil, errors.New("a message is required")
+		return errors.New("a message is required")
 	}
 	file := string(argfilepath)
 	span := starlarkToSpan(argspan)
 	if span.Start.Line == -1 || span.End.Line == -1 {
-		return nil, errors.New("invalid span, expect ((line, col), (line, col))")
+		return errors.New("invalid span, expect ((line, col), (line, col))")
 	}
 	replacements := tupleToString(argreplacements)
 	if replacements == nil {
-		return nil, errors.New("invalid replacements, expect tuple of str")
+		return errors.New("invalid replacements, expect tuple of str")
 	}
-	ctx := interpreter.Context(th)
-	s := ctxState(ctx)
 	c := ctxCheck(ctx)
 	if level == "error" {
 		c.hadError = true
 	}
 	if err := s.r.EmitAnnotation(ctx, c.name, level, message, file, span, replacements); err != nil {
-		return nil, fmt.Errorf("failed to emit: %w", err)
+		return fmt.Errorf("failed to emit: %w", err)
 	}
-	return starlark.None, nil
+	return nil
 }
 
-func ctxEmitArtifact(th *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+func ctxEmitArtifact(ctx context.Context, s *state, name string, args starlark.Tuple, kwargs []starlark.Tuple) error {
 	var argfilepath starlark.String
 	var argcontent starlark.Value = starlark.None
-	if err := starlark.UnpackArgs(fn.Name(), args, kwargs,
+	if err := starlark.UnpackArgs(name, args, kwargs,
 		"filepath", &argfilepath,
 		"content?", &argcontent,
 	); err != nil {
-		return nil, err
+		return err
 	}
 	f := string(argfilepath)
-	ctx := interpreter.Context(th)
-	s := ctxState(ctx)
 	var content []byte
 	switch v := argcontent.(type) {
 	case starlark.Bytes:
@@ -89,19 +85,19 @@ func ctxEmitArtifact(th *starlark.Thread, fn *starlark.Builtin, args starlark.Tu
 	case starlark.NoneType:
 		dst, err := absPath(f, s.inputs.root)
 		if err != nil {
-			return nil, err
+			return err
 		}
 		if content, err = readFile(dst, -1); err != nil {
-			return nil, err
+			return err
 		}
 	default:
-		return nil, fmt.Errorf("for parameter \"content\": got %s, want str or bytes", argcontent.Type())
+		return fmt.Errorf("for parameter \"content\": got %s, want str or bytes", argcontent.Type())
 	}
 	c := ctxCheck(ctx)
 	if err := s.r.EmitArtifact(ctx, c.name, f, content); err != nil {
-		return nil, fmt.Errorf("failed to emit: %w", err)
+		return fmt.Errorf("failed to emit: %w", err)
 	}
-	return starlark.None, nil
+	return nil
 }
 
 func starlarkToSpan(t starlark.Tuple) Span {

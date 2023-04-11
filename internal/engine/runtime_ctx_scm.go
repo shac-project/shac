@@ -29,7 +29,6 @@ import (
 	"strings"
 	"sync"
 
-	"go.chromium.org/luci/starlark/interpreter"
 	"go.starlark.net/starlark"
 )
 
@@ -51,13 +50,11 @@ type file struct {
 	action string
 }
 
-type starlarkFunc func(th *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error)
-
 // scmCheckout is the generic interface for version controlled sources.
 type scmCheckout interface {
 	affectedFiles(ctx context.Context) ([]file, error)
 	allFiles(ctx context.Context) ([]file, error)
-	newLines(path string, allFiles bool) starlarkFunc
+	newLines(path string, allFiles bool) builtin
 }
 
 // Git support.
@@ -253,14 +250,13 @@ func (g *gitCheckout) isSubmodule(path string) bool {
 	return fi.IsDir()
 }
 
-func (g *gitCheckout) newLines(path string, allFiles bool) starlarkFunc {
+func (g *gitCheckout) newLines(path string, allFiles bool) builtin {
 	// TODO(maruel): Revisit the design, it is likely not performance efficient
 	// to use a stack context.
-	return func(th *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
-		if err := starlark.UnpackArgs(fn.Name(), args, kwargs); err != nil {
+	return func(ctx context.Context, s *state, name string, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+		if err := starlark.UnpackArgs(name, args, kwargs); err != nil {
 			return nil, err
 		}
-		ctx := interpreter.Context(th)
 		if allFiles {
 			// Include all lines when processing all files independent if the file
 			// was modified or not.
@@ -364,10 +360,10 @@ func (r *rawTree) allFiles(ctx context.Context) ([]file, error) {
 	return r.all, err
 }
 
-func (r *rawTree) newLines(path string, allFiles bool) starlarkFunc {
+func (r *rawTree) newLines(path string, allFiles bool) builtin {
 	// TODO(maruel): Revisit the design, it is likely not performance efficient.
-	return func(th *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
-		if err := starlark.UnpackArgs(fn.Name(), args, kwargs); err != nil {
+	return func(ctx context.Context, s *state, name string, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+		if err := starlark.UnpackArgs(name, args, kwargs); err != nil {
 			return nil, err
 		}
 		v, err := newLinesWhole(r.root, path)
@@ -380,12 +376,10 @@ func (r *rawTree) newLines(path string, allFiles bool) starlarkFunc {
 
 // Starlark adapter code.
 
-func ctxScmFilesCommon(th *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple, all bool) (starlark.Value, error) {
-	if err := starlark.UnpackArgs(fn.Name(), args, kwargs); err != nil {
+func ctxScmFilesCommon(ctx context.Context, s *state, name string, args starlark.Tuple, kwargs []starlark.Tuple, all bool) (starlark.Value, error) {
+	if err := starlark.UnpackArgs(name, args, kwargs); err != nil {
 		return nil, err
 	}
-	ctx := interpreter.Context(th)
-	s := ctxState(ctx)
 	var files []file
 	var err error
 	if s.inputs.allFiles || all {
@@ -414,8 +408,8 @@ func ctxScmFilesCommon(th *starlark.Thread, fn *starlark.Builtin, args starlark.
 // It returns a dictionary.
 //
 // Make sure to update //doc/stdlib.star whenever this function is modified.
-func ctxScmAffectedFiles(th *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
-	return ctxScmFilesCommon(th, fn, args, kwargs, false)
+func ctxScmAffectedFiles(ctx context.Context, s *state, name string, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+	return ctxScmFilesCommon(ctx, s, name, args, kwargs, false)
 }
 
 // ctxScmAllFiles implements native function ctx.scm.all_files().
@@ -423,8 +417,8 @@ func ctxScmAffectedFiles(th *starlark.Thread, fn *starlark.Builtin, args starlar
 // It returns a dictionary.
 //
 // Make sure to update //doc/stdlib.star whenever this function is modified.
-func ctxScmAllFiles(th *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
-	return ctxScmFilesCommon(th, fn, args, kwargs, true)
+func ctxScmAllFiles(ctx context.Context, s *state, name string, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+	return ctxScmFilesCommon(ctx, s, name, args, kwargs, true)
 }
 
 // newLinesWhole returns the whole file as new lines.

@@ -15,6 +15,7 @@
 package engine
 
 import (
+	"context"
 	"errors"
 	"io"
 	"os"
@@ -22,7 +23,6 @@ import (
 	"path"
 	"strings"
 
-	"go.chromium.org/luci/starlark/interpreter"
 	"go.starlark.net/starlark"
 )
 
@@ -33,8 +33,8 @@ func getCtx() starlark.Value {
 	return toValue("ctx", starlark.StringDict{
 		// Implemented in runtime_ctx_emit.go
 		"emit": toValue("ctx.emit", starlark.StringDict{
-			"annotation": newBuiltin("ctx.emit.annotation", ctxEmitAnnotation),
-			"artifact":   newBuiltin("ctx.emit.artifact", ctxEmitArtifact),
+			"annotation": newBuiltinNone("ctx.emit.annotation", ctxEmitAnnotation),
+			"artifact":   newBuiltinNone("ctx.emit.artifact", ctxEmitArtifact),
 		}),
 		"io": toValue("ctx.io", starlark.StringDict{
 			"read_file": newBuiltin("ctx.io.read_file", ctxIoReadFile),
@@ -60,10 +60,10 @@ func getCtx() starlark.Value {
 // Use POSIX style relative path. "..", "\" and absolute paths are denied.
 //
 // Make sure to update //doc/stdlib.star whenever this function is modified.
-func ctxIoReadFile(th *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+func ctxIoReadFile(ctx context.Context, s *state, name string, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	var argfilepath starlark.String
 	var argsize starlark.Int
-	if err := starlark.UnpackArgs(fn.Name(), args, kwargs,
+	if err := starlark.UnpackArgs(name, args, kwargs,
 		"filepath", &argfilepath,
 		"size?", &argsize,
 	); err != nil {
@@ -73,8 +73,6 @@ func ctxIoReadFile(th *starlark.Thread, fn *starlark.Builtin, args starlark.Tupl
 	if !ok {
 		return nil, errors.New("invalid size")
 	}
-	ctx := interpreter.Context(th)
-	s := ctxState(ctx)
 	dst, err := absPath(string(argfilepath), s.inputs.root)
 	if err != nil {
 		return nil, err
@@ -93,10 +91,10 @@ func ctxIoReadFile(th *starlark.Thread, fn *starlark.Builtin, args starlark.Tupl
 // exit code.
 //
 // Make sure to update //doc/stdlib.star whenever this function is modified.
-func ctxOsExec(th *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+func ctxOsExec(ctx context.Context, s *state, name string, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	var rawCmd *starlark.List
 	var cwd starlark.String
-	if err := starlark.UnpackArgs(fn.Name(), args, kwargs,
+	if err := starlark.UnpackArgs(name, args, kwargs,
 		"cmd", &rawCmd,
 		"cwd?", &cwd,
 	); err != nil {
@@ -117,9 +115,6 @@ func ctxOsExec(th *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, k
 		}
 		parsedCmd = append(parsedCmd, str.GoString())
 	}
-
-	ctx := interpreter.Context(th)
-	s := ctxState(ctx)
 
 	// TODO(olivernewman): Wrap with nsjail on linux.
 	//#nosec G204

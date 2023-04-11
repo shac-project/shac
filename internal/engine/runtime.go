@@ -15,6 +15,7 @@
 package engine
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"runtime/debug"
@@ -42,7 +43,7 @@ var (
 func getPredeclared() starlark.StringDict {
 	return starlark.StringDict{
 		"shac": toValue("shac", starlark.StringDict{
-			"register_check": newBuiltin("shac.register_check", shacRegisterCheck),
+			"register_check": newBuiltinNone("shac.register_check", shacRegisterCheck),
 			"commit_hash":    starlark.String(getCommitHash()),
 			"version": starlark.Tuple{
 				starlark.MakeInt(version[0]), starlark.MakeInt(version[1]), starlark.MakeInt(version[2]),
@@ -54,7 +55,10 @@ func getPredeclared() starlark.StringDict {
 		"json": json.Module,
 
 		// Override fail to include additional functionality.
-		"fail": newBuiltin("fail", fail),
+		//
+		// Do not use newBuiltinNone() because it needs access to the thread to
+		// capture the stack trace.
+		"fail": starlark.NewBuiltin("fail", fail),
 		// struct is an helper function that enables users to create seamless
 		// object instances.
 		"struct": builtins.Struct,
@@ -65,10 +69,9 @@ func getPredeclared() starlark.StringDict {
 //
 // Unlike builtins.Fail(), it doesn't allow user specified stack traces.
 func fail(th *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
-	//builtins.Fail()
 	sep := " "
 	// Do not exit early if the arguments are wrong.
-	err := starlark.UnpackArgs("fail", nil, kwargs, "sep?", &sep)
+	err := starlark.UnpackArgs(fn.Name(), nil, kwargs, "sep?", &sep)
 	buf := strings.Builder{}
 	for i, v := range args {
 		if i > 0 {
@@ -85,11 +88,11 @@ func fail(th *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs
 		buf.WriteString(err.Error())
 	}
 	msg := buf.String()
-	ctx := interpreter.Context(th)
 	failErr := &failure{
 		Message: msg,
 		Stack:   th.CallStack(),
 	}
+	ctx := interpreter.Context(th)
 	if c := ctxCheck(ctx); c != nil {
 		// Running inside a check, annotate it.
 		c.failErr = failErr
@@ -98,30 +101,28 @@ func fail(th *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs
 		s := ctxState(ctx)
 		s.failErr = failErr
 	}
-	return nil, errors.New(msg)
+	return nil, errors.New(fn.Name() + ": " + msg)
 }
 
 // shacRegisterCheck implements native function shac.register_check().
 //
 // Make sure to update //doc/stdlib.star whenever this function is modified.
-func shacRegisterCheck(th *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+func shacRegisterCheck(ctx context.Context, s *state, name string, args starlark.Tuple, kwargs []starlark.Tuple) error {
 	var argcallback starlark.Callable
-	if err := starlark.UnpackArgs(fn.Name(), args, kwargs, "callback", &argcallback); err != nil {
-		return nil, err
+	if err := starlark.UnpackArgs(name, args, kwargs, "callback", &argcallback); err != nil {
+		return err
 	}
 	// Inspect callback to verify that it accepts one argument and that it is not a builtin.
 	cb, ok := argcallback.(*starlark.Function)
 	if !ok || cb.NumParams() != 1 {
-		return nil, errors.New("callback must be a function accepting one \"ctx\" argument")
+		return errors.New("callback must be a function accepting one \"ctx\" argument")
 	}
-	ctx := interpreter.Context(th)
-	s := ctxState(ctx)
 	if s.doneLoading {
-		return nil, errors.New("can't register checks after done loading")
+		return errors.New("can't register checks after done loading")
 	}
 	// Register the new callback.
 	s.checks = append(s.checks, check{cb: cb, name: strings.TrimPrefix(cb.Name(), "_")})
-	return starlark.None, nil
+	return nil
 }
 
 // getCommitHash return the git commit hash that was used to build this
@@ -145,20 +146,32 @@ func toValue(name string, d starlark.StringDict) starlark.Value {
 	return starlarkstruct.FromStringDict(starlark.String(name), d)
 }
 
+type builtin func(ctx context.Context, s *state, name string, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error)
+
 // newBuiltin registers a go function as a Starlark builtin.
 //
 // It's identical to `starlark.NewBuiltin()`, but prepends the function name to
 // the text of any returned errors as a usability improvement.
-func newBuiltin(name string, impl func(thread *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error)) *starlark.Builtin {
-	wrapper := func(thread *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
-		val, err := impl(thread, fn, args, kwargs)
+func newBuiltin(name string, impl builtin) *starlark.Builtin {
+	wrapper := func(th *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+		ctx := interpreter.Context(th)
+		s := ctxState(ctx)
+		val, err := impl(ctx, s, name, args, kwargs)
 		// starlark.UnpackArgs already adds the function name prefix to errors
 		// it returns, so make sure not to duplicate the prefix if it's already
 		// there.
-		if err != nil && !strings.HasPrefix(err.Error(), name+":") {
+		if err != nil && !strings.HasPrefix(err.Error(), name+": ") {
 			err = fmt.Errorf("%s: %w", name, err)
 		}
 		return val, err
 	}
 	return starlark.NewBuiltin(name, wrapper)
+}
+
+func newBuiltinNone(name string, f func(ctx context.Context, s *state, name string, args starlark.Tuple, kwargs []starlark.Tuple) error) *starlark.Builtin {
+	return newBuiltin(
+		name,
+		func(ctx context.Context, s *state, name string, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+			return starlark.None, f(ctx, s, name, args, kwargs)
+		})
 }

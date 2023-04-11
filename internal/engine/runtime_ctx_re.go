@@ -15,6 +15,7 @@
 package engine
 
 import (
+	"context"
 	"regexp"
 	"sync"
 
@@ -30,16 +31,16 @@ import (
 // It uses the RE2 engine as specified at https://golang.org/s/re2syntax.
 //
 // Make sure to update //doc/stdlib.star whenever this function is modified.
-func ctxReMatch(th *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
-	s, r, err := reCommonPreamble(fn, args, kwargs)
+func ctxReMatch(ctx context.Context, s *state, name string, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+	str, r, err := reCommonPreamble(name, args, kwargs)
 	if err != nil {
 		return nil, err
 	}
-	m := r.FindStringSubmatchIndex(s)
+	m := r.FindStringSubmatchIndex(str)
 	if m == nil {
 		return starlark.None, nil
 	}
-	return matchToGroup(s, m), nil
+	return matchToGroup(str, m), nil
 }
 
 // ctxReAllMatches implements ctx.re.allmatches.
@@ -51,18 +52,18 @@ func ctxReMatch(th *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, 
 // It uses the RE2 engine as specified at https://golang.org/s/re2syntax.
 //
 // Make sure to update //doc/stdlib.star whenever this function is modified.
-func ctxReAllMatches(th *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
-	s, r, err := reCommonPreamble(fn, args, kwargs)
+func ctxReAllMatches(ctx context.Context, s *state, name string, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+	str, r, err := reCommonPreamble(name, args, kwargs)
 	if err != nil {
 		return nil, err
 	}
-	matches := r.FindAllStringSubmatchIndex(s, -1)
+	matches := r.FindAllStringSubmatchIndex(str, -1)
 	// Always return a tuple even if no match is found to make client code
 	// simpler.
 	out := make(starlark.Tuple, len(matches))
 	for i, match := range matches {
 		// Create a struct for each match.
-		out[i] = matchToGroup(s, match)
+		out[i] = matchToGroup(str, match)
 	}
 	return out, nil
 }
@@ -95,9 +96,9 @@ func matchToGroup(s string, groups []int) starlark.Value {
 // reCommonPreamble implements the common code for functions in ctx.re.*.
 //
 // Make sure to update //doc/stdlib.star whenever this function is modified.
-func reCommonPreamble(fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (string, *regexp.Regexp, error) {
+func reCommonPreamble(name string, args starlark.Tuple, kwargs []starlark.Tuple) (string, *regexp.Regexp, error) {
 	var argpattern, argstr starlark.String
-	if err := starlark.UnpackArgs(fn.Name(), args, kwargs, "pattern", &argpattern, "str", &argstr); err != nil {
+	if err := starlark.UnpackArgs(name, args, kwargs, "pattern", &argpattern, "str", &argstr); err != nil {
 		return "", nil, err
 	}
 	r, err := reCache.compile(string(argpattern))
