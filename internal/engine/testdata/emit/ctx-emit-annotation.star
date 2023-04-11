@@ -6,7 +6,7 @@ def cb(ctx):
   ctx.emit.annotation(
       level="warning",
       message="please fix",
-      file="file.txt",
+      filepath="file.txt",
       span=((1,1), (10,1)),
       replacements=("nothing", "broken code"))
   ctx.emit.annotation(level="notice", span=((100,2),), message="great code")

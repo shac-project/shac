@@ -19,7 +19,9 @@ _SKIP_FILE_REGEXES = [
   # JSON files can't contain comments.
   r".*\.json",
   # gitignore files need not contain a license header.
-  r"(.*/)?\.gitignore"
+  r"(.*/)?\.gitignore",
+  # text files in testdata/ need not contain a license header.
+  r"(.*/)?testdata/(.+)\.txt",
 ]
 
 def check_license_headers(ctx):

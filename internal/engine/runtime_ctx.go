@@ -13,7 +13,6 @@ import (
 	"path"
 	"strings"
 
-	"go.chromium.org/luci/starlark/builtins"
 	"go.chromium.org/luci/starlark/interpreter"
 	"go.starlark.net/starlark"
 )
@@ -26,8 +25,7 @@ func getCtx() starlark.Value {
 		// Implemented in runtime_ctx_emit.go
 		"emit": toValue("ctx.emit", starlark.StringDict{
 			"annotation": starlark.NewBuiltin("ctx.emit.annotation", ctxEmitAnnotation),
-			"artifact":   builtins.Fail,
-			"result":     builtins.Fail,
+			"artifact":   starlark.NewBuiltin("ctx.emit.artifact", ctxEmitArtifact),
 		}),
 		"io": toValue("ctx.io", starlark.StringDict{
 			"read_file": starlark.NewBuiltin("ctx.io.read_file", ctxIoReadFile),
@@ -54,10 +52,10 @@ func getCtx() starlark.Value {
 //
 // Make sure to update //doc/stdlib.star whenever this function is modified.
 func ctxIoReadFile(th *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
-	var argpath starlark.String
+	var argfilepath starlark.String
 	var argsize starlark.Int
 	if err := starlark.UnpackArgs(fn.Name(), args, kwargs,
-		"path", &argpath,
+		"filepath", &argfilepath,
 		"size?", &argsize,
 	); err != nil {
 		return nil, err
@@ -68,7 +66,7 @@ func ctxIoReadFile(th *starlark.Thread, fn *starlark.Builtin, args starlark.Tupl
 	}
 	ctx := interpreter.Context(th)
 	s := ctxState(ctx)
-	dst, err := absPath(string(argpath), s.inputs.root)
+	dst, err := absPath(string(argfilepath), s.inputs.root)
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", fn.Name(), err)
 	}

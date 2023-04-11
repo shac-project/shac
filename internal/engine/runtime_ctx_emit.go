@@ -14,29 +14,27 @@ import (
 func ctxEmitAnnotation(th *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	var arglevel starlark.String
 	var argmessage starlark.String
-	var argfile starlark.String
+	var argfilepath starlark.String
 	var argspan starlark.Tuple
 	var argreplacements starlark.Tuple
 	if err := starlark.UnpackArgs(fn.Name(), args, kwargs,
 		"level", &arglevel,
 		"message", &argmessage,
-		"file?", &argfile,
+		"filepath?", &argfilepath,
 		"span?", &argspan,
 		"replacements?", &argreplacements,
 	); err != nil {
 		return nil, err
 	}
-	level := string(arglevel)
-	switch level {
-	case "notice", "warning", "error":
-	default:
-		return nil, fmt.Errorf("%s: a valid level is required, use one of \"notice\", \"warning\" or \"error\"", fn.Name())
+	level := Level(string(arglevel))
+	if !level.isValid() {
+		return nil, fmt.Errorf("%s: a valid level is required, use one of %q, %q or %q", fn.Name(), Notice, Warning, Error)
 	}
 	message := string(argmessage)
 	if len(message) == 0 {
 		return nil, fmt.Errorf("%s: a message is required", fn.Name())
 	}
-	file := string(argfile)
+	file := string(argfilepath)
 	span := starlarkToSpan(argspan)
 	if span.Start.Line == -1 || span.End.Line == -1 {
 		return nil, fmt.Errorf("%s: invalid span, expect ((line, col), (line, col))", fn.Name())
@@ -52,6 +50,44 @@ func ctxEmitAnnotation(th *starlark.Thread, fn *starlark.Builtin, args starlark.
 		c.hadError = true
 	}
 	if err := s.r.EmitAnnotation(ctx, c.name, level, message, file, span, replacements); err != nil {
+		return nil, fmt.Errorf("%s: failed to emit: %w", fn.Name(), err)
+	}
+	return starlark.None, nil
+}
+
+func ctxEmitArtifact(th *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+	var argfilepath starlark.String
+	var argcontent starlark.Value = starlark.None
+	if err := starlark.UnpackArgs(fn.Name(), args, kwargs,
+		"filepath", &argfilepath,
+		"content?", &argcontent,
+	); err != nil {
+		return nil, err
+	}
+	f := string(argfilepath)
+	ctx := interpreter.Context(th)
+	s := ctxState(ctx)
+	var content []byte
+	switch v := argcontent.(type) {
+	case starlark.Bytes:
+		// TODO(maruel): Use unsafe conversion to save a memory copy.
+		content = []byte(v)
+	case starlark.String:
+		// TODO(maruel): Use unsafe conversion to save a memory copy.
+		content = []byte(v)
+	case starlark.NoneType:
+		dst, err := absPath(f, s.inputs.root)
+		if err != nil {
+			return nil, fmt.Errorf("%s: %w", fn.Name(), err)
+		}
+		if content, err = readFile(dst, -1); err != nil {
+			return nil, fmt.Errorf("%s: %w", fn.Name(), err)
+		}
+	default:
+		return nil, fmt.Errorf("%s: for parameter \"content\": got %s, want str or bytes", fn.Name(), argcontent.Type())
+	}
+	c := ctxCheck(ctx)
+	if err := s.r.EmitArtifact(ctx, c.name, f, content); err != nil {
 		return nil, fmt.Errorf("%s: failed to emit: %w", fn.Name(), err)
 	}
 	return starlark.None, nil

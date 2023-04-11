@@ -3,11 +3,8 @@
 # license that can be found in the LICENSE file.
 
 def cb(ctx):
-  ctx.emit.annotation(
-      level="error",
-      message="bad code",
-      filepath="file.txt",
-      span=((1,1), (10,1)),
-      replacements=("nothing", "broken code"))
+  ctx.emit.artifact(filepath="file.txt", content="content as str")
+  ctx.emit.artifact(filepath="file.txt", content=bytes("content as bytes"))
+  ctx.emit.artifact(filepath="file.txt")
 
 shac.register_check(cb)

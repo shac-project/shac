@@ -31,7 +31,7 @@ features](https://pkg.go.dev/go.starlark.net/resolve#pkg-variables) are enabled:
 ## Methods inside ctx object.
 
 
-def _ctx_emit_annotation(level, message, file = None, span = None, replacements = None):
+def _ctx_emit_annotation(level, message, filepath = None, span = None, replacements = None):
   """Emits an annotation from the current check.
 
   Example:
@@ -41,7 +41,7 @@ def _ctx_emit_annotation(level, message, file = None, span = None, replacements 
         ctx.emit.annotation(
             level="notice",
             message="great code",
-            file=path,
+            filepath=path,
             span=((1, 1),),
         )
 
@@ -51,7 +51,7 @@ def _ctx_emit_annotation(level, message, file = None, span = None, replacements 
   Args:
     level: One of "notice", "warning" or "error".
     message: Message of the annotation.
-    file: (optional) Path to the source file to annotate.
+    filepath: (optional) Path to the source file to annotate.
     span: (optional) One or two pairs of (line,col) tuples that delimits the
       start and the end of the annotation.
     replacements: (optional) List of possible replacements.
@@ -59,7 +59,27 @@ def _ctx_emit_annotation(level, message, file = None, span = None, replacements 
   pass
 
 
-def _ctx_io_read_file(path, size = None):
+def _ctx_emit_artifact(filepath, content = None):
+  """Emits an artifact from the current check.
+
+  Example:
+    ```python
+    def cb(ctx):
+      ctx.emit.artifact("result.txt", "fake data")
+
+    shac.register_check(cb)
+    ```
+
+  Args:
+    filepath: File name of the artifact. The path must be relative and in POSIX
+      format, using / separator.
+    content: (optional) Content. If content is omitted, the content of the file
+      at filepath will be saved as an artifact.
+  """
+  pass
+
+
+def _ctx_io_read_file(filepath, size = None):
   """Returns the content of a file.
 
   Example:
@@ -75,8 +95,8 @@ def _ctx_io_read_file(path, size = None):
     ```
 
   Args:
-    path: Path of the file to read. The file must be within the workspace. The
-      path must be relative and in POSIX format, using / separator.
+    filepath: Path of the file to read. The file must be within the workspace.
+      The path must be relative and in POSIX format, using / separator.
     size: (optional) Limits the maximum number of bytes to return. The whole
       file is buffered in memory. Defaults to 128Mib on 32 bits runtime, 4Gib on
       64 bits runtime.
@@ -230,8 +250,7 @@ ctx = struct(
   # ctx.emit is the object that exposes the API to emit results for checks.
   emit = struct(
     annotation = _ctx_emit_annotation,
-    artifact = _not_implemented,
-    result = _not_implemented,
+    artifact = _ctx_emit_artifact,
   ),
   # ctx.io is the object that exposes the API to interact with the file system.
   io = struct(

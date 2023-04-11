@@ -6,6 +6,7 @@ package reporting
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -51,10 +52,14 @@ type basic struct {
 	out io.Writer
 }
 
-func (b *basic) EmitAnnotation(ctx context.Context, check, level, message, file string, s engine.Span, replacements []string) error {
+func (b *basic) EmitAnnotation(ctx context.Context, check string, level engine.Level, message, file string, s engine.Span, replacements []string) error {
 	// TODO(maruel): Do not drop span and replacements!
 	_, err := fmt.Fprintf(b.out, "[%s/%s] %s(%d): %s\n", check, level, file, s.Start.Line, message)
 	return err
+}
+
+func (b *basic) EmitArtifact(ctx context.Context, check, file string, content []byte) error {
+	return errors.New("not implemented")
 }
 
 func (b *basic) Print(ctx context.Context, file string, line int, message string) {
@@ -69,11 +74,15 @@ type github struct {
 	out io.Writer
 }
 
-func (g *github) EmitAnnotation(ctx context.Context, check, level, message, file string, s engine.Span, replacements []string) error {
+func (g *github) EmitAnnotation(ctx context.Context, check string, level engine.Level, message, file string, s engine.Span, replacements []string) error {
 	// TODO(maruel): Do not drop replacements!
 	_, err := fmt.Fprintf(g.out, "::%s ::file=%s,line=%d,col=%d,endLine=%d,endCol=%d,title=%s::%s\n",
 		level, file, s.Start.Line, s.Start.Col, s.End.Line, s.End.Col, check, message)
 	return err
+}
+
+func (g *github) EmitArtifact(ctx context.Context, check, file string, content []byte) error {
+	return errors.New("not implemented")
 }
 
 func (g *github) Print(ctx context.Context, file string, line int, message string) {
@@ -88,19 +97,23 @@ type interactive struct {
 	out io.Writer
 }
 
-func (i *interactive) EmitAnnotation(ctx context.Context, check, level, message, file string, s engine.Span, replacements []string) error {
+func (i *interactive) EmitAnnotation(ctx context.Context, check string, level engine.Level, message, file string, s engine.Span, replacements []string) error {
 	// TODO(maruel): Do not drop span and replacements!
 	l := ""
 	switch level {
-	case "notice":
+	case engine.Notice:
 		l = fgGreen.String() + "Notice"
-	case "warning":
+	case engine.Warning:
 		l = fgYellow.String() + "Warning"
-	case "error":
+	case engine.Error:
 		l = fgRed.String() + "Error"
 	}
 	_, err := fmt.Fprintf(i.out, "%s[%s%s%s/%s%s] %s(%d): %s\n", reset, fgHiCyan, check, reset, l, reset, file, s.Start.Line, message)
 	return err
+}
+
+func (i *interactive) EmitArtifact(ctx context.Context, check, file string, content []byte) error {
+	return errors.New("not implemented")
 }
 
 func (i *interactive) Print(ctx context.Context, file string, line int, message string) {

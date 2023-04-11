@@ -33,12 +33,12 @@ def new_todos(ctx):
       # inefficient to calculate back.
       span = ((num, line.index(m.groups[0])+1), (num, len(line)))
       if _is_todo_valid(ctx, m.groups[1]):
-        ctx.emit.annotation(level="notice", message=m.groups[0], file=path, span=span)
+        ctx.emit.annotation(level="notice", message=m.groups[0], filepath=path, span=span)
       else:
         ctx.emit.annotation(
             level="error",
             message="Use a valid username in your TODO, %r is not valid" % m.groups[1],
-            file=path,
+            filepath=path,
             span=span,
         )
 

@@ -276,6 +276,12 @@ func TestTestDataFailOrThrow(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// TODO(maruel): This error comes from the OS, thus this is a very brittle
+	// expectation.
+	inexistantErr := "no such file or directory"
+	if runtime.GOOS == "windows" {
+		inexistantErr = "The system cannot find the file specified."
+	}
 	data := []struct {
 		name  string
 		err   string
@@ -324,6 +330,26 @@ func TestTestDataFailOrThrow(t *testing.T) {
 			"  //ctx-emit-annotation-span-str.star:6:22: in cb\n",
 		},
 		{
+			"ctx-emit-artifact-inexistant.star",
+			"ctx.emit.artifact: open " + fail + "/inexistant" + ": " + inexistantErr,
+			"  //ctx-emit-artifact-inexistant.star:6:20: in cb\n",
+		},
+		{
+			"ctx-emit-artifact-kwarg.star",
+			"ctx.emit.artifact: unexpected keyword argument \"foo\"",
+			"  //ctx-emit-artifact-kwarg.star:6:20: in cb\n",
+		},
+		{
+			"ctx-emit-artifact-type.star",
+			"ctx.emit.artifact: for parameter \"content\": got int, want str or bytes",
+			"  //ctx-emit-artifact-type.star:6:20: in cb\n",
+		},
+		{
+			"ctx-emit-artifact-windows.star",
+			"ctx.emit.artifact: use POSIX style path",
+			"  //ctx-emit-artifact-windows.star:6:20: in cb\n",
+		},
+		{
 			"ctx-immutable.star",
 			"can't assign to .key field of struct",
 			"  //ctx-immutable.star:7:6: in cb\n",
@@ -352,22 +378,12 @@ func TestTestDataFailOrThrow(t *testing.T) {
 		},
 		{
 			"ctx-io-read_file-inexistant.star",
-			func() string {
-				// Work around the fact that path are not yet correctly handled on
-				// Windows.
-				inexistant := fail + "/inexistant"
-				// TODO(maruel): This error comes from the OS, thus this is a very
-				// brittle test case.
-				if runtime.GOOS == "windows" {
-					return "ctx.io.read_file: open " + inexistant + ": The system cannot find the file specified."
-				}
-				return "ctx.io.read_file: open " + inexistant + ": no such file or directory"
-			}(),
+			"ctx.io.read_file: open " + fail + "/inexistant" + ": " + inexistantErr,
 			"  //ctx-io-read_file-inexistant.star:6:19: in cb\n",
 		},
 		{
 			"ctx-io-read_file-missing_arg.star",
-			"ctx.io.read_file: missing argument for path",
+			"ctx.io.read_file: missing argument for filepath",
 			"  //ctx-io-read_file-missing_arg.star:6:19: in cb\n",
 		},
 		{
@@ -559,6 +575,7 @@ func TestTestDataEmit(t *testing.T) {
 	data := []struct {
 		name        string
 		annotations []annotation
+		artifacts   []artifact
 		err         string
 	}{
 		{
@@ -566,13 +583,14 @@ func TestTestDataEmit(t *testing.T) {
 			[]annotation{
 				{
 					Check:        "cb",
-					Level:        "error",
+					Level:        Error,
 					Message:      "bad code",
 					File:         "file.txt",
 					Span:         Span{Start: Cursor{Line: 1, Col: 1}, End: Cursor{Line: 10, Col: 1}},
 					Replacements: []string{"nothing", "broken code"},
 				},
 			},
+			nil,
 			"a check failed",
 		},
 		{
@@ -580,7 +598,7 @@ func TestTestDataEmit(t *testing.T) {
 			[]annotation{
 				{
 					Check:        "cb",
-					Level:        "warning",
+					Level:        Warning,
 					Message:      "please fix",
 					File:         "file.txt",
 					Span:         Span{Start: Cursor{Line: 1, Col: 1}, End: Cursor{Line: 10, Col: 1}},
@@ -588,10 +606,33 @@ func TestTestDataEmit(t *testing.T) {
 				},
 				{
 					Check:        "cb",
-					Level:        "notice",
+					Level:        Notice,
 					Message:      "great code",
 					Span:         Span{Start: Cursor{Line: 100, Col: 2}, End: Cursor{Line: 100, Col: 2}},
 					Replacements: []string{},
+				},
+			},
+			nil,
+			"",
+		},
+		{
+			"ctx-emit-artifact.star",
+			nil,
+			[]artifact{
+				{
+					Check:   "cb",
+					File:    "file.txt",
+					Content: []byte("content as str"),
+				},
+				{
+					Check:   "cb",
+					File:    "file.txt",
+					Content: []byte("content as bytes"),
+				},
+				{
+					Check:   "cb",
+					File:    "file.txt",
+					Content: []byte("content as a file\n"),
 				},
 			},
 			"",
@@ -621,6 +662,9 @@ func TestTestDataEmit(t *testing.T) {
 				t.Fatal(err)
 			}
 			if diff := cmp.Diff(data[i].annotations, r.annotations); diff != "" {
+				t.Fatalf("mismatch (-want +got):\n%s", diff)
+			}
+			if diff := cmp.Diff(data[i].artifacts, r.artifacts); diff != "" {
 				t.Fatalf("mismatch (-want +got):\n%s", diff)
 			}
 		})
@@ -802,8 +846,13 @@ type reportNoPrint struct {
 	t *testing.T
 }
 
-func (r *reportNoPrint) EmitAnnotation(ctx context.Context, check, level, message, file string, s Span, replacements []string) error {
+func (r *reportNoPrint) EmitAnnotation(ctx context.Context, check string, level Level, message, file string, s Span, replacements []string) error {
 	r.t.Errorf("unexpected annotation: %s: %s, %q, %s, %# v, %v", check, level, message, file, s, replacements)
+	return errors.New("not implemented")
+}
+
+func (r *reportNoPrint) EmitArtifact(ctx context.Context, check, file string, content []byte) error {
+	r.t.Errorf("unexpected artifact: %s: %s", check, file)
 	return errors.New("not implemented")
 }
 
@@ -827,18 +876,25 @@ type reportEmit struct {
 	reportNoPrint
 	mu          sync.Mutex
 	annotations []annotation
+	artifacts   []artifact
 }
 
 type annotation struct {
 	Check        string
-	Level        string
+	Level        Level
 	Message      string
 	File         string
 	Span         Span
 	Replacements []string
 }
 
-func (r *reportEmit) EmitAnnotation(ctx context.Context, check, level, message, file string, s Span, replacements []string) error {
+type artifact struct {
+	Check   string
+	File    string
+	Content []byte
+}
+
+func (r *reportEmit) EmitAnnotation(ctx context.Context, check string, level Level, message, file string, s Span, replacements []string) error {
 	r.mu.Lock()
 	r.annotations = append(r.annotations, annotation{
 		Check:        check,
@@ -848,6 +904,13 @@ func (r *reportEmit) EmitAnnotation(ctx context.Context, check, level, message, 
 		Span:         s,
 		Replacements: replacements,
 	})
+	r.mu.Unlock()
+	return nil
+}
+
+func (r *reportEmit) EmitArtifact(ctx context.Context, check, file string, content []byte) error {
+	r.mu.Lock()
+	r.artifacts = append(r.artifacts, artifact{Check: check, File: file, Content: content})
 	r.mu.Unlock()
 	return nil
 }

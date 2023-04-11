@@ -48,7 +48,6 @@ Fields:
 
 - annotation
 - artifact
-- result
 
 ## ctx.emit.annotation
 
@@ -62,7 +61,7 @@ def cb(ctx):
     ctx.emit.annotation(
         level="notice",
         message="great code",
-        file=path,
+        filepath=path,
         span=((1, 1),),
     )
 
@@ -73,19 +72,27 @@ shac.register_check(cb)
 
 * **level**: One of "notice", "warning" or "error".
 * **message**: Message of the annotation.
-* **file**: (optional) Path to the source file to annotate.
+* **filepath**: (optional) Path to the source file to annotate.
 * **span**: (optional) One or two pairs of (line,col) tuples that delimits the start and the end of the annotation.
 * **replacements**: (optional) List of possible replacements.
 
 ## ctx.emit.artifact
 
-Not implemented.
+Emits an artifact from the current check.
 
+### Example
 
-## ctx.emit.result
+```python
+def cb(ctx):
+  ctx.emit.artifact("result.txt", "fake data")
 
-Not implemented.
+shac.register_check(cb)
+```
 
+### Arguments
+
+* **filepath**: File name of the artifact. The path must be relative and in POSIX format, using / separator.
+* **content**: (optional) Content. If content is omitted, the content of the file at filepath will be saved as an artifact.
 
 ## ctx.io
 
@@ -114,7 +121,7 @@ shac.register_check(cb)
 
 ### Arguments
 
-* **path**: Path of the file to read. The file must be within the workspace. The path must be relative and in POSIX format, using / separator.
+* **filepath**: Path of the file to read. The file must be within the workspace. The path must be relative and in POSIX format, using / separator.
 * **size**: (optional) Limits the maximum number of bytes to return. The whole file is buffered in memory. Defaults to 128Mib on 32 bits runtime, 4Gib on 64 bits runtime.
 
 ### Returns
