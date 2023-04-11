@@ -33,6 +33,7 @@ type Cursor struct {
 	Line int
 	Col  int
 
+	// Require keyed arguments.
 	_ struct{}
 }
 
@@ -41,6 +42,7 @@ type Span struct {
 	Start Cursor
 	End   Cursor
 
+	// Require keyed arguments.
 	_ struct{}
 }
 

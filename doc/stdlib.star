@@ -31,7 +31,7 @@ features](https://pkg.go.dev/go.starlark.net/resolve#pkg-variables) are enabled:
 ## Methods inside ctx object.
 
 
-def _ctx_emit_annotation(level, message, file, span, replacements):
+def _ctx_emit_annotation(level, message, file = None, span = None, replacements = None):
   """Emits an annotation from the current check.
 
   Example:
@@ -49,17 +49,17 @@ def _ctx_emit_annotation(level, message, file, span, replacements):
     ```
 
   Args:
-    level: one of "notice", "warning" or "error".
-    message: message of the annotation.
-    file?: path to the source file to annotate.
-    span?: one or two pairs of (line,col) tuples that delimits the start and the end
-      of the annotation.
-    replacements?: list of possible replacements.
+    level: One of "notice", "warning" or "error".
+    message: Message of the annotation.
+    file: (optional) Path to the source file to annotate.
+    span: (optional) One or two pairs of (line,col) tuples that delimits the
+      start and the end of the annotation.
+    replacements: (optional) List of possible replacements.
   """
   pass
 
 
-def _ctx_io_read_file(path, size):
+def _ctx_io_read_file(path, size = None):
   """Returns the content of a file.
 
   Example:
@@ -75,10 +75,11 @@ def _ctx_io_read_file(path, size):
     ```
 
   Args:
-    path: path of the file to read. The file must be within the workspace. The
+    path: Path of the file to read. The file must be within the workspace. The
       path must be relative and in POSIX format, using / separator.
-    size?: optional value to limit the maximum number of bytes to return. On 32
-      bits, size defaults to 128Mib. On 64 bits, size defaults to 4Gib.
+    size: (optional) Limits the maximum number of bytes to return. The whole
+      file is buffered in memory. Defaults to 128Mib on 32 bits runtime, 4Gib on
+      64 bits runtime.
 
   Returns:
     Content of the file as bytes.
@@ -100,7 +101,8 @@ def _ctx_os_exec(cmd, cwd = None):
 
   Args:
     cmd: Subprocess command line.
-    cwd: Relative path to cwd for the subprocess.
+    cwd: (optional) Relative path to cwd for the subprocess. Defaults to the
+      directory containing shac.star.
 
   Returns:
     An integer corresponding to the subprocess exit code.
@@ -108,7 +110,7 @@ def _ctx_os_exec(cmd, cwd = None):
   pass
 
 
-def _ctx_re_allmatches(pattern, str):
+def _ctx_re_allmatches(pattern, string):
   """Returns all the matches of the regexp pattern onto content.
 
   Example:
@@ -122,9 +124,9 @@ def _ctx_re_allmatches(pattern, str):
     ```
 
   Args:
-    pattern: regexp to run. It must use the syntax as described at
+    pattern: Regexp to run. The syntax as described at
       https://golang.org/s/re2syntax.
-    str: string to run the regexp on.
+    string: String to run the regexp on.
 
   Returns:
     list(struct(offset=bytes_offset, groups=list(matches)))
@@ -132,7 +134,7 @@ def _ctx_re_allmatches(pattern, str):
   pass
 
 
-def _ctx_re_match(pattern, str):
+def _ctx_re_match(pattern, string):
   """Returns the first match of the regexp pattern onto content.
 
   Example:
@@ -147,9 +149,9 @@ def _ctx_re_match(pattern, str):
     ```
 
   Args:
-    pattern: regexp to run. It must use the syntax as described at
+    pattern: Pegexp to run. The syntax as described at
       https://golang.org/s/re2syntax.
-    str: string to run the regexp on.
+    string: String to run the regexp on.
 
   Returns:
     struct(offset=bytes_offset, groups=list(matches))
@@ -183,7 +185,7 @@ def _ctx_scm_affected_files(glob = None):
     ```
 
   Args:
-    glob: TODO: Will later accept a glob.
+    glob: (optional) TODO: Will later accept a glob.
 
   Returns:
     A map of {path: struct()} where the struct has a string field action and a
@@ -209,7 +211,7 @@ def _ctx_scm_all_files(glob = None):
     ```
 
   Args:
-    glob: TODO: Will later accept a glob.
+    glob: (optional) TODO: Will later accept a glob.
 
   Returns:
     A map of {path: struct()} where the struct has a string field action and a
@@ -264,7 +266,7 @@ def dir(x):
   https://github.com/google/starlark-go/blob/HEAD/doc/spec.md#dir.
 
   Args:
-    x: object that will have its properties enumerated.
+    x: Object that has its properties enumerated.
 
   Example:
     ```python
@@ -291,13 +293,13 @@ def dir(x):
     ```
 
   Returns:
-    list of x object properties as strings. You can use getattr() to retrieve
+    List of x object properties as strings. You can use getattr() to retrieve
     each attributes in a loop.
   """
   pass
 
 
-def fail(*args, sep=" "):
+def fail(*args, sep = " "):
   """Starlark builtin that fails immediately the execution.
 
   This function will abort execution. When called in the first phase, outside a
@@ -332,8 +334,8 @@ def fail(*args, sep=" "):
     ```
 
   Args:
-    *args: arguments to print out.
-    sep?: separator between the items in args, defaults to " ".
+    *args: Arguments to print out.
+    sep: (optional) Separator between the items in args. Defaults to " ".
   """
   pass
 
@@ -364,7 +366,7 @@ def _json_decode(x):
     ```
 
   Args:
-    x: string or bytes of JSON encoded data to convert back to starlark.
+    x: String or bytes of JSON encoded data to convert back to starlark.
   """
   pass
 
@@ -385,12 +387,12 @@ def _json_encode(x):
     ```
 
   Args:
-    x: starlark value to encode to a JSON encoded string.
+    x: Starlark value to encode to a JSON encoded string.
   """
   pass
 
 
-def _json_indent(s, *, prefix="", indent="\t"):
+def _json_indent(s, *, prefix = "", indent = "\t"):
   """Returns the indented form of a valid JSON-encoded string.
 
   See the full documentation at https://bazel.build/rules/lib/json#indent.
@@ -405,9 +407,9 @@ def _json_indent(s, *, prefix="", indent="\t"):
     ```
 
   Args:
-    x: string or bytes of JSON encoded data to reformat.
-    prefix: prefix for each new line.
-    indent: indent for nested fields.
+    s: String or bytes of JSON encoded data to reformat.
+    prefix: (optional) Prefix for each new line. Defaults to "".
+    indent: (optional) Indent for nested fields. Defaults to "\t".
   """
   pass
 
@@ -453,16 +455,16 @@ def load_(module, *symbols, **kwsymbols):
     ```
 
   Args:
-    module: path to a local module to load. In the future, a remote path will be
+    module: Path to a local module to load. In the future, a remote path will be
       allowed.
-    *symbols: symbols to load from the module.
-    **kwsymbols: symbols to load from the module that will be accessible under a
+    *symbols: Symbols to load from the module.
+    **kwsymbols: Symbols to load from the module that will be accessible under a
       new name.
   """
   pass
 
 
-def print(*args, sep=" "):
+def print(*args, sep = " "):
   """Starlark builtin that prints a debug log.
 
   This function should only be used while debugging the starlark code.
@@ -476,8 +478,8 @@ def print(*args, sep=" "):
   https://github.com/google/starlark-go/blob/HEAD/doc/spec.md#print.
 
   Args:
-    args: arguments to print out.
-    sep: separator between the items in args, defaults to " ".
+    args: Arguments to print out.
+    sep: (optional) Separator between the items in args. Defaults to " ".
   """
   pass
 
@@ -500,8 +502,8 @@ def _shac_register_check(callback):
     ```
 
   Args:
-    callback: Starlark function that is called back to implement the check.
-      Passed a single argument ctx(...).
+    callback: Starlark function that is called back to implement the check. The
+      callback must accept one ctx(...) argument and return None.
   """
   pass
 

@@ -71,11 +71,11 @@ shac.register_check(cb)
 
 ### Arguments
 
-* **level**: one of "notice", "warning" or "error".
-* **message**: message of the annotation.
-* **file?**: path to the source file to annotate.
-* **span?**: one or two pairs of (line,col) tuples that delimits the start and the end of the annotation.
-* **replacements?**: list of possible replacements.
+* **level**: One of "notice", "warning" or "error".
+* **message**: Message of the annotation.
+* **file**: (optional) Path to the source file to annotate.
+* **span**: (optional) One or two pairs of (line,col) tuples that delimits the start and the end of the annotation.
+* **replacements**: (optional) List of possible replacements.
 
 ## ctx.emit.artifact
 
@@ -114,8 +114,8 @@ shac.register_check(cb)
 
 ### Arguments
 
-* **path**: path of the file to read. The file must be within the workspace. The path must be relative and in POSIX format, using / separator.
-* **size?**: optional value to limit the maximum number of bytes to return. On 32 bits, size defaults to 128Mib. On 64 bits, size defaults to 4Gib.
+* **path**: Path of the file to read. The file must be within the workspace. The path must be relative and in POSIX format, using / separator.
+* **size**: (optional) Limits the maximum number of bytes to return. The whole file is buffered in memory. Defaults to 128Mib on 32 bits runtime, 4Gib on 64 bits runtime.
 
 ### Returns
 
@@ -147,7 +147,7 @@ shac.register_check(cb)
 ### Arguments
 
 * **cmd**: Subprocess command line.
-* **cwd**: Relative path to cwd for the subprocess.
+* **cwd**: (optional) Relative path to cwd for the subprocess. Defaults to the directory containing shac.star.
 
 ### Returns
 
@@ -180,8 +180,8 @@ shac.register_check(cb)
 
 ### Arguments
 
-* **pattern**: regexp to run. It must use the syntax as described at https://golang.org/s/re2syntax.
-* **str**: string to run the regexp on.
+* **pattern**: Regexp to run. The syntax as described at https://golang.org/s/re2syntax.
+* **string**: String to run the regexp on.
 
 ### Returns
 
@@ -205,8 +205,8 @@ shac.register_check(cb)
 
 ### Arguments
 
-* **pattern**: regexp to run. It must use the syntax as described at https://golang.org/s/re2syntax.
-* **str**: string to run the regexp on.
+* **pattern**: Pegexp to run. The syntax as described at https://golang.org/s/re2syntax.
+* **string**: String to run the regexp on.
 
 ### Returns
 
@@ -251,7 +251,7 @@ shac.register_check(new_todos)
 
 ### Arguments
 
-* **glob**: TODO: Will later accept a glob.
+* **glob**: (optional) TODO: Will later accept a glob.
 
 ### Returns
 
@@ -278,7 +278,7 @@ shac.register_check(all_todos)
 
 ### Arguments
 
-* **glob**: TODO: Will later accept a glob.
+* **glob**: (optional) TODO: Will later accept a glob.
 
 ### Returns
 
@@ -321,11 +321,11 @@ shac.register_check(cb)
 
 ### Arguments
 
-* **x**: object that will have its properties enumerated.
+* **x**: Object that has its properties enumerated.
 
 ### Returns
 
-list of x object properties as strings. You can use getattr() to retrieve
+List of x object properties as strings. You can use getattr() to retrieve
 each attributes in a loop.
 
 ## fail
@@ -366,8 +366,8 @@ shac.register_check(cb2)
 
 ### Arguments
 
-* **\*args**: arguments to print out.
-* **sep?**: separator between the items in args, defaults to " ".
+* **\*args**: Arguments to print out.
+* **sep**: (optional) Separator between the items in args. Defaults to " ".
 
 ## json
 
@@ -412,7 +412,7 @@ shac.register_check(cb)
 
 ### Arguments
 
-* **x**: string or bytes of JSON encoded data to convert back to starlark.
+* **x**: String or bytes of JSON encoded data to convert back to starlark.
 
 ## json.encode
 
@@ -433,7 +433,7 @@ print(json.encode(config))
 
 ### Arguments
 
-* **x**: starlark value to encode to a JSON encoded string.
+* **x**: Starlark value to encode to a JSON encoded string.
 
 ## json.indent
 
@@ -453,9 +453,9 @@ print(json.indent(d))
 
 ### Arguments
 
-* **x**: string or bytes of JSON encoded data to reformat.
-* **prefix**: prefix for each new line.
-* **indent**: indent for nested fields.
+* **s**: String or bytes of JSON encoded data to reformat.
+* **prefix**: (optional) Prefix for each new line. Defaults to "".
+* **indent**: (optional) Indent for nested fields. Defaults to "	".
 
 ## load
 
@@ -484,9 +484,9 @@ register_checks(_gosec)
 
 ### Arguments
 
-* **module**: path to a local module to load. In the future, a remote path will be allowed.
-* **\*symbols**: symbols to load from the module.
-* **\*\*kwsymbols**: symbols to load from the module that will be accessible under a new name.
+* **module**: Path to a local module to load. In the future, a remote path will be allowed.
+* **\*symbols**: Symbols to load from the module.
+* **\*\*kwsymbols**: Symbols to load from the module that will be accessible under a new name.
 
 ## print
 
@@ -504,8 +504,8 @@ print("shac", "is", "great")
 
 ### Arguments
 
-* **args**: arguments to print out.
-* **sep**: separator between the items in args, defaults to " ".
+* **args**: Arguments to print out.
+* **sep**: (optional) Separator between the items in args. Defaults to " ".
 
 ## shac
 
@@ -543,7 +543,7 @@ shac.register_check(cb)
 
 ### Arguments
 
-* **callback**: Starlark function that is called back to implement the check. Passed a single argument ctx(...).
+* **callback**: Starlark function that is called back to implement the check. The callback must accept one ctx(...) argument and return None.
 
 ## struct
 
