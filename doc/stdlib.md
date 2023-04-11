@@ -55,6 +55,17 @@ Emits an annotation from the current check.
 
 ### Example
 
+A check level annotation:
+
+```python
+def cb(ctx):
+  ctx.emit.annotation(level="warning", message="Do not change anything")
+
+shac.register_check(cb)
+```
+
+An annotation associated with a specific file:
+
 ```python
 def cb(ctx):
   for path, _ in ctx.scm.affected_files().items():
@@ -62,8 +73,28 @@ def cb(ctx):
         level="notice",
         message="great code",
         filepath=path,
-        span=((1, 1),),
+        line=1,
+        col=1,
     )
+
+shac.register_check(cb)
+```
+
+An annotation associated with a specific span within a file:
+
+```python
+def cb(ctx):
+  for path, meta in ctx.scm.affected_files().items():
+    for num, line in meta.new_lines():
+      ctx.emit.annotation(
+          level="error",
+          message="This line is superfluous",
+          filepath=path,
+          line=num,
+          col=1,
+          end_line=num,
+          end_col=len(line))
+      )
 
 shac.register_check(cb)
 ```
@@ -73,7 +104,10 @@ shac.register_check(cb)
 * **level**: One of "notice", "warning" or "error".
 * **message**: Message of the annotation.
 * **filepath**: (optional) Path to the source file to annotate.
-* **span**: (optional) One or two pairs of (line,col) tuples that delimits the start and the end of the annotation.
+* **line**: (optional) Line where the annotation should start. 1 based.
+* **col**: (optional) Column where the annotation should start. 1 based.
+* **end_line**: (optional) Line where the annotation should end if it represents a span. 1 based.
+* **end_col**: (optional) Column where the annotation should end if it represents a span. 1 based.
 * **replacements**: (optional) List of possible replacements.
 
 ## ctx.emit.artifact

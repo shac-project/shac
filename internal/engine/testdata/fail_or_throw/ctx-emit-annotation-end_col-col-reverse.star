@@ -16,7 +16,9 @@ def cb(ctx):
   ctx.emit.annotation(
       level="notice",
       message="fix it",
-      span=((1,1), (1,-10)),
-      replacements=("nothing", "broken code"))
+      line=1,
+      col=2,
+      end_line=1,
+      end_col=1)
 
 shac.register_check(cb)

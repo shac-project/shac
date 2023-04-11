@@ -28,7 +28,7 @@ def gosec(ctx, version = "v2.15.0"):
     fail("failed to install")
   if ctx.os.exec(["gosec", "-fmt=golint", "-quiet", "-exclude=G304", "-exclude-dir=.tools", "./..."]):
     # TODO(maruel): Emits lines.
-    fail("failed gosec")
+    ctx.emit.annotation(level="error", message="failed gosec")
 
 
 def staticcheck(ctx, version = "v0.4.3"):
@@ -46,4 +46,4 @@ def staticcheck(ctx, version = "v0.4.3"):
     fail("failed to install")
   if ctx.os.exec(["staticcheck", "./..."]):
     # TODO(maruel): Emits lines.
-    fail("failed staticcheck")
+    ctx.emit.annotation(level="error", message="failed staticcheck")

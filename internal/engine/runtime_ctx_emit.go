@@ -26,33 +26,73 @@ func ctxEmitAnnotation(ctx context.Context, s *state, name string, args starlark
 	var arglevel starlark.String
 	var argmessage starlark.String
 	var argfilepath starlark.String
-	var argspan starlark.Tuple
+	var argline starlark.Int
+	var argcol starlark.Int
+	var argendCol starlark.Int
+	var argendLine starlark.Int
 	var argreplacements starlark.Tuple
 	if err := starlark.UnpackArgs(name, args, kwargs,
 		"level", &arglevel,
 		"message", &argmessage,
 		"filepath?", &argfilepath,
-		"span?", &argspan,
+		"line?", &argline,
+		"col?", &argcol,
+		"end_line?", &argendLine,
+		"end_col?", &argendCol,
 		"replacements?", &argreplacements,
 	); err != nil {
 		return err
 	}
 	level := Level(string(arglevel))
 	if !level.isValid() {
-		return fmt.Errorf("a valid level is required, use one of %q, %q or %q", Notice, Warning, Error)
+		return fmt.Errorf("for parameter \"level\": got %s, want one of %q, %q or %q", arglevel, Notice, Warning, Error)
 	}
 	message := string(argmessage)
 	if len(message) == 0 {
-		return errors.New("a message is required")
+		return fmt.Errorf("for parameter \"message\": got %s, want string", argmessage)
 	}
 	file := string(argfilepath)
-	span := starlarkToSpan(argspan)
-	if span.Start.Line == -1 || span.End.Line == -1 {
-		return errors.New("invalid span, expect ((line, col), (line, col))")
+	span := Span{
+		Start: Cursor{
+			Line: intToInt(argline),
+			Col:  intToInt(argcol),
+		},
+		End: Cursor{
+			Line: intToInt(argendLine),
+			Col:  intToInt(argendCol),
+		},
+	}
+	if span.Start.Line <= -1 {
+		return fmt.Errorf("for parameter \"line\": got %s, line are 1 based", argline)
+	} else if span.Start.Col <= -1 {
+		return fmt.Errorf("for parameter \"col\": got %s, line are 1 based", argcol)
+	} else if span.End.Line <= -1 {
+		return fmt.Errorf("for parameter \"end_line\": got %s, line are 1 based", argendLine)
+	} else if span.End.Col <= -1 {
+		return fmt.Errorf("for parameter \"end_col\": got %s, line are 1 based", argendCol)
+	}
+	if span.Start.Col == 0 && span.End.Col > 0 {
+		return errors.New("for parameter \"end_col\": \"col\" must be specified")
+	}
+	if span.Start.Line > 0 {
+		if span.End.Line > 0 {
+			if span.End.Line < span.Start.Line {
+				return errors.New("for parameter \"end_line\": must be greater than \"line\"")
+			} else if span.End.Line == span.Start.Line && span.End.Col > 0 && span.End.Col < span.Start.Col {
+				return errors.New("for parameter \"end_col\": must be greater than \"col\"")
+			}
+		}
+	} else {
+		if span.End.Line > 0 {
+			return errors.New("for parameter \"end_line\": \"line\" must be specified")
+		}
+		if span.Start.Col > 0 {
+			return errors.New("for parameter \"col\": \"line\" must be specified")
+		}
 	}
 	replacements := tupleToString(argreplacements)
 	if replacements == nil {
-		return errors.New("invalid replacements, expect tuple of str")
+		return fmt.Errorf("for parameter \"replacements\": got %s, want tuple of str", argreplacements.Type())
 	}
 	c := ctxCheck(ctx)
 	if level == "error" {
@@ -100,19 +140,6 @@ func ctxEmitArtifact(ctx context.Context, s *state, name string, args starlark.T
 	return nil
 }
 
-func starlarkToSpan(t starlark.Tuple) Span {
-	s := Span{Start: Cursor{Line: -1}, End: Cursor{Line: -1}}
-	if l := len(t); l >= 1 && l <= 2 {
-		s.Start.Line, s.Start.Col = tupleTo2Int(t[0])
-		if l == 2 {
-			s.End.Line, s.End.Col = tupleTo2Int(t[1])
-		} else {
-			s.End = s.Start
-		}
-	}
-	return s
-}
-
 // tupleToString returns nil on failure.
 func tupleToString(t starlark.Tuple) []string {
 	out := make([]string, len(t))
@@ -126,30 +153,12 @@ func tupleToString(t starlark.Tuple) []string {
 	return out
 }
 
-// tupleTo2Int returns -1 on failure.
-func tupleTo2Int(v starlark.Value) (int, int) {
-	t, ok := v.(starlark.Tuple)
-	if !ok || len(t) != 2 {
-		return -1, -1
-	}
-	i := valueToInt(t[0])
-	j := valueToInt(t[1])
-	if j == -1 {
-		i = -1
-	}
-	return i, j
-}
-
-// valueToInt returns -1 on failure.
-func valueToInt(v starlark.Value) int {
-	k, ok := v.(starlark.Int)
-	if !ok {
-		return -1
-	}
-	j, ok := k.Int64()
+// intToInt returns -1 on failure.
+func intToInt(i starlark.Int) int {
+	i64, ok := i.Int64()
 	const maxInt = int64(int(^uint(0) >> 1))
-	if !ok || j < 0 || j > maxInt {
+	if !ok || i64 < 0 || i64 > maxInt {
 		return -1
 	}
-	return int(j)
+	return int(i64)
 }

@@ -305,39 +305,69 @@ func TestTestDataFailOrThrow(t *testing.T) {
 				"  //backtrace.star:16:7: in fn2\n",
 		},
 		{
+			"ctx-emit-annotation-col-line.star",
+			"ctx.emit.annotation: for parameter \"col\": \"line\" must be specified",
+			"  //ctx-emit-annotation-col-line.star:16:22: in cb\n",
+		},
+		{
+			"ctx-emit-annotation-col.star",
+			"ctx.emit.annotation: for parameter \"col\": got -10, line are 1 based",
+			"  //ctx-emit-annotation-col.star:16:22: in cb\n",
+		},
+		{
+			"ctx-emit-annotation-end_col-col-reverse.star",
+			"ctx.emit.annotation: for parameter \"end_col\": must be greater than \"col\"",
+			"  //ctx-emit-annotation-end_col-col-reverse.star:16:22: in cb\n",
+		},
+		{
+			"ctx-emit-annotation-end_col-col.star",
+			"ctx.emit.annotation: for parameter \"end_col\": \"col\" must be specified",
+			"  //ctx-emit-annotation-end_col-col.star:16:22: in cb\n",
+		},
+		{
+			"ctx-emit-annotation-end_col.star",
+			"ctx.emit.annotation: for parameter \"end_col\": got -10, line are 1 based",
+			"  //ctx-emit-annotation-end_col.star:16:22: in cb\n",
+		},
+		{
+			"ctx-emit-annotation-end_line-line-reverse.star",
+			"ctx.emit.annotation: for parameter \"end_line\": must be greater than \"line\"",
+			"  //ctx-emit-annotation-end_line-line-reverse.star:16:22: in cb\n",
+		},
+		{
+			"ctx-emit-annotation-end_line-line.star",
+			"ctx.emit.annotation: for parameter \"end_line\": \"line\" must be specified",
+			"  //ctx-emit-annotation-end_line-line.star:16:22: in cb\n",
+		},
+		{
+			"ctx-emit-annotation-end_line.star",
+			"ctx.emit.annotation: for parameter \"end_line\": got -10, line are 1 based",
+			"  //ctx-emit-annotation-end_line.star:16:22: in cb\n",
+		},
+		{
 			"ctx-emit-annotation-kwarg.star",
 			"ctx.emit.annotation: unexpected keyword argument \"foo\"",
 			"  //ctx-emit-annotation-kwarg.star:16:22: in cb\n",
 		},
 		{
 			"ctx-emit-annotation-level.star",
-			"ctx.emit.annotation: a valid level is required, use one of \"notice\", \"warning\" or \"error\"",
+			"ctx.emit.annotation: for parameter \"level\": got \"invalid\", want one of \"notice\", \"warning\" or \"error\"",
 			"  //ctx-emit-annotation-level.star:16:22: in cb\n",
 		},
 		{
+			"ctx-emit-annotation-line.star",
+			"ctx.emit.annotation: for parameter \"line\": got -1, line are 1 based",
+			"  //ctx-emit-annotation-line.star:16:22: in cb\n",
+		},
+		{
 			"ctx-emit-annotation-message.star",
-			"ctx.emit.annotation: a message is required",
+			"ctx.emit.annotation: for parameter \"message\": got \"\", want string",
 			"  //ctx-emit-annotation-message.star:16:22: in cb\n",
 		},
 		{
 			"ctx-emit-annotation-replacements.star",
-			"ctx.emit.annotation: invalid replacements, expect tuple of str",
+			"ctx.emit.annotation: for parameter \"replacements\": got tuple, want tuple of str",
 			"  //ctx-emit-annotation-replacements.star:16:22: in cb\n",
-		},
-		{
-			"ctx-emit-annotation-span-len.star",
-			"ctx.emit.annotation: invalid span, expect ((line, col), (line, col))",
-			"  //ctx-emit-annotation-span-len.star:16:22: in cb\n",
-		},
-		{
-			"ctx-emit-annotation-span-negative.star",
-			"ctx.emit.annotation: invalid span, expect ((line, col), (line, col))",
-			"  //ctx-emit-annotation-span-negative.star:16:22: in cb\n",
-		},
-		{
-			"ctx-emit-annotation-span-str.star",
-			"ctx.emit.annotation: invalid span, expect ((line, col), (line, col))",
-			"  //ctx-emit-annotation-span-str.star:16:22: in cb\n",
 		},
 		{
 			"ctx-emit-artifact-inexistant.star",
@@ -618,7 +648,7 @@ func TestTestDataEmit(t *testing.T) {
 					Check:        "cb",
 					Level:        Notice,
 					Message:      "great code",
-					Span:         Span{Start: Cursor{Line: 100, Col: 2}, End: Cursor{Line: 100, Col: 2}},
+					Span:         Span{Start: Cursor{Line: 100, Col: 2}},
 					Replacements: []string{},
 				},
 			},

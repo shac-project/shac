@@ -17,8 +17,11 @@ def cb(ctx):
       level="warning",
       message="please fix",
       filepath="file.txt",
-      span=((1,1), (10,1)),
+      line=1,
+      col=1,
+      end_line=10,
+      end_col=1,
       replacements=("nothing", "broken code"))
-  ctx.emit.annotation(level="notice", span=((100,2),), message="great code")
+  ctx.emit.annotation(level="notice", line=100, col=2, message="great code")
 
 shac.register_check(cb)

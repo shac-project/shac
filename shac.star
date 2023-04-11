@@ -41,16 +41,21 @@ def new_todos(ctx):
         continue
       # TODO(maruel): Have ctx.re.match() return the offset since it's
       # inefficient to calculate back.
-      span = ((num, line.index(m.groups[0])+1), (num, len(line)))
       if _is_todo_valid(ctx, m.groups[1]):
-        ctx.emit.annotation(level="notice", message=m.groups[0], filepath=path, span=span)
+        level = "notice"
+        message = m.groups[0]
       else:
-        ctx.emit.annotation(
-            level="error",
-            message="Use a valid username in your TODO, %r is not valid" % m.groups[1],
-            filepath=path,
-            span=span,
-        )
+        level = "error"
+        message = "Use a valid username in your TODO, %r is not valid" % m.groups[1]
+      ctx.emit.annotation(
+          level="error",
+          message="Use a valid username in your TODO, %r is not valid" % m.groups[1],
+          filepath=path,
+          line=num,
+          col=line.index(m.groups[0])+1,
+          end_line=num,
+          end_col=len(line),
+      )
 
 
 shac.register_check(check_docs)

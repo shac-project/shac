@@ -17,7 +17,10 @@ def cb(ctx):
       level="error",
       message="bad code",
       filepath="file.txt",
-      span=((1,1), (10,1)),
+      line=1,
+      col=1,
+      end_line=10,
+      end_col=1,
       replacements=("nothing", "broken code"))
 
 shac.register_check(cb)

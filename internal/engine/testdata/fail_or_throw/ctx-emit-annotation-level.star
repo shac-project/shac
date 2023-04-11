@@ -13,10 +13,6 @@
 # limitations under the License.
 
 def cb(ctx):
-  ctx.emit.annotation(
-      level="invalid",
-      message="foo",
-      span=((1,1), (10,1)),
-      replacements=("nothing", "broken code"))
+  ctx.emit.annotation(level="invalid", message="foo")
 
 shac.register_check(cb)
