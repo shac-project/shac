@@ -15,7 +15,6 @@ import (
 	"runtime"
 	"sync"
 
-	"go.chromium.org/luci/starlark/builtins"
 	"go.chromium.org/luci/starlark/interpreter"
 	"go.starlark.net/resolve"
 	"go.starlark.net/starlark"
@@ -121,7 +120,6 @@ var stateCtxKey = "shac.state"
 //
 // TODO(maruel): Returns one new shacState for the input.
 func (s *state) parse(ctx context.Context) error {
-	failures := builtins.FailureCollector{}
 	s.intr = &interpreter.Interpreter{
 		Predeclared: getPredeclared(),
 		Packages: map[string]interpreter.Loader{
@@ -133,9 +131,6 @@ func (s *state) parse(ctx context.Context) error {
 			s.mu.Unlock()
 			s.r.Print(ctx, file, line, message)
 		},
-		ThreadModifier: func(th *starlark.Thread) {
-			failures.Install(th)
-		},
 	}
 
 	var err error
@@ -143,9 +138,9 @@ func (s *state) parse(ctx context.Context) error {
 		_, err = s.intr.ExecModule(ctx, interpreter.MainPkg, s.inputs.main)
 	}
 	if err != nil {
-		if f := failures.LatestFailure(); f != nil {
-			// Prefer the collected error if any, it will have a collected trace.
-			err = f
+		if s.failErr != nil {
+			// We got a fail() call, use this instead.
+			return s.failErr
 		}
 		return err
 	}
@@ -165,6 +160,10 @@ type shacState struct {
 	// Checks are executed sequentially after all Starlark code is loaded and not
 	// mutated. They run checks and emit results (results and comments).
 	checks []check
+
+	// Set when fail() is called. This happens only during the first phase, thus
+	// no mutex is needed.
+	failErr *failure
 
 	// Set when the first phase of starlark interpretation is complete. This
 	// complete the serial part, after which execution becomes concurrent.
@@ -191,33 +190,31 @@ func (s *shacState) callAllChecks(ctx context.Context) error {
 }
 
 type check struct {
-	cb   starlark.Callable
-	name string
+	cb      starlark.Callable
+	name    string
+	failErr *failure
 }
 
 var checkCtxKey = "shac.check"
 
 // ctxCheck pulls out *check from the context.
 //
-// Panics if not there.
+// Returns nil when not run inside a check.
 func ctxCheck(ctx context.Context) *check {
-	return ctx.Value(&checkCtxKey).(*check)
+	c, _ := ctx.Value(&checkCtxKey).(*check)
+	return c
 }
 
 func (c *check) call(ctx context.Context, intr *interpreter.Interpreter) error {
 	ctx = context.WithValue(ctx, &checkCtxKey, c)
 	th := intr.Thread(ctx)
 	th.Name = c.name
-	fc := builtins.GetFailureCollector(th)
-	if fc != nil {
-		fc.Clear()
-	}
 	args := starlark.Tuple{getCtx()}
 	args.Freeze()
 	if r, err := starlark.Call(th, c.cb, args, nil); err != nil {
-		if fc != nil && fc.LatestFailure() != nil {
-			// Prefer this error, it has custom stack trace.
-			return fc.LatestFailure()
+		if c.failErr != nil {
+			// fail() was called, return this error since this is an abnormal failure.
+			return c.failErr
 		}
 		return err
 	} else if r != starlark.None {

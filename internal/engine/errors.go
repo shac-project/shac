@@ -5,13 +5,10 @@
 package engine
 
 import (
-	"go.chromium.org/luci/starlark/builtins"
 	"go.starlark.net/starlark"
 )
 
 // BacktracableError is an error that has a starlark backtrace attached to it.
-//
-// Implemented by builtins.Failure and by starlark.EvalError.
 type BacktracableError interface {
 	error
 	// Backtrace returns a user-friendly error message describing the stack
@@ -19,7 +16,26 @@ type BacktracableError interface {
 	Backtrace() string
 }
 
+// failure is an error emitted by fail(...).
+type failure struct {
+	Message string             // the error message, as passed to fail(...)
+	Stack   starlark.CallStack // where 'fail' itself was called
+}
+
+// Error is the short error message, as passed to fail(...).
+func (f *failure) Error() string {
+	return f.Message
+}
+
+// Backtrace returns a user-friendly error message describing the stack of
+// calls that led to this error.
+//
+// The trace of where fail(...) happened is used.
+func (f *failure) Backtrace() string {
+	return f.Stack.String() + "Error: " + f.Message
+}
+
 var (
 	_ BacktracableError = (*starlark.EvalError)(nil)
-	_ BacktracableError = (*builtins.Failure)(nil)
+	_ BacktracableError = (*failure)(nil)
 )

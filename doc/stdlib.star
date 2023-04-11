@@ -300,21 +300,40 @@ def dir(x):
 def fail(*args, sep=" "):
   """Starlark builtin that fails immediately the execution.
 
-  This function should not be used normally. It can be used as a quick debugging
-  tool or when there is an irrecoverable failure that should immediately stop
-  all execution.
+  This function will abort execution. When called in the first phase, outside a
+  check callback, it will prevent execution of checks.
+
+  When called within a check, it stops the check execution and annotates it with
+  an abnormal failure. It also prevents checks that were not yet started from
+  running.
 
   See the official documentation at
   https://github.com/google/starlark-go/blob/HEAD/doc/spec.md#fail.
 
   Example:
+    The code after the fail() call will not be executed:
+
     ```python
     fail("implement me")
     ```
 
+    The check will be annotated with the abnormal failure:
+
+    ```python
+    def cb1(ctx):
+      fail("implement me")
+
+    def cb2(ctx):
+      # This check may or may not run, depending on concurrency.
+      pass
+
+    shac.register_check(cb1)
+    shac.register_check(cb2)
+    ```
+
   Args:
     *args: arguments to print out.
-    sep: separator between the items in args, defaults to " ".
+    sep?: separator between the items in args, defaults to " ".
   """
   pass
 

@@ -43,11 +43,51 @@ func getPredeclared() starlark.StringDict {
 		"json": json.Module,
 
 		// Override fail to include additional functionality.
-		"fail": builtins.Fail,
+		"fail": starlark.NewBuiltin("fail", fail),
 		// struct is an helper function that enables users to create seamless
 		// object instances.
 		"struct": builtins.Struct,
 	}
+}
+
+// fail aborts execution. When run within a check, associates the check with an "abnormal failure".
+//
+// Unlike builtins.Fail(), it doesn't allow user specified stack traces.
+func fail(th *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+	//builtins.Fail()
+	sep := " "
+	// Do not exit early if the arguments are wrong.
+	err := starlark.UnpackArgs("fail", nil, kwargs, "sep?", &sep)
+	buf := strings.Builder{}
+	for i, v := range args {
+		if i > 0 {
+			buf.WriteString(sep)
+		}
+		if s, ok := starlark.AsString(v); ok {
+			buf.WriteString(s)
+		} else {
+			buf.WriteString(v.String())
+		}
+	}
+	if err != nil {
+		buf.WriteString("\n")
+		buf.WriteString(err.Error())
+	}
+	msg := buf.String()
+	ctx := interpreter.Context(th)
+	failErr := &failure{
+		Message: msg,
+		Stack:   th.CallStack(),
+	}
+	if c := ctxCheck(ctx); c != nil {
+		// Running inside a check, annotate it.
+		c.failErr = failErr
+	} else {
+		// Save the error in the shacState object since we are in the first phase.
+		s := ctxState(ctx)
+		s.failErr = failErr
+	}
+	return nil, errors.New(msg)
 }
 
 // shacRegisterCheck implements native function shac.register_check().

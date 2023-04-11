@@ -514,6 +514,13 @@ func TestTestDataFailOrThrow(t *testing.T) {
 			"",
 		},
 		{
+			"fail-check.star",
+			"an  unexpected  failure  None\nfail: unexpected keyword argument \"unknown\"",
+			"  //fail-check.star:6:7: in cb\n" +
+				"  <builtin>: in fail\n" +
+				"Error: an  unexpected  failure  None\nfail: unexpected keyword argument \"unknown\"",
+		},
+		{
 			"fail.star",
 			"an expected failure",
 			`  //fail.star:5:5: in <toplevel>` + "\n" +
