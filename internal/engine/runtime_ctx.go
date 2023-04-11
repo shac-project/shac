@@ -6,7 +6,6 @@ package engine
 
 import (
 	"errors"
-	"fmt"
 	"io"
 	"os"
 	"os/exec"
@@ -24,24 +23,24 @@ func getCtx() starlark.Value {
 	return toValue("ctx", starlark.StringDict{
 		// Implemented in runtime_ctx_emit.go
 		"emit": toValue("ctx.emit", starlark.StringDict{
-			"annotation": starlark.NewBuiltin("ctx.emit.annotation", ctxEmitAnnotation),
-			"artifact":   starlark.NewBuiltin("ctx.emit.artifact", ctxEmitArtifact),
+			"annotation": newBuiltin("ctx.emit.annotation", ctxEmitAnnotation),
+			"artifact":   newBuiltin("ctx.emit.artifact", ctxEmitArtifact),
 		}),
 		"io": toValue("ctx.io", starlark.StringDict{
-			"read_file": starlark.NewBuiltin("ctx.io.read_file", ctxIoReadFile),
+			"read_file": newBuiltin("ctx.io.read_file", ctxIoReadFile),
 		}),
 		"os": toValue("ctx.os", starlark.StringDict{
-			"exec": starlark.NewBuiltin("ctx.os.exec", ctxOsExec),
+			"exec": newBuiltin("ctx.os.exec", ctxOsExec),
 		}),
 		// Implemented in runtime_ctx_re.go
 		"re": toValue("ctx.re", starlark.StringDict{
-			"match":      starlark.NewBuiltin("ctx.re.match", ctxReMatch),
-			"allmatches": starlark.NewBuiltin("ctx.re.allmatches", ctxReAllMatches),
+			"match":      newBuiltin("ctx.re.match", ctxReMatch),
+			"allmatches": newBuiltin("ctx.re.allmatches", ctxReAllMatches),
 		}),
 		// Implemented in runtime_ctx_scm.go
 		"scm": toValue("ctx.scm", starlark.StringDict{
-			"affected_files": starlark.NewBuiltin("ctx.scm.affected_files", ctxScmAffectedFiles),
-			"all_files":      starlark.NewBuiltin("ctx.scm.all_files", ctxScmAllFiles),
+			"affected_files": newBuiltin("ctx.scm.affected_files", ctxScmAffectedFiles),
+			"all_files":      newBuiltin("ctx.scm.all_files", ctxScmAllFiles),
 		}),
 	})
 }
@@ -62,17 +61,17 @@ func ctxIoReadFile(th *starlark.Thread, fn *starlark.Builtin, args starlark.Tupl
 	}
 	size, ok := argsize.Int64()
 	if !ok {
-		return nil, fmt.Errorf("%s: invalid size", fn.Name())
+		return nil, errors.New("invalid size")
 	}
 	ctx := interpreter.Context(th)
 	s := ctxState(ctx)
 	dst, err := absPath(string(argfilepath), s.inputs.root)
 	if err != nil {
-		return nil, fmt.Errorf("%s: %w", fn.Name(), err)
+		return nil, err
 	}
 	b, err := readFile(dst, size)
 	if err != nil {
-		return nil, fmt.Errorf("%s: %w", fn.Name(), err)
+		return nil, err
 	}
 	// TODO(maruel): Use unsafe conversion to save a memory copy.
 	return starlark.Bytes(b), nil
@@ -94,7 +93,7 @@ func ctxOsExec(th *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, k
 		return nil, err
 	}
 	if rawCmd.Len() == 0 {
-		return nil, fmt.Errorf("%s: cmdline must not be an empty list", fn.Name())
+		return nil, errors.New("cmdline must not be an empty list")
 	}
 
 	var parsedCmd []string
@@ -104,7 +103,7 @@ func ctxOsExec(th *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, k
 	for iter.Next(&val) {
 		str, ok := val.(starlark.String)
 		if !ok {
-			return nil, fmt.Errorf("%s: command args must be strings", fn.Name())
+			return nil, errors.New("command args must be strings")
 		}
 		parsedCmd = append(parsedCmd, str.GoString())
 	}
@@ -120,7 +119,7 @@ func ctxOsExec(th *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, k
 		var err error
 		cmd.Dir, err = absPath(cwd.GoString(), s.inputs.root)
 		if err != nil {
-			return nil, fmt.Errorf("%s: %w", fn.Name(), err)
+			return nil, err
 		}
 	} else {
 		cmd.Dir = s.inputs.root
@@ -130,7 +129,7 @@ func ctxOsExec(th *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, k
 		if errExit := (&exec.ExitError{}); errors.As(err, &errExit) {
 			return starlark.MakeInt(errExit.ExitCode()), nil
 		}
-		return nil, fmt.Errorf("%s: %w", fn.Name(), err)
+		return nil, err
 	}
 	return starlark.MakeInt(0), nil
 }

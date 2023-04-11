@@ -256,7 +256,7 @@ func (g *gitCheckout) newLines(path string, allFiles bool) starlarkFunc {
 			// was modified or not.
 			v, err := newLinesWhole(g.checkoutRoot, path)
 			if err != nil {
-				return nil, fmt.Errorf("%s: %w", fn.Name(), err)
+				return nil, err
 			}
 			return v, nil
 		}
@@ -265,7 +265,7 @@ func (g *gitCheckout) newLines(path string, allFiles bool) starlarkFunc {
 			// TODO(maruel): This is not normal. For now fallback to the whole file.
 			v, err := newLinesWhole(g.checkoutRoot, path)
 			if err != nil {
-				return nil, fmt.Errorf("%s: %w", fn.Name(), err)
+				return nil, err
 			}
 			return v, nil
 		}
@@ -362,7 +362,7 @@ func (r *rawTree) newLines(path string, allFiles bool) starlarkFunc {
 		}
 		v, err := newLinesWhole(r.root, path)
 		if err != nil {
-			return nil, fmt.Errorf("%s: %w", fn.Name(), err)
+			return nil, err
 		}
 		return v, nil
 	}
@@ -384,7 +384,7 @@ func ctxScmFilesCommon(th *starlark.Thread, fn *starlark.Builtin, args starlark.
 		files, err = s.scm.affectedFiles(ctx)
 	}
 	if err != nil {
-		return nil, fmt.Errorf("%s: %w", fn.Name(), err)
+		return nil, err
 	}
 	// files is guaranteed to be sorted.
 	out := starlark.NewDict(len(files))
@@ -392,7 +392,7 @@ func ctxScmFilesCommon(th *starlark.Thread, fn *starlark.Builtin, args starlark.
 		// Make sure to update //doc/stdlib.star whenever this function is modified.
 		_ = out.SetKey(starlark.String(f.path), toValue("file", starlark.StringDict{
 			"action":    starlark.String(f.action),
-			"new_lines": starlark.NewBuiltin("new_lines", s.scm.newLines(f.path, s.inputs.allFiles)),
+			"new_lines": newBuiltin("new_lines", s.scm.newLines(f.path, s.inputs.allFiles)),
 		}))
 	}
 	out.Freeze()

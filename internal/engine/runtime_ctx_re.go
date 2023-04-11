@@ -5,7 +5,6 @@
 package engine
 
 import (
-	"fmt"
 	"regexp"
 	"sync"
 
@@ -93,7 +92,7 @@ func reCommonPreamble(fn *starlark.Builtin, args starlark.Tuple, kwargs []starla
 	}
 	r, err := reCache.compile(string(argpattern))
 	if err != nil {
-		return "", nil, fmt.Errorf("%s: %w", fn.Name(), err)
+		return "", nil, err
 	}
 	return string(argstr), r, nil
 }
