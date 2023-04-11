@@ -94,13 +94,15 @@ func fail(th *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs
 //
 // Make sure to update //doc/stdlib.star whenever this function is modified.
 func shacRegisterCheck(th *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
-	var cb starlark.Callable
-	if err := starlark.UnpackArgs(fn.Name(), args, kwargs,
-		"callback", &cb,
-	); err != nil {
+	var argcallback starlark.Callable
+	if err := starlark.UnpackArgs(fn.Name(), args, kwargs, "callback", &argcallback); err != nil {
 		return nil, err
 	}
-	// TODO(maruel): Inspect cb to verify that it accepts one argument.
+	// Inspect callback to verify that it accepts one argument and that it is not a builtin.
+	cb, ok := argcallback.(*starlark.Function)
+	if !ok || cb.NumParams() != 1 {
+		return nil, errors.New("callback must be a function accepting one \"ctx\" argument")
+	}
 	ctx := interpreter.Context(th)
 	s := ctxState(ctx)
 	if s.doneLoading {

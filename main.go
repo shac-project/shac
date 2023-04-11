@@ -12,11 +12,17 @@ import (
 
 	flag "github.com/spf13/pflag"
 	"go.fuchsia.dev/shac-project/shac/internal/cli"
+	"go.fuchsia.dev/shac-project/shac/internal/engine"
 )
 
 func main() {
 	if err := cli.Main(os.Args); err != nil && !errors.Is(err, flag.ErrHelp) {
-		fmt.Fprintf(os.Stderr, "shac: %s\n", err)
+		var stackerr engine.BacktracableError
+		if errors.As(err, &stackerr) {
+			fmt.Fprintf(os.Stderr, "shac: %s\n", stackerr.Backtrace())
+		} else {
+			fmt.Fprintf(os.Stderr, "shac: %s\n", err)
+		}
 		os.Exit(1)
 	}
 }

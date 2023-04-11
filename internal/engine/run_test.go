@@ -534,6 +534,18 @@ func TestTestDataFailOrThrow(t *testing.T) {
 				"Error: can't assign to .key field of struct",
 		},
 		{
+			"shac-register_check-builtin.star",
+			"callback must be a function accepting one \"ctx\" argument",
+			"  //shac-register_check-builtin.star:5:20: in <toplevel>\n" +
+				"Error in register_check: callback must be a function accepting one \"ctx\" argument",
+		},
+		{
+			"shac-register_check-callback.star",
+			"callback must be a function accepting one \"ctx\" argument",
+			"  //shac-register_check-callback.star:8:20: in <toplevel>\n" +
+				"Error in register_check: callback must be a function accepting one \"ctx\" argument",
+		},
+		{
 			"shac-register_check-kwarg.star",
 			"register_check: unexpected keyword argument \"invalid\"",
 			`  //shac-register_check-kwarg.star:8:20: in <toplevel>` + "\n" +

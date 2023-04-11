@@ -33,6 +33,6 @@ def new_todos(ctx):
 
 shac.register_check(check_docs)
 shac.register_check(check_license_headers)
-shac.register_check(gosec)
+shac.register_check(lambda ctx: gosec(ctx))
 shac.register_check(new_todos)
-shac.register_check(staticcheck)
+shac.register_check(lambda ctx: staticcheck(ctx))
