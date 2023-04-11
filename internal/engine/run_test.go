@@ -1,6 +1,16 @@
-// Copyright 2023 The Shac Authors. All rights reserved.
-// Use of this source code is governed by a BSD-style
-// license that can be found in the LICENSE file.
+// Copyright 2023 The Shac Authors
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 package engine
 
@@ -28,7 +38,7 @@ func TestRun_SCM_Raw(t *testing.T) {
 	writeFile(t, root, "file1.txt", "First file")
 	copySCM(t, root)
 	t.Run("affected", func(t *testing.T) {
-		want := "[//scm_affected_files.star:9] \n" +
+		want := "[//scm_affected_files.star:19] \n" +
 			"file1.txt: \n" +
 			"scm_affected_files.star: \n" +
 			"scm_affected_files_new_lines.star: \n" +
@@ -38,13 +48,13 @@ func TestRun_SCM_Raw(t *testing.T) {
 	})
 	t.Run("affected_new_lines", func(t *testing.T) {
 		t.Parallel()
-		want := "[//scm_affected_files_new_lines.star:17] file1.txt\n" +
+		want := "[//scm_affected_files_new_lines.star:27] file1.txt\n" +
 			"1: First file\n"
 		testStarlarkPrint(t, root, "scm_affected_files_new_lines.star", false, want)
 	})
 	t.Run("all", func(t *testing.T) {
 		t.Parallel()
-		want := "[//scm_all_files.star:9] \n" +
+		want := "[//scm_all_files.star:19] \n" +
 			"file1.txt: \n" +
 			"scm_affected_files.star: \n" +
 			"scm_affected_files_new_lines.star: \n" +
@@ -63,7 +73,7 @@ func TestRun_SCM_Git_NoUpstream_Pristine(t *testing.T) {
 	runGit(t, root, "commit", "-m", "Third commit")
 	t.Run("affected", func(t *testing.T) {
 		t.Parallel()
-		want := "[//scm_affected_files.star:9] \n" +
+		want := "[//scm_affected_files.star:19] \n" +
 			"scm_affected_files.star: A\n" +
 			"scm_affected_files_new_lines.star: A\n" +
 			"scm_all_files.star: A\n" +
@@ -72,7 +82,7 @@ func TestRun_SCM_Git_NoUpstream_Pristine(t *testing.T) {
 	})
 	t.Run("affected/all", func(t *testing.T) {
 		t.Parallel()
-		want := "[//scm_affected_files.star:9] \n" +
+		want := "[//scm_affected_files.star:19] \n" +
 			"file1.txt: A\n" +
 			"file2.txt: A\n" +
 			"scm_affected_files.star: A\n" +
@@ -83,7 +93,7 @@ func TestRun_SCM_Git_NoUpstream_Pristine(t *testing.T) {
 	})
 	t.Run("all", func(t *testing.T) {
 		t.Parallel()
-		want := "[//scm_all_files.star:9] \n" +
+		want := "[//scm_all_files.star:19] \n" +
 			"file1.txt: A\n" +
 			"file2.txt: A\n" +
 			"scm_affected_files.star: A\n" +
@@ -102,7 +112,7 @@ func TestRun_SCM_Git_NoUpstream_Staged(t *testing.T) {
 	runGit(t, root, "add", "scm_*.star")
 	t.Run("affected", func(t *testing.T) {
 		t.Parallel()
-		want := "[//scm_affected_files.star:9] \n" +
+		want := "[//scm_affected_files.star:19] \n" +
 			"scm_affected_files.star: A\n" +
 			"scm_affected_files_new_lines.star: A\n" +
 			"scm_all_files.star: A\n" +
@@ -111,19 +121,19 @@ func TestRun_SCM_Git_NoUpstream_Staged(t *testing.T) {
 	})
 	t.Run("affected_new_lines", func(t *testing.T) {
 		t.Parallel()
-		want := "[//scm_affected_files_new_lines.star:17] scm_affected_files.star\n" +
-			"1: # Copyright 2023 The Shac Authors. All rights reserved.\n"
+		want := "[//scm_affected_files_new_lines.star:27] scm_affected_files.star\n" +
+			"1: # Copyright 2023 The Shac Authors\n"
 		testStarlarkPrint(t, root, "scm_affected_files_new_lines.star", false, want)
 	})
 	t.Run("affected_new_lines/all", func(t *testing.T) {
 		t.Parallel()
-		want := "[//scm_affected_files_new_lines.star:17] file1.txt\n" +
+		want := "[//scm_affected_files_new_lines.star:27] file1.txt\n" +
 			"1: First file\n"
 		testStarlarkPrint(t, root, "scm_affected_files_new_lines.star", true, want)
 	})
 	t.Run("all", func(t *testing.T) {
 		t.Parallel()
-		want := "[//scm_all_files.star:9] \n" +
+		want := "[//scm_all_files.star:19] \n" +
 			"file1.txt: A\n" +
 			"file2.txt: A\n" +
 			"scm_affected_files.star: A\n" +
@@ -145,7 +155,7 @@ func TestRun_SCM_Git_Upstream_Staged(t *testing.T) {
 	runGit(t, root, "add", "scm_*.star")
 	t.Run("affected", func(t *testing.T) {
 		t.Parallel()
-		want := "[//scm_affected_files.star:9] \n" +
+		want := "[//scm_affected_files.star:19] \n" +
 			"file1.txt: R\n" +
 			"file2.txt: A\n" +
 			"scm_affected_files.star: A\n" +
@@ -156,7 +166,7 @@ func TestRun_SCM_Git_Upstream_Staged(t *testing.T) {
 	})
 	t.Run("all", func(t *testing.T) {
 		t.Parallel()
-		want := "[//scm_all_files.star:9] \n" +
+		want := "[//scm_all_files.star:19] \n" +
 			"file1.txt: A\n" +
 			"file2.txt: A\n" +
 			"scm_affected_files.star: A\n" +
@@ -184,7 +194,7 @@ func TestRun_SCM_Git_Submodule(t *testing.T) {
 
 	t.Run("affected", func(t *testing.T) {
 		t.Parallel()
-		want := "[//scm_affected_files.star:9] \n" +
+		want := "[//scm_affected_files.star:19] \n" +
 			".gitmodules: A\n" +
 			"scm_affected_files.star: A\n" +
 			"scm_affected_files_new_lines.star: A\n" +
@@ -195,7 +205,7 @@ func TestRun_SCM_Git_Submodule(t *testing.T) {
 
 	t.Run("all", func(t *testing.T) {
 		t.Parallel()
-		want := "[//scm_all_files.star:9] \n" +
+		want := "[//scm_all_files.star:19] \n" +
 			".gitmodules: A\n" +
 			"file1.txt: A\n" +
 			"file2.txt: A\n" +
@@ -219,7 +229,7 @@ func TestRun_SCM_Git_Binary_File(t *testing.T) {
 
 	t.Run("affected", func(t *testing.T) {
 		t.Parallel()
-		want := "[//scm_affected_files.star:9] \n" +
+		want := "[//scm_affected_files.star:19] \n" +
 			"a.bin: A\n" +
 			"\n"
 		testStarlarkPrint(t, root, "scm_affected_files.star", false, want)
@@ -229,13 +239,13 @@ func TestRun_SCM_Git_Binary_File(t *testing.T) {
 		t.Parallel()
 		// Only a binary file is touched, no lines should be considered
 		// affected.
-		want := "[//scm_affected_files_new_lines.star:19] no new lines\n"
+		want := "[//scm_affected_files_new_lines.star:29] no new lines\n"
 		testStarlarkPrint(t, root, "scm_affected_files_new_lines.star", false, want)
 	})
 
 	t.Run("affected_new_lines/all", func(t *testing.T) {
 		t.Parallel()
-		want := "[//scm_affected_files_new_lines.star:19] no new lines\n"
+		want := "[//scm_affected_files_new_lines.star:29] no new lines\n"
 		testStarlarkPrint(t, root, "scm_affected_files_new_lines.star", true, want)
 	})
 }
@@ -290,74 +300,74 @@ func TestTestDataFailOrThrow(t *testing.T) {
 		{
 			"backtrace.star",
 			"fail: inner",
-			"  //backtrace.star:11:4: in <toplevel>\n" +
-				"  //backtrace.star:9:6: in fn1\n" +
-				"  //backtrace.star:6:7: in fn2\n",
+			"  //backtrace.star:21:4: in <toplevel>\n" +
+				"  //backtrace.star:19:6: in fn1\n" +
+				"  //backtrace.star:16:7: in fn2\n",
 		},
 		{
 			"ctx-emit-annotation-kwarg.star",
 			"ctx.emit.annotation: unexpected keyword argument \"foo\"",
-			"  //ctx-emit-annotation-kwarg.star:6:22: in cb\n",
+			"  //ctx-emit-annotation-kwarg.star:16:22: in cb\n",
 		},
 		{
 			"ctx-emit-annotation-level.star",
 			"ctx.emit.annotation: a valid level is required, use one of \"notice\", \"warning\" or \"error\"",
-			"  //ctx-emit-annotation-level.star:6:22: in cb\n",
+			"  //ctx-emit-annotation-level.star:16:22: in cb\n",
 		},
 		{
 			"ctx-emit-annotation-message.star",
 			"ctx.emit.annotation: a message is required",
-			"  //ctx-emit-annotation-message.star:6:22: in cb\n",
+			"  //ctx-emit-annotation-message.star:16:22: in cb\n",
 		},
 		{
 			"ctx-emit-annotation-replacements.star",
 			"ctx.emit.annotation: invalid replacements, expect tuple of str",
-			"  //ctx-emit-annotation-replacements.star:6:22: in cb\n",
+			"  //ctx-emit-annotation-replacements.star:16:22: in cb\n",
 		},
 		{
 			"ctx-emit-annotation-span-len.star",
 			"ctx.emit.annotation: invalid span, expect ((line, col), (line, col))",
-			"  //ctx-emit-annotation-span-len.star:6:22: in cb\n",
+			"  //ctx-emit-annotation-span-len.star:16:22: in cb\n",
 		},
 		{
 			"ctx-emit-annotation-span-negative.star",
 			"ctx.emit.annotation: invalid span, expect ((line, col), (line, col))",
-			"  //ctx-emit-annotation-span-negative.star:6:22: in cb\n",
+			"  //ctx-emit-annotation-span-negative.star:16:22: in cb\n",
 		},
 		{
 			"ctx-emit-annotation-span-str.star",
 			"ctx.emit.annotation: invalid span, expect ((line, col), (line, col))",
-			"  //ctx-emit-annotation-span-str.star:6:22: in cb\n",
+			"  //ctx-emit-annotation-span-str.star:16:22: in cb\n",
 		},
 		{
 			"ctx-emit-artifact-inexistant.star",
 			"ctx.emit.artifact: open " + fail + "/inexistant" + ": " + inexistantErr,
-			"  //ctx-emit-artifact-inexistant.star:6:20: in cb\n",
+			"  //ctx-emit-artifact-inexistant.star:16:20: in cb\n",
 		},
 		{
 			"ctx-emit-artifact-kwarg.star",
 			"ctx.emit.artifact: unexpected keyword argument \"foo\"",
-			"  //ctx-emit-artifact-kwarg.star:6:20: in cb\n",
+			"  //ctx-emit-artifact-kwarg.star:16:20: in cb\n",
 		},
 		{
 			"ctx-emit-artifact-type.star",
 			"ctx.emit.artifact: for parameter \"content\": got int, want str or bytes",
-			"  //ctx-emit-artifact-type.star:6:20: in cb\n",
+			"  //ctx-emit-artifact-type.star:16:20: in cb\n",
 		},
 		{
 			"ctx-emit-artifact-windows.star",
 			"ctx.emit.artifact: use POSIX style path",
-			"  //ctx-emit-artifact-windows.star:6:20: in cb\n",
+			"  //ctx-emit-artifact-windows.star:16:20: in cb\n",
 		},
 		{
 			"ctx-immutable.star",
 			"can't assign to .key field of struct",
-			"  //ctx-immutable.star:7:6: in cb\n",
+			"  //ctx-immutable.star:17:6: in cb\n",
 		},
 		{
 			"ctx-io-read_file-abs.star",
 			"ctx.io.read_file: do not use absolute path",
-			"  //ctx-io-read_file-abs.star:6:19: in cb\n",
+			"  //ctx-io-read_file-abs.star:16:19: in cb\n",
 		},
 		{
 			"ctx-io-read_file-dir.star",
@@ -369,52 +379,52 @@ func TestTestDataFailOrThrow(t *testing.T) {
 				}
 				return "ctx.io.read_file: read " + fail + ": is a directory"
 			}(),
-			"  //ctx-io-read_file-dir.star:6:19: in cb\n",
+			"  //ctx-io-read_file-dir.star:16:19: in cb\n",
 		},
 		{
 			"ctx-io-read_file-escape.star",
 			"ctx.io.read_file: cannot escape root",
-			"  //ctx-io-read_file-escape.star:6:19: in cb\n",
+			"  //ctx-io-read_file-escape.star:16:19: in cb\n",
 		},
 		{
 			"ctx-io-read_file-inexistant.star",
 			"ctx.io.read_file: open " + fail + "/inexistant" + ": " + inexistantErr,
-			"  //ctx-io-read_file-inexistant.star:6:19: in cb\n",
+			"  //ctx-io-read_file-inexistant.star:16:19: in cb\n",
 		},
 		{
 			"ctx-io-read_file-missing_arg.star",
 			"ctx.io.read_file: missing argument for filepath",
-			"  //ctx-io-read_file-missing_arg.star:6:19: in cb\n",
+			"  //ctx-io-read_file-missing_arg.star:16:19: in cb\n",
 		},
 		{
 			"ctx-io-read_file-size_big.star",
 			"ctx.io.read_file: invalid size",
-			"  //ctx-io-read_file-size_big.star:6:19: in cb\n",
+			"  //ctx-io-read_file-size_big.star:16:19: in cb\n",
 		},
 		{
 			"ctx-io-read_file-size_type.star",
 			"ctx.io.read_file: for parameter \"size\": got string, want int",
-			"  //ctx-io-read_file-size_type.star:6:19: in cb\n",
+			"  //ctx-io-read_file-size_type.star:16:19: in cb\n",
 		},
 		{
 			"ctx-io-read_file-unclean.star",
 			"ctx.io.read_file: pass cleaned path",
-			"  //ctx-io-read_file-unclean.star:6:19: in cb\n",
+			"  //ctx-io-read_file-unclean.star:16:19: in cb\n",
 		},
 		{
 			"ctx-io-read_file-windows.star",
 			"ctx.io.read_file: use POSIX style path",
-			"  //ctx-io-read_file-windows.star:6:19: in cb\n",
+			"  //ctx-io-read_file-windows.star:16:19: in cb\n",
 		},
 		{
 			"ctx-os-exec-bad_arg.star",
 			"ctx.os.exec: unexpected keyword argument \"unknown\"",
-			"  //ctx-os-exec-bad_arg.star:6:14: in cb\n",
+			"  //ctx-os-exec-bad_arg.star:16:14: in cb\n",
 		},
 		{
 			"ctx-os-exec-bad_type_in_args.star",
 			"ctx.os.exec: command args must be strings",
-			"  //ctx-os-exec-bad_type_in_args.star:6:14: in cb\n",
+			"  //ctx-os-exec-bad_type_in_args.star:16:14: in cb\n",
 		},
 		{
 			"ctx-os-exec-command_not_in_path.star",
@@ -424,52 +434,52 @@ func TestTestDataFailOrThrow(t *testing.T) {
 				}
 				return "ctx.os.exec: exec: \"this-command-does-not-exist\": executable file not found in $PATH"
 			}(),
-			"  //ctx-os-exec-command_not_in_path.star:6:14: in cb\n",
+			"  //ctx-os-exec-command_not_in_path.star:16:14: in cb\n",
 		},
 		{
 			"ctx-os-exec-invalid_cwd.star",
 			"ctx.os.exec: cannot escape root",
-			"  //ctx-os-exec-invalid_cwd.star:6:14: in cb\n",
+			"  //ctx-os-exec-invalid_cwd.star:16:14: in cb\n",
 		},
 		{
 			"ctx-os-exec-no_cmd.star",
 			"ctx.os.exec: cmdline must not be an empty list",
-			"  //ctx-os-exec-no_cmd.star:6:14: in cb\n",
+			"  //ctx-os-exec-no_cmd.star:16:14: in cb\n",
 		},
 		{
 			"ctx-re-allmatches-no_arg.star",
 			"ctx.re.allmatches: missing argument for pattern",
-			"  //ctx-re-allmatches-no_arg.star:6:20: in cb\n",
+			"  //ctx-re-allmatches-no_arg.star:16:20: in cb\n",
 		},
 		{
 			"ctx-re-match-bad_re.star",
 			"ctx.re.match: error parsing regexp: missing closing ): `(`",
-			"  //ctx-re-match-bad_re.star:6:15: in cb\n",
+			"  //ctx-re-match-bad_re.star:16:15: in cb\n",
 		},
 		{
 			"ctx-re-match-no_arg.star",
 			"ctx.re.match: missing argument for pattern",
-			"  //ctx-re-match-no_arg.star:6:15: in cb\n",
+			"  //ctx-re-match-no_arg.star:16:15: in cb\n",
 		},
 		{
 			"ctx-scm-affected_files-arg.star",
 			"ctx.scm.affected_files: got 1 arguments, want at most 0",
-			"  //ctx-scm-affected_files-arg.star:6:25: in cb\n",
+			"  //ctx-scm-affected_files-arg.star:16:25: in cb\n",
 		},
 		{
 			"ctx-scm-affected_files-kwarg.star",
 			"ctx.scm.affected_files: unexpected keyword argument \"unexpected\"",
-			"  //ctx-scm-affected_files-kwarg.star:6:25: in cb\n",
+			"  //ctx-scm-affected_files-kwarg.star:16:25: in cb\n",
 		},
 		{
 			"ctx-scm-all_files-arg.star",
 			"ctx.scm.all_files: got 1 arguments, want at most 0",
-			"  //ctx-scm-all_files-arg.star:6:20: in cb\n",
+			"  //ctx-scm-all_files-arg.star:16:20: in cb\n",
 		},
 		{
 			"ctx-scm-all_files-kwarg.star",
 			"ctx.scm.all_files: unexpected keyword argument \"unexpected\"",
-			"  //ctx-scm-all_files-kwarg.star:6:20: in cb\n",
+			"  //ctx-scm-all_files-kwarg.star:16:20: in cb\n",
 		},
 		{
 			"empty.star",
@@ -479,42 +489,42 @@ func TestTestDataFailOrThrow(t *testing.T) {
 		{
 			"fail-check.star",
 			"fail: an  unexpected  failure  None\nfail: unexpected keyword argument \"unknown\"",
-			"  //fail-check.star:6:7: in cb\n",
+			"  //fail-check.star:16:7: in cb\n",
 		},
 		{
 			"fail.star",
 			"fail: an expected failure",
-			"  //fail.star:5:5: in <toplevel>\n",
+			"  //fail.star:15:5: in <toplevel>\n",
 		},
 		{
 			"shac-immutable.star",
 			"can't assign to .key field of struct",
-			"  //shac-immutable.star:6:5: in <toplevel>\n",
+			"  //shac-immutable.star:16:5: in <toplevel>\n",
 		},
 		{
 			"shac-register_check-builtin.star",
 			"shac.register_check: callback must be a function accepting one \"ctx\" argument",
-			"  //shac-register_check-builtin.star:5:20: in <toplevel>\n",
+			"  //shac-register_check-builtin.star:15:20: in <toplevel>\n",
 		},
 		{
 			"shac-register_check-callback.star",
 			"shac.register_check: callback must be a function accepting one \"ctx\" argument",
-			"  //shac-register_check-callback.star:8:20: in <toplevel>\n",
+			"  //shac-register_check-callback.star:18:20: in <toplevel>\n",
 		},
 		{
 			"shac-register_check-kwarg.star",
 			"shac.register_check: unexpected keyword argument \"invalid\"",
-			"  //shac-register_check-kwarg.star:8:20: in <toplevel>\n",
+			"  //shac-register_check-kwarg.star:18:20: in <toplevel>\n",
 		},
 		{
 			"shac-register_check-no_arg.star",
 			"shac.register_check: missing argument for callback",
-			"  //shac-register_check-no_arg.star:5:20: in <toplevel>\n",
+			"  //shac-register_check-no_arg.star:15:20: in <toplevel>\n",
 		},
 		{
 			"shac-register_check-recursive.star",
 			"shac.register_check: can't register checks after done loading",
-			"  //shac-register_check-recursive.star:9:22: in cb1\n",
+			"  //shac-register_check-recursive.star:19:22: in cb1\n",
 		},
 		{
 			"shac-register_check-return.star",
@@ -523,12 +533,12 @@ func TestTestDataFailOrThrow(t *testing.T) {
 		},
 		{
 			"syntax_error.star",
-			"//syntax_error.star:5:3: got '//', want primary expression",
+			"//syntax_error.star:15:3: got '//', want primary expression",
 			"",
 		},
 		{
 			"undefined_symbol.star",
-			"//undefined_symbol.star:5:1: undefined: undefined_symbol",
+			"//undefined_symbol.star:15:1: undefined: undefined_symbol",
 			"",
 		},
 	}
@@ -684,48 +694,48 @@ func TestTestDataPrint(t *testing.T) {
 	}{
 		{
 			"ctx-io-read_file-size.star",
-			"[//ctx-io-read_file-size.star:6] {\n  \"key\":\n",
+			"[//ctx-io-read_file-size.star:16] {\n  \"key\":\n",
 		},
 		{
 			"ctx-io-read_file.star",
-			"[//ctx-io-read_file.star:7] {\"key\": \"value\"}\n",
+			"[//ctx-io-read_file.star:17] {\"key\": \"value\"}\n",
 		},
 		{
 			"ctx-os-exec-false.star",
-			"[//ctx-os-exec-false.star:6] retcode: 1\n",
+			"[//ctx-os-exec-false.star:16] retcode: 1\n",
 		},
 		{
 			"ctx-os-exec-success.star",
-			"[//ctx-os-exec-success.star:6] retcode: 0\n",
+			"[//ctx-os-exec-success.star:16] retcode: 0\n",
 		},
 		{
 			"ctx-re-allmatches.star",
-			"[//ctx-re-allmatches.star:7] ()\n" +
-				"[//ctx-re-allmatches.star:9] (match(groups = (\"TODO(foo)\",), offset = 4), match(groups = (\"TODO(bar)\",), offset = 14))\n" +
-				"[//ctx-re-allmatches.star:11] (match(groups = (\"anc\", \"n\", \"c\"), offset = 0),)\n",
+			"[//ctx-re-allmatches.star:17] ()\n" +
+				"[//ctx-re-allmatches.star:19] (match(groups = (\"TODO(foo)\",), offset = 4), match(groups = (\"TODO(bar)\",), offset = 14))\n" +
+				"[//ctx-re-allmatches.star:21] (match(groups = (\"anc\", \"n\", \"c\"), offset = 0),)\n",
 		},
 		{
 			"ctx-re-match.star",
-			"[//ctx-re-match.star:7] None\n" +
-				"[//ctx-re-match.star:9] match(groups = (\"TODO(foo)\",), offset = 4)\n" +
-				"[//ctx-re-match.star:11] match(groups = (\"anc\", \"n\", \"c\"), offset = 0)\n" +
-				"[//ctx-re-match.star:13] match(groups = (\"a\", None), offset = 0)\n",
+			"[//ctx-re-match.star:17] None\n" +
+				"[//ctx-re-match.star:19] match(groups = (\"TODO(foo)\",), offset = 4)\n" +
+				"[//ctx-re-match.star:21] match(groups = (\"anc\", \"n\", \"c\"), offset = 0)\n" +
+				"[//ctx-re-match.star:23] match(groups = (\"a\", None), offset = 0)\n",
 		},
 		{
 			"dir-ctx.star",
-			"[//dir-ctx.star:6] [\"emit\", \"io\", \"os\", \"re\", \"scm\"]\n",
+			"[//dir-ctx.star:16] [\"emit\", \"io\", \"os\", \"re\", \"scm\"]\n",
 		},
 		{
 			"dir-shac.star",
-			"[//dir-shac.star:5] [\"commit_hash\", \"register_check\", \"version\"]\n",
+			"[//dir-shac.star:15] [\"commit_hash\", \"register_check\", \"version\"]\n",
 		},
 		{
 			"print-shac-version.star",
-			"[//print-shac-version.star:5] " + v + "\n",
+			"[//print-shac-version.star:15] " + v + "\n",
 		},
 		{
 			"shac-register_check.star",
-			"[//shac-register_check.star:6] running\n",
+			"[//shac-register_check.star:16] running\n",
 		},
 	}
 	want := make([]string, len(data))
