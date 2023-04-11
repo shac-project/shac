@@ -5,6 +5,7 @@
 package engine
 
 import (
+	"fmt"
 	"regexp"
 	"sync"
 
@@ -23,7 +24,7 @@ import (
 func ctxReMatch(th *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	s, r, err := reCommonPreamble(fn, args, kwargs)
 	if err != nil {
-		return starlark.None, err
+		return nil, err
 	}
 	m := r.FindStringSubmatchIndex(s)
 	if m == nil {
@@ -44,7 +45,7 @@ func ctxReMatch(th *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, 
 func ctxReAllMatches(th *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	s, r, err := reCommonPreamble(fn, args, kwargs)
 	if err != nil {
-		return starlark.None, err
+		return nil, err
 	}
 	matches := r.FindAllStringSubmatchIndex(s, -1)
 	// Always return a tuple even if no match is found to make client code
@@ -91,7 +92,10 @@ func reCommonPreamble(fn *starlark.Builtin, args starlark.Tuple, kwargs []starla
 		return "", nil, err
 	}
 	r, err := reCache.compile(string(argpattern))
-	return string(argstr), r, err
+	if err != nil {
+		return "", nil, fmt.Errorf("%s: %w", fn.Name(), err)
+	}
+	return string(argstr), r, nil
 }
 
 // Support functions.

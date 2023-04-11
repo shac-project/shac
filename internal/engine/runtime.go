@@ -6,6 +6,7 @@ package engine
 
 import (
 	"errors"
+	"fmt"
 	"runtime/debug"
 	"strings"
 
@@ -31,7 +32,7 @@ var (
 func getPredeclared() starlark.StringDict {
 	return starlark.StringDict{
 		"shac": toValue("shac", starlark.StringDict{
-			"register_check": starlark.NewBuiltin("register_check", shacRegisterCheck),
+			"register_check": starlark.NewBuiltin("shac.register_check", shacRegisterCheck),
 			"commit_hash":    starlark.String(getCommitHash()),
 			"version": starlark.Tuple{
 				starlark.MakeInt(version[0]), starlark.MakeInt(version[1]), starlark.MakeInt(version[2]),
@@ -101,12 +102,12 @@ func shacRegisterCheck(th *starlark.Thread, fn *starlark.Builtin, args starlark.
 	// Inspect callback to verify that it accepts one argument and that it is not a builtin.
 	cb, ok := argcallback.(*starlark.Function)
 	if !ok || cb.NumParams() != 1 {
-		return nil, errors.New("callback must be a function accepting one \"ctx\" argument")
+		return nil, fmt.Errorf("%s: callback must be a function accepting one \"ctx\" argument", fn.Name())
 	}
 	ctx := interpreter.Context(th)
 	s := ctxState(ctx)
 	if s.doneLoading {
-		return nil, errors.New("can't register checks after done loading")
+		return nil, fmt.Errorf("%s: can't register checks after done loading", fn.Name())
 	}
 	// Register the new callback.
 	s.checks = append(s.checks, check{cb: cb, name: strings.TrimPrefix(cb.Name(), "_")})

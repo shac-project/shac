@@ -31,7 +31,7 @@ type failure struct {
 
 // Error is the short error message, as passed to fail(...).
 func (f *failure) Error() string {
-	return f.Message
+	return "fail: " + f.Message
 }
 
 // Backtrace returns a user-friendly error message describing the stack of
@@ -39,10 +39,29 @@ func (f *failure) Error() string {
 //
 // The trace of where fail(...) happened is used.
 func (f *failure) Backtrace() string {
-	return f.Stack.String() + "Error: " + f.Message
+	c := f.Stack
+	if len(c) > 0 && c[len(c)-1].Pos.Filename() == "<builtin>" {
+		c = c[:len(c)-1]
+	}
+	return c.String()
+}
+
+// evalError is starlark.EvalError with an optimized Backtrace() function.
+type evalError struct {
+	*starlark.EvalError
+}
+
+// Backtrace returns a user-friendly error message describing the stack
+// of calls that led to this error.
+func (e *evalError) Backtrace() string {
+	c := e.CallStack
+	if len(c) > 0 && c[len(c)-1].Pos.Filename() == "<builtin>" {
+		c = c[:len(c)-1]
+	}
+	return c.String()
 }
 
 var (
-	_ BacktracableError = (*starlark.EvalError)(nil)
 	_ BacktracableError = (*failure)(nil)
+	_ BacktracableError = (*evalError)(nil)
 )

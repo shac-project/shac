@@ -254,12 +254,20 @@ func (g *gitCheckout) newLines(path string, allFiles bool) starlarkFunc {
 		if allFiles {
 			// Include all lines when processing all files independent if the file
 			// was modified or not.
-			return newLinesWhole(g.checkoutRoot, path)
+			v, err := newLinesWhole(g.checkoutRoot, path)
+			if err != nil {
+				return nil, fmt.Errorf("%s: %w", fn.Name(), err)
+			}
+			return v, nil
 		}
 		o := g.run(ctx, "diff", "--no-prefix", "-C", "-U0", g.upstream.hash, "--", path)
 		if o == "" {
 			// TODO(maruel): This is not normal. For now fallback to the whole file.
-			return newLinesWhole(g.checkoutRoot, path)
+			v, err := newLinesWhole(g.checkoutRoot, path)
+			if err != nil {
+				return nil, fmt.Errorf("%s: %w", fn.Name(), err)
+			}
+			return v, nil
 		}
 		// Skip the header.
 		for len(o) != 0 {
@@ -352,7 +360,11 @@ func (r *rawTree) newLines(path string, allFiles bool) starlarkFunc {
 		if err := starlark.UnpackArgs(fn.Name(), args, kwargs); err != nil {
 			return nil, err
 		}
-		return newLinesWhole(r.root, path)
+		v, err := newLinesWhole(r.root, path)
+		if err != nil {
+			return nil, fmt.Errorf("%s: %w", fn.Name(), err)
+		}
+		return v, nil
 	}
 }
 
@@ -372,7 +384,7 @@ func ctxScmFilesCommon(th *starlark.Thread, fn *starlark.Builtin, args starlark.
 		files, err = s.scm.affectedFiles(ctx)
 	}
 	if err != nil {
-		return starlark.None, err
+		return nil, fmt.Errorf("%s: %w", fn.Name(), err)
 	}
 	// files is guaranteed to be sorted.
 	out := starlark.NewDict(len(files))
@@ -411,7 +423,7 @@ func ctxScmAllFiles(th *starlark.Thread, fn *starlark.Builtin, args starlark.Tup
 func newLinesWhole(root, path string) (starlark.Value, error) {
 	b, err := os.ReadFile(filepath.Join(root, path))
 	if err != nil {
-		return starlark.None, err
+		return nil, err
 	}
 	// If the file contains a null byte we'll assume it's binary and not try to
 	// parse its lines.

@@ -283,66 +283,55 @@ func TestTestDataFailOrThrow(t *testing.T) {
 	}{
 		{
 			"backtrace.star",
-			"inner",
-			`  //backtrace.star:11:4: in <toplevel>` + "\n" +
-				`  //backtrace.star:9:6: in fn1` + "\n" +
-				`  //backtrace.star:6:7: in fn2` + "\n" +
-				`  <builtin>: in fail` + "\n" +
-				`Error: inner`,
+			"fail: inner",
+			"  //backtrace.star:11:4: in <toplevel>\n" +
+				"  //backtrace.star:9:6: in fn1\n" +
+				"  //backtrace.star:6:7: in fn2\n",
 		},
 		{
 			"ctx-emit-annotation-kwarg.star",
-			"annotation: unexpected keyword argument \"foo\"",
-			"  //ctx-emit-annotation-kwarg.star:6:22: in cb\n" +
-				"Error in annotation: annotation: unexpected keyword argument \"foo\"",
+			"ctx.emit.annotation: unexpected keyword argument \"foo\"",
+			"  //ctx-emit-annotation-kwarg.star:6:22: in cb\n",
 		},
 		{
 			"ctx-emit-annotation-level.star",
-			"a valid level is required, use one of \"notice\", \"warning\" or \"error\"",
-			"  //ctx-emit-annotation-level.star:6:22: in cb\n" +
-				"Error in annotation: a valid level is required, use one of \"notice\", \"warning\" or \"error\"",
+			"ctx.emit.annotation: a valid level is required, use one of \"notice\", \"warning\" or \"error\"",
+			"  //ctx-emit-annotation-level.star:6:22: in cb\n",
 		},
 		{
 			"ctx-emit-annotation-message.star",
-			"a message is required",
-			"  //ctx-emit-annotation-message.star:6:22: in cb\n" +
-				"Error in annotation: a message is required",
+			"ctx.emit.annotation: a message is required",
+			"  //ctx-emit-annotation-message.star:6:22: in cb\n",
 		},
 		{
 			"ctx-emit-annotation-replacements.star",
-			"invalid replacements, expect tuple of str",
-			"  //ctx-emit-annotation-replacements.star:6:22: in cb\n" +
-				"Error in annotation: invalid replacements, expect tuple of str",
+			"ctx.emit.annotation: invalid replacements, expect tuple of str",
+			"  //ctx-emit-annotation-replacements.star:6:22: in cb\n",
 		},
 		{
 			"ctx-emit-annotation-span-len.star",
-			"invalid span, expect ((line, col), (line, col))",
-			"  //ctx-emit-annotation-span-len.star:6:22: in cb\n" +
-				"Error in annotation: invalid span, expect ((line, col), (line, col))",
+			"ctx.emit.annotation: invalid span, expect ((line, col), (line, col))",
+			"  //ctx-emit-annotation-span-len.star:6:22: in cb\n",
 		},
 		{
 			"ctx-emit-annotation-span-negative.star",
-			"invalid span, expect ((line, col), (line, col))",
-			"  //ctx-emit-annotation-span-negative.star:6:22: in cb\n" +
-				"Error in annotation: invalid span, expect ((line, col), (line, col))",
+			"ctx.emit.annotation: invalid span, expect ((line, col), (line, col))",
+			"  //ctx-emit-annotation-span-negative.star:6:22: in cb\n",
 		},
 		{
 			"ctx-emit-annotation-span-str.star",
-			"invalid span, expect ((line, col), (line, col))",
-			"  //ctx-emit-annotation-span-str.star:6:22: in cb\n" +
-				"Error in annotation: invalid span, expect ((line, col), (line, col))",
+			"ctx.emit.annotation: invalid span, expect ((line, col), (line, col))",
+			"  //ctx-emit-annotation-span-str.star:6:22: in cb\n",
 		},
 		{
 			"ctx-immutable.star",
 			"can't assign to .key field of struct",
-			"  //ctx-immutable.star:7:6: in cb\n" +
-				"Error: can't assign to .key field of struct",
+			"  //ctx-immutable.star:7:6: in cb\n",
 		},
 		{
 			"ctx-io-read_file-abs.star",
-			"do not use absolute path",
-			"  //ctx-io-read_file-abs.star:6:19: in cb\n" +
-				"Error in read_file: do not use absolute path",
+			"ctx.io.read_file: do not use absolute path",
+			"  //ctx-io-read_file-abs.star:6:19: in cb\n",
 		},
 		{
 			"ctx-io-read_file-dir.star",
@@ -350,25 +339,16 @@ func TestTestDataFailOrThrow(t *testing.T) {
 				// TODO(maruel): This error comes from the OS, thus this is a very
 				// brittle test case.
 				if runtime.GOOS == "windows" {
-					return "read " + fail + ": Incorrect function."
+					return "ctx.io.read_file: read " + fail + ": Incorrect function."
 				}
-				return "read " + fail + ": is a directory"
+				return "ctx.io.read_file: read " + fail + ": is a directory"
 			}(),
-			func() string {
-				// TODO(maruel): This error comes from the OS, thus this is a very
-				// brittle test case.
-				prefix := "  //ctx-io-read_file-dir.star:6:19: in cb\nError in read_file: "
-				if runtime.GOOS == "windows" {
-					return prefix + "read " + fail + ": Incorrect function."
-				}
-				return prefix + "read " + fail + ": is a directory"
-			}(),
+			"  //ctx-io-read_file-dir.star:6:19: in cb\n",
 		},
 		{
 			"ctx-io-read_file-escape.star",
-			"cannot escape root",
-			"  //ctx-io-read_file-escape.star:6:19: in cb\n" +
-				"Error in read_file: cannot escape root",
+			"ctx.io.read_file: cannot escape root",
+			"  //ctx-io-read_file-escape.star:6:19: in cb\n",
 		},
 		{
 			"ctx-io-read_file-inexistant.star",
@@ -379,134 +359,101 @@ func TestTestDataFailOrThrow(t *testing.T) {
 				// TODO(maruel): This error comes from the OS, thus this is a very
 				// brittle test case.
 				if runtime.GOOS == "windows" {
-					return "open " + inexistant + ": The system cannot find the file specified."
+					return "ctx.io.read_file: open " + inexistant + ": The system cannot find the file specified."
 				}
-				return "open " + inexistant + ": no such file or directory"
+				return "ctx.io.read_file: open " + inexistant + ": no such file or directory"
 			}(),
-			func() string {
-				// Work around the fact that path are not yet correctly handled on
-				// Windows.
-				inexistant := fail + "/inexistant"
-				prefix := "  //ctx-io-read_file-inexistant.star:6:19: in cb\nError in read_file: "
-				// TODO(maruel): This error comes from the OS, thus this is a very
-				// brittle test case.
-				if runtime.GOOS == "windows" {
-					return prefix + "open " + inexistant + ": The system cannot find the file specified."
-				}
-				return prefix + "open " + inexistant + ": no such file or directory"
-			}(),
+			"  //ctx-io-read_file-inexistant.star:6:19: in cb\n",
 		},
 		{
 			"ctx-io-read_file-missing_arg.star",
-			"read_file: missing argument for path",
-			"  //ctx-io-read_file-missing_arg.star:6:19: in cb\n" +
-				"Error in read_file: read_file: missing argument for path",
+			"ctx.io.read_file: missing argument for path",
+			"  //ctx-io-read_file-missing_arg.star:6:19: in cb\n",
 		},
 		{
 			"ctx-io-read_file-size_big.star",
-			"invalid size",
-			"  //ctx-io-read_file-size_big.star:6:19: in cb\n" +
-				"Error in read_file: invalid size",
+			"ctx.io.read_file: invalid size",
+			"  //ctx-io-read_file-size_big.star:6:19: in cb\n",
 		},
 		{
 			"ctx-io-read_file-size_type.star",
-			"read_file: for parameter \"size\": got string, want int",
-			"  //ctx-io-read_file-size_type.star:6:19: in cb\n" +
-				"Error in read_file: read_file: for parameter \"size\": got string, want int",
+			"ctx.io.read_file: for parameter \"size\": got string, want int",
+			"  //ctx-io-read_file-size_type.star:6:19: in cb\n",
 		},
 		{
 			"ctx-io-read_file-unclean.star",
-			"pass cleaned path",
-			"  //ctx-io-read_file-unclean.star:6:19: in cb\n" +
-				"Error in read_file: pass cleaned path",
+			"ctx.io.read_file: pass cleaned path",
+			"  //ctx-io-read_file-unclean.star:6:19: in cb\n",
 		},
 		{
 			"ctx-io-read_file-windows.star",
-			"use POSIX style path",
-			"  //ctx-io-read_file-windows.star:6:19: in cb\n" +
-				"Error in read_file: use POSIX style path",
+			"ctx.io.read_file: use POSIX style path",
+			"  //ctx-io-read_file-windows.star:6:19: in cb\n",
 		},
 		{
 			"ctx-os-exec-bad_arg.star",
-			"exec: unexpected keyword argument \"unknown\"",
-			"  //ctx-os-exec-bad_arg.star:6:14: in cb\n" +
-				"Error in exec: exec: unexpected keyword argument \"unknown\"",
+			"ctx.os.exec: unexpected keyword argument \"unknown\"",
+			"  //ctx-os-exec-bad_arg.star:6:14: in cb\n",
 		},
 		{
 			"ctx-os-exec-bad_type_in_args.star",
-			"command args must be strings",
-			"  //ctx-os-exec-bad_type_in_args.star:6:14: in cb\n" +
-				"Error in exec: command args must be strings",
+			"ctx.os.exec: command args must be strings",
+			"  //ctx-os-exec-bad_type_in_args.star:6:14: in cb\n",
 		},
 		{
 			"ctx-os-exec-command_not_in_path.star",
 			func() string {
 				if runtime.GOOS == "windows" {
-					return `exec: "this-command-does-not-exist": executable file not found in %PATH%`
+					return "ctx.os.exec: exec: \"this-command-does-not-exist\": executable file not found in %PATH%"
 				}
-				return `exec: "this-command-does-not-exist": executable file not found in $PATH`
+				return "ctx.os.exec: exec: \"this-command-does-not-exist\": executable file not found in $PATH"
 			}(),
-			func() string {
-				prefix := "  //ctx-os-exec-command_not_in_path.star:6:14: in cb\nError in exec: "
-				if runtime.GOOS == "windows" {
-					return prefix + `exec: "this-command-does-not-exist": executable file not found in %PATH%`
-				}
-				return prefix + `exec: "this-command-does-not-exist": executable file not found in $PATH`
-			}(),
+			"  //ctx-os-exec-command_not_in_path.star:6:14: in cb\n",
 		},
 		{
 			"ctx-os-exec-invalid_cwd.star",
-			"cannot escape root",
-			"  //ctx-os-exec-invalid_cwd.star:6:14: in cb\n" +
-				"Error in exec: cannot escape root",
+			"ctx.os.exec: cannot escape root",
+			"  //ctx-os-exec-invalid_cwd.star:6:14: in cb\n",
 		},
 		{
 			"ctx-os-exec-no_cmd.star",
-			"cmdline must not be an empty list",
-			"  //ctx-os-exec-no_cmd.star:6:14: in cb\n" +
-				"Error in exec: cmdline must not be an empty list",
+			"ctx.os.exec: cmdline must not be an empty list",
+			"  //ctx-os-exec-no_cmd.star:6:14: in cb\n",
 		},
 		{
 			"ctx-re-allmatches-no_arg.star",
-			"allmatches: missing argument for pattern",
-			"  //ctx-re-allmatches-no_arg.star:6:20: in cb" +
-				"\nError in allmatches: allmatches: missing argument for pattern",
+			"ctx.re.allmatches: missing argument for pattern",
+			"  //ctx-re-allmatches-no_arg.star:6:20: in cb\n",
 		},
 		{
 			"ctx-re-match-bad_re.star",
-			"error parsing regexp: missing closing ): `(`",
-			"  //ctx-re-match-bad_re.star:6:15: in cb\n" +
-				"Error in match: error parsing regexp: missing closing ): `(`",
+			"ctx.re.match: error parsing regexp: missing closing ): `(`",
+			"  //ctx-re-match-bad_re.star:6:15: in cb\n",
 		},
 		{
 			"ctx-re-match-no_arg.star",
-			"match: missing argument for pattern",
-			"  //ctx-re-match-no_arg.star:6:15: in cb\n" +
-				"Error in match: match: missing argument for pattern",
+			"ctx.re.match: missing argument for pattern",
+			"  //ctx-re-match-no_arg.star:6:15: in cb\n",
 		},
 		{
 			"ctx-scm-affected_files-arg.star",
-			"affected_files: got 1 arguments, want at most 0",
-			"  //ctx-scm-affected_files-arg.star:6:25: in cb\n" +
-				"Error in affected_files: affected_files: got 1 arguments, want at most 0",
+			"ctx.scm.affected_files: got 1 arguments, want at most 0",
+			"  //ctx-scm-affected_files-arg.star:6:25: in cb\n",
 		},
 		{
 			"ctx-scm-affected_files-kwarg.star",
-			"affected_files: unexpected keyword argument \"unexpected\"",
-			"  //ctx-scm-affected_files-kwarg.star:6:25: in cb\n" +
-				"Error in affected_files: affected_files: unexpected keyword argument \"unexpected\"",
+			"ctx.scm.affected_files: unexpected keyword argument \"unexpected\"",
+			"  //ctx-scm-affected_files-kwarg.star:6:25: in cb\n",
 		},
 		{
 			"ctx-scm-all_files-arg.star",
-			"all_files: got 1 arguments, want at most 0",
-			"  //ctx-scm-all_files-arg.star:6:20: in cb\n" +
-				"Error in all_files: all_files: got 1 arguments, want at most 0",
+			"ctx.scm.all_files: got 1 arguments, want at most 0",
+			"  //ctx-scm-all_files-arg.star:6:20: in cb\n",
 		},
 		{
 			"ctx-scm-all_files-kwarg.star",
-			"all_files: unexpected keyword argument \"unexpected\"",
-			"  //ctx-scm-all_files-kwarg.star:6:20: in cb\n" +
-				"Error in all_files: all_files: unexpected keyword argument \"unexpected\"",
+			"ctx.scm.all_files: unexpected keyword argument \"unexpected\"",
+			"  //ctx-scm-all_files-kwarg.star:6:20: in cb\n",
 		},
 		{
 			"empty.star",
@@ -515,57 +462,47 @@ func TestTestDataFailOrThrow(t *testing.T) {
 		},
 		{
 			"fail-check.star",
-			"an  unexpected  failure  None\nfail: unexpected keyword argument \"unknown\"",
-			"  //fail-check.star:6:7: in cb\n" +
-				"  <builtin>: in fail\n" +
-				"Error: an  unexpected  failure  None\nfail: unexpected keyword argument \"unknown\"",
+			"fail: an  unexpected  failure  None\nfail: unexpected keyword argument \"unknown\"",
+			"  //fail-check.star:6:7: in cb\n",
 		},
 		{
 			"fail.star",
-			"an expected failure",
-			`  //fail.star:5:5: in <toplevel>` + "\n" +
-				`  <builtin>: in fail` + "\n" +
-				`Error: an expected failure`,
+			"fail: an expected failure",
+			"  //fail.star:5:5: in <toplevel>\n",
 		},
 		{
 			"shac-immutable.star",
 			"can't assign to .key field of struct",
-			"  //shac-immutable.star:6:5: in <toplevel>\n" +
-				"Error: can't assign to .key field of struct",
+			"  //shac-immutable.star:6:5: in <toplevel>\n",
 		},
 		{
 			"shac-register_check-builtin.star",
-			"callback must be a function accepting one \"ctx\" argument",
-			"  //shac-register_check-builtin.star:5:20: in <toplevel>\n" +
-				"Error in register_check: callback must be a function accepting one \"ctx\" argument",
+			"shac.register_check: callback must be a function accepting one \"ctx\" argument",
+			"  //shac-register_check-builtin.star:5:20: in <toplevel>\n",
 		},
 		{
 			"shac-register_check-callback.star",
-			"callback must be a function accepting one \"ctx\" argument",
-			"  //shac-register_check-callback.star:8:20: in <toplevel>\n" +
-				"Error in register_check: callback must be a function accepting one \"ctx\" argument",
+			"shac.register_check: callback must be a function accepting one \"ctx\" argument",
+			"  //shac-register_check-callback.star:8:20: in <toplevel>\n",
 		},
 		{
 			"shac-register_check-kwarg.star",
-			"register_check: unexpected keyword argument \"invalid\"",
-			`  //shac-register_check-kwarg.star:8:20: in <toplevel>` + "\n" +
-				`Error in register_check: register_check: unexpected keyword argument "invalid"`,
+			"shac.register_check: unexpected keyword argument \"invalid\"",
+			"  //shac-register_check-kwarg.star:8:20: in <toplevel>\n",
 		},
 		{
 			"shac-register_check-no_arg.star",
-			"register_check: missing argument for callback",
-			`  //shac-register_check-no_arg.star:5:20: in <toplevel>` + "\n" +
-				`Error in register_check: register_check: missing argument for callback`,
+			"shac.register_check: missing argument for callback",
+			"  //shac-register_check-no_arg.star:5:20: in <toplevel>\n",
 		},
 		{
 			"shac-register_check-recursive.star",
-			"can't register checks after done loading",
-			"  //shac-register_check-recursive.star:9:22: in cb1\n" +
-				"Error in register_check: can't register checks after done loading",
+			"shac.register_check: can't register checks after done loading",
+			"  //shac-register_check-recursive.star:9:22: in cb1\n",
 		},
 		{
 			"shac-register_check-return.star",
-			`check "cb" returned an object of type string, expected None`,
+			"check \"cb\" returned an object of type string, expected None",
 			"",
 		},
 		{
@@ -601,9 +538,9 @@ func TestTestDataFailOrThrow(t *testing.T) {
 			var err2 BacktracableError
 			if errors.As(err, &err2) != expectTrace {
 				if expectTrace {
-					t.Fatal("expected backtracable error")
+					t.Fatal("expected BacktracableError")
 				} else {
-					t.Fatalf("unexpected backtracable error: %s", err2.Backtrace())
+					t.Fatalf("unexpected BacktracableError: %s", err2.Backtrace())
 				}
 			}
 			if expectTrace {
@@ -719,16 +656,16 @@ func TestTestDataPrint(t *testing.T) {
 		},
 		{
 			"ctx-re-allmatches.star",
-			`[//ctx-re-allmatches.star:7] ()` + "\n" +
-				`[//ctx-re-allmatches.star:9] (match(groups = ("TODO(foo)",), offset = 4), match(groups = ("TODO(bar)",), offset = 14))` + "\n" +
-				`[//ctx-re-allmatches.star:11] (match(groups = ("anc", "n", "c"), offset = 0),)` + "\n",
+			"[//ctx-re-allmatches.star:7] ()\n" +
+				"[//ctx-re-allmatches.star:9] (match(groups = (\"TODO(foo)\",), offset = 4), match(groups = (\"TODO(bar)\",), offset = 14))\n" +
+				"[//ctx-re-allmatches.star:11] (match(groups = (\"anc\", \"n\", \"c\"), offset = 0),)\n",
 		},
 		{
 			"ctx-re-match.star",
-			`[//ctx-re-match.star:7] None` + "\n" +
-				`[//ctx-re-match.star:9] match(groups = ("TODO(foo)",), offset = 4)` + "\n" +
-				`[//ctx-re-match.star:11] match(groups = ("anc", "n", "c"), offset = 0)` + "\n" +
-				`[//ctx-re-match.star:13] match(groups = ("a", None), offset = 0)` + "\n",
+			"[//ctx-re-match.star:7] None\n" +
+				"[//ctx-re-match.star:9] match(groups = (\"TODO(foo)\",), offset = 4)\n" +
+				"[//ctx-re-match.star:11] match(groups = (\"anc\", \"n\", \"c\"), offset = 0)\n" +
+				"[//ctx-re-match.star:13] match(groups = (\"a\", None), offset = 0)\n",
 		},
 		{
 			"dir-ctx.star",

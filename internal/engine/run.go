@@ -153,6 +153,10 @@ func (s *state) parse(ctx context.Context) error {
 			// We got a fail() call, use this instead.
 			return s.failErr
 		}
+		var evalErr *starlark.EvalError
+		if errors.As(err, &evalErr) {
+			return &evalError{evalErr}
+		}
 		return err
 	}
 	s.doneLoading = true
@@ -230,7 +234,10 @@ func (c *check) call(ctx context.Context, intr *interpreter.Interpreter) error {
 			// fail() was called, return this error since this is an abnormal failure.
 			return c.failErr
 		}
-		return err
+		var evalErr *starlark.EvalError
+		if errors.As(err, &evalErr) {
+			return &evalError{evalErr}
+		}
 	} else if r != starlark.None {
 		return fmt.Errorf("check %q returned an object of type %s, expected None", c.name, r.Type())
 	}

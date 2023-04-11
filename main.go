@@ -19,10 +19,9 @@ func main() {
 	if err := cli.Main(os.Args); err != nil && !errors.Is(err, flag.ErrHelp) {
 		var stackerr engine.BacktracableError
 		if errors.As(err, &stackerr) {
-			fmt.Fprintf(os.Stderr, "shac: %s\n", stackerr.Backtrace())
-		} else {
-			fmt.Fprintf(os.Stderr, "shac: %s\n", err)
+			_, _ = os.Stderr.WriteString(stackerr.Backtrace())
 		}
+		_, _ = fmt.Fprintf(os.Stderr, "shac: %s\n", err)
 		os.Exit(1)
 	}
 }

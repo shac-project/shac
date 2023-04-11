@@ -5,7 +5,7 @@
 package engine
 
 import (
-	"errors"
+	"fmt"
 
 	"go.chromium.org/luci/starlark/interpreter"
 	"go.starlark.net/starlark"
@@ -30,20 +30,20 @@ func ctxEmitAnnotation(th *starlark.Thread, fn *starlark.Builtin, args starlark.
 	switch level {
 	case "notice", "warning", "error":
 	default:
-		return nil, errors.New("a valid level is required, use one of \"notice\", \"warning\" or \"error\"")
+		return nil, fmt.Errorf("%s: a valid level is required, use one of \"notice\", \"warning\" or \"error\"", fn.Name())
 	}
 	message := string(argmessage)
 	if len(message) == 0 {
-		return nil, errors.New("a message is required")
+		return nil, fmt.Errorf("%s: a message is required", fn.Name())
 	}
 	file := string(argfile)
 	span := starlarkToSpan(argspan)
 	if span.Start.Line == -1 || span.End.Line == -1 {
-		return nil, errors.New("invalid span, expect ((line, col), (line, col))")
+		return nil, fmt.Errorf("%s: invalid span, expect ((line, col), (line, col))", fn.Name())
 	}
 	replacements := tupleToString(argreplacements)
 	if replacements == nil {
-		return nil, errors.New("invalid replacements, expect tuple of str")
+		return nil, fmt.Errorf("%s: invalid replacements, expect tuple of str", fn.Name())
 	}
 	ctx := interpreter.Context(th)
 	s := ctxState(ctx)
@@ -52,8 +52,7 @@ func ctxEmitAnnotation(th *starlark.Thread, fn *starlark.Builtin, args starlark.
 		c.hadError = true
 	}
 	if err := s.r.EmitAnnotation(ctx, c.name, level, message, file, span, replacements); err != nil {
-		// Surface the error to starlark, is it the right thing to do?
-		return nil, err
+		return nil, fmt.Errorf("%s: failed to emit: %w", fn.Name(), err)
 	}
 	return starlark.None, nil
 }
