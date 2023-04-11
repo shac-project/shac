@@ -48,6 +48,9 @@ func ctxEmitAnnotation(th *starlark.Thread, fn *starlark.Builtin, args starlark.
 	ctx := interpreter.Context(th)
 	s := ctxState(ctx)
 	c := ctxCheck(ctx)
+	if level == "error" {
+		c.hadError = true
+	}
 	if err := s.r.EmitAnnotation(ctx, c.name, level, message, file, span, replacements); err != nil {
 		// Surface the error to starlark, is it the right thing to do?
 		return nil, err

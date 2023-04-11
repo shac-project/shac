@@ -5,8 +5,15 @@
 package engine
 
 import (
+	"errors"
+
 	"go.starlark.net/starlark"
 )
+
+// ErrCheckFailed is returned by Run() when at least one check failed.
+//
+// The information will have been provided via the Report interface.
+var ErrCheckFailed = errors.New("a check failed")
 
 // BacktracableError is an error that has a starlark backtrace attached to it.
 type BacktracableError interface {

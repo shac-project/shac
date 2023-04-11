@@ -622,7 +622,22 @@ func TestTestDataEmit(t *testing.T) {
 	data := []struct {
 		name        string
 		annotations []annotation
+		err         string
 	}{
+		{
+			"ctx-emit-annotation-error.star",
+			[]annotation{
+				{
+					Check:        "cb",
+					Level:        "error",
+					Message:      "bad code",
+					File:         "file.txt",
+					Span:         Span{Start: Cursor{Line: 1, Col: 1}, End: Cursor{Line: 10, Col: 1}},
+					Replacements: []string{"nothing", "broken code"},
+				},
+			},
+			"a check failed",
+		},
 		{
 			"ctx-emit-annotation.star",
 			[]annotation{
@@ -642,6 +657,7 @@ func TestTestDataEmit(t *testing.T) {
 					Replacements: []string{},
 				},
 			},
+			"",
 		},
 	}
 	want := make([]string, len(data))
@@ -655,7 +671,16 @@ func TestTestDataEmit(t *testing.T) {
 		i := i
 		t.Run(data[i].name, func(t *testing.T) {
 			r := reportEmit{reportNoPrint: reportNoPrint{t: t}}
-			if err := Run(context.Background(), root, data[i].name, false, &r); err != nil {
+			err := Run(context.Background(), root, data[i].name, false, &r)
+			if data[i].err != "" {
+				if err == nil {
+					t.Fatal("expected error")
+				}
+				got := err.Error()
+				if data[i].err != got {
+					t.Fatal(got)
+				}
+			} else if err != nil {
 				t.Fatal(err)
 			}
 			if diff := cmp.Diff(data[i].annotations, r.annotations); diff != "" {

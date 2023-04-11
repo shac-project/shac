@@ -85,7 +85,16 @@ func Run(ctx context.Context, root, main string, allFiles bool, r Report) error 
 		return errors.New("did you forget to call shac.register_check?")
 	}
 	// Last phase where checks are called.
-	return s.callAllChecks(ctx)
+	if err := s.callAllChecks(ctx); err != nil {
+		return err
+	}
+	// If any check failed, return an error.
+	for i := range s.checks {
+		if s.checks[i].hadError {
+			return ErrCheckFailed
+		}
+	}
+	return nil
 }
 
 // inputs represents a starlark package.
@@ -144,8 +153,6 @@ func (s *state) parse(ctx context.Context) error {
 		}
 		return err
 	}
-	// TODO(maruel): Error if there are unconsumed variables once variables are
-	// added.
 	s.doneLoading = true
 	return nil
 }
@@ -189,10 +196,12 @@ func (s *shacState) callAllChecks(ctx context.Context) error {
 	return eg.Wait()
 }
 
+// check represents one check added via shac.register_check().
 type check struct {
-	cb      starlark.Callable
-	name    string
-	failErr *failure
+	cb       starlark.Callable
+	name     string
+	failErr  *failure // set when fail() is called from within the check, an abnormal failure.
+	hadError bool     // set when an error is emitted via Report, a normal error.
 }
 
 var checkCtxKey = "shac.check"
@@ -205,6 +214,9 @@ func ctxCheck(ctx context.Context) *check {
 	return c
 }
 
+// call calls the check callback and returns an error if an abnormal error happened.
+//
+// A "normal" error will still have this function return nil.
 func (c *check) call(ctx context.Context, intr *interpreter.Interpreter) error {
 	ctx = context.WithValue(ctx, &checkCtxKey, c)
 	th := intr.Thread(ctx)
