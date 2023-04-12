@@ -48,8 +48,8 @@ def new_todos(ctx):
         level = "error"
         message = "Use a valid username in your TODO, %r is not valid" % m.groups[1]
       ctx.emit.annotation(
-          level="error",
-          message="Use a valid username in your TODO, %r is not valid" % m.groups[1],
+          level=level,
+          message=message,
           filepath=path,
           line=num,
           col=line.index(m.groups[0])+1,
