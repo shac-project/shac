@@ -542,7 +542,7 @@ def print(*args, sep = " "):
   https://github.com/google/starlark-go/blob/HEAD/doc/spec.md#print.
 
   Args:
-    args: Arguments to print out.
+    *args: Arguments to print out.
     sep: (optional) Separator between the items in args. Defaults to " ".
   """
   pass
@@ -582,7 +582,7 @@ shac = struct(
 )
 
 
-def struct_():
+def struct_(**kwargs):
   """Creates and return a structure instance.
 
   This a non-standard function that enables creating an "object" that has

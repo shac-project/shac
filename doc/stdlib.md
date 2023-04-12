@@ -545,7 +545,7 @@ print("shac", "is", "great")
 
 ### Arguments
 
-* **args**: Arguments to print out.
+* **\*args**: Arguments to print out.
 * **sep**: (optional) Separator between the items in args. Defaults to " ".
 
 ## shac
