@@ -18,6 +18,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
+	"os"
 
 	"go.starlark.net/starlark"
 )
@@ -115,6 +117,7 @@ func ctxEmitArtifact(ctx context.Context, s *state, name string, args starlark.T
 	}
 	f := string(argfilepath)
 	var content []byte
+	root := ""
 	switch v := argcontent.(type) {
 	case starlark.Bytes:
 		// TODO(maruel): Use unsafe conversion to save a memory copy.
@@ -123,18 +126,27 @@ func ctxEmitArtifact(ctx context.Context, s *state, name string, args starlark.T
 		// TODO(maruel): Use unsafe conversion to save a memory copy.
 		content = []byte(v)
 	case starlark.NoneType:
-		dst, err := absPath(f, s.inputs.root)
+		root = s.inputs.root
+		dst, err := absPath(f, root)
 		if err != nil {
-			return err
+			return fmt.Errorf("for parameter \"filepath\": %s %w", argfilepath, err)
 		}
-		if content, err = readFile(dst, -1); err != nil {
-			return err
+		// Make sure the file exist, but do not load it.
+		if info, err := os.Stat(dst); err != nil {
+			if errors.Is(err, fs.ErrNotExist) {
+				// Hide the underlying error for determinism.
+				return fmt.Errorf("for parameter \"filepath\": %q not found", f)
+			}
+			// Something other than a file not found error, return it as is.
+			return fmt.Errorf("for parameter \"filepath\": %w", err)
+		} else if info.IsDir() {
+			return fmt.Errorf("for parameter \"filepath\": %q is a directory", f)
 		}
 	default:
 		return fmt.Errorf("for parameter \"content\": got %s, want str or bytes", argcontent.Type())
 	}
 	c := ctxCheck(ctx)
-	if err := s.r.EmitArtifact(ctx, c.name, f, content); err != nil {
+	if err := s.r.EmitArtifact(ctx, c.name, root, f, content); err != nil {
 		return fmt.Errorf("failed to emit: %w", err)
 	}
 	return nil

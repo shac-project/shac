@@ -68,7 +68,7 @@ func (b *basic) EmitAnnotation(ctx context.Context, check string, level engine.L
 	return err
 }
 
-func (b *basic) EmitArtifact(ctx context.Context, check, file string, content []byte) error {
+func (b *basic) EmitArtifact(ctx context.Context, check, root, file string, content []byte) error {
 	return errors.New("not implemented")
 }
 
@@ -91,7 +91,7 @@ func (g *github) EmitAnnotation(ctx context.Context, check string, level engine.
 	return err
 }
 
-func (g *github) EmitArtifact(ctx context.Context, check, file string, content []byte) error {
+func (g *github) EmitArtifact(ctx context.Context, check, root, file string, content []byte) error {
 	return errors.New("not implemented")
 }
 
@@ -122,7 +122,7 @@ func (i *interactive) EmitAnnotation(ctx context.Context, check string, level en
 	return err
 }
 
-func (i *interactive) EmitArtifact(ctx context.Context, check, file string, content []byte) error {
+func (i *interactive) EmitArtifact(ctx context.Context, root, check, file string, content []byte) error {
 	return errors.New("not implemented")
 }
 

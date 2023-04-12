@@ -85,7 +85,12 @@ type Report interface {
 	// not a failure by itself, unless level "error" is used.
 	EmitAnnotation(ctx context.Context, check string, level Level, message, file string, s Span, replacements []string) error
 	// EmitArtifact emits an artifact by a check.
-	EmitArtifact(ctx context.Context, check, file string, content []byte) error
+	//
+	// Only one of root or content can be specified. If root is specified, it is
+	// a file on disk. The file may disappear after this function is called. If
+	// root is not specified, content is the artifact. Either way, file is the
+	// display name of the artifact.
+	EmitArtifact(ctx context.Context, check, root, file string, content []byte) error
 	// Print is called when print() starlark function is called.
 	Print(ctx context.Context, file string, line int, message string)
 }

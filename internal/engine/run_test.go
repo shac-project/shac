@@ -282,16 +282,6 @@ func TestRun_SCM_Git_Broken(t *testing.T) {
 func TestTestDataFailOrThrow(t *testing.T) {
 	t.Parallel()
 	p, got := enumDir(t, "fail_or_throw")
-	fail, err := filepath.Abs(filepath.Join("testdata", "fail_or_throw"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	// TODO(maruel): This error comes from the OS, thus this is a very brittle
-	// expectation.
-	inexistantErr := "no such file or directory"
-	if runtime.GOOS == "windows" {
-		inexistantErr = "The system cannot find the file specified."
-	}
 	data := []struct {
 		name  string
 		err   string
@@ -370,8 +360,13 @@ func TestTestDataFailOrThrow(t *testing.T) {
 			"  //ctx-emit-annotation-replacements.star:16:22: in cb\n",
 		},
 		{
+			"ctx-emit-artifact-dir.star",
+			"ctx.emit.artifact: for parameter \"filepath\": \".\" is a directory",
+			"  //ctx-emit-artifact-dir.star:16:20: in cb\n",
+		},
+		{
 			"ctx-emit-artifact-inexistant.star",
-			"ctx.emit.artifact: open " + fail + "/inexistant" + ": " + inexistantErr,
+			"ctx.emit.artifact: for parameter \"filepath\": \"inexistant\" not found",
 			"  //ctx-emit-artifact-inexistant.star:16:20: in cb\n",
 		},
 		{
@@ -386,7 +381,7 @@ func TestTestDataFailOrThrow(t *testing.T) {
 		},
 		{
 			"ctx-emit-artifact-windows.star",
-			"ctx.emit.artifact: use POSIX style path",
+			"ctx.emit.artifact: for parameter \"filepath\": \"foo\\\\bar\" use POSIX style path",
 			"  //ctx-emit-artifact-windows.star:16:20: in cb\n",
 		},
 		{
@@ -396,29 +391,22 @@ func TestTestDataFailOrThrow(t *testing.T) {
 		},
 		{
 			"ctx-io-read_file-abs.star",
-			"ctx.io.read_file: do not use absolute path",
+			"ctx.io.read_file: for parameter \"filepath\": \"/dev/null\" do not use absolute path",
 			"  //ctx-io-read_file-abs.star:16:19: in cb\n",
 		},
 		{
 			"ctx-io-read_file-dir.star",
-			func() string {
-				// TODO(maruel): This error comes from the OS, thus this is a very
-				// brittle test case.
-				if runtime.GOOS == "windows" {
-					return "ctx.io.read_file: read " + fail + ": Incorrect function."
-				}
-				return "ctx.io.read_file: read " + fail + ": is a directory"
-			}(),
+			"ctx.io.read_file: for parameter \"filepath\": \".\" is a directory",
 			"  //ctx-io-read_file-dir.star:16:19: in cb\n",
 		},
 		{
 			"ctx-io-read_file-escape.star",
-			"ctx.io.read_file: cannot escape root",
+			"ctx.io.read_file: for parameter \"filepath\": \"../checks.go\" cannot escape root",
 			"  //ctx-io-read_file-escape.star:16:19: in cb\n",
 		},
 		{
 			"ctx-io-read_file-inexistant.star",
-			"ctx.io.read_file: open " + fail + "/inexistant" + ": " + inexistantErr,
+			"ctx.io.read_file: for parameter \"filepath\": \"inexistant\" not found",
 			"  //ctx-io-read_file-inexistant.star:16:19: in cb\n",
 		},
 		{
@@ -428,7 +416,7 @@ func TestTestDataFailOrThrow(t *testing.T) {
 		},
 		{
 			"ctx-io-read_file-size_big.star",
-			"ctx.io.read_file: invalid size",
+			"ctx.io.read_file: for parameter \"size\": 36893488147419103232 is an invalid size",
 			"  //ctx-io-read_file-size_big.star:16:19: in cb\n",
 		},
 		{
@@ -438,12 +426,12 @@ func TestTestDataFailOrThrow(t *testing.T) {
 		},
 		{
 			"ctx-io-read_file-unclean.star",
-			"ctx.io.read_file: pass cleaned path",
+			"ctx.io.read_file: for parameter \"filepath\": \"path/../file.txt\" pass cleaned path",
 			"  //ctx-io-read_file-unclean.star:16:19: in cb\n",
 		},
 		{
 			"ctx-io-read_file-windows.star",
-			"ctx.io.read_file: use POSIX style path",
+			"ctx.io.read_file: for parameter \"filepath\": \"test\\\\data.txt\" use POSIX style path",
 			"  //ctx-io-read_file-windows.star:16:19: in cb\n",
 		},
 		{
@@ -670,9 +658,9 @@ func TestTestDataEmit(t *testing.T) {
 					Content: []byte("content as bytes"),
 				},
 				{
-					Check:   "cb",
-					File:    "file.txt",
-					Content: []byte("content as a file\n"),
+					Check: "cb",
+					Root:  root,
+					File:  "file.txt",
 				},
 			},
 			"",
@@ -799,7 +787,10 @@ func testStarlarkPrint(t *testing.T, root, name string, all bool, want string) {
 }
 
 func enumDir(t *testing.T, name string) (string, []string) {
-	p := filepath.Join("testdata", name)
+	p, err := filepath.Abs(filepath.Join("testdata", name))
+	if err != nil {
+		t.Fatal(err)
+	}
 	d, err := os.ReadDir(p)
 	if err != nil {
 		t.Fatal(err)
@@ -891,7 +882,7 @@ func (r *reportNoPrint) EmitAnnotation(ctx context.Context, check string, level 
 	return errors.New("not implemented")
 }
 
-func (r *reportNoPrint) EmitArtifact(ctx context.Context, check, file string, content []byte) error {
+func (r *reportNoPrint) EmitArtifact(ctx context.Context, check, root, file string, content []byte) error {
 	r.t.Errorf("unexpected artifact: %s: %s", check, file)
 	return errors.New("not implemented")
 }
@@ -930,6 +921,7 @@ type annotation struct {
 
 type artifact struct {
 	Check   string
+	Root    string
 	File    string
 	Content []byte
 }
@@ -948,9 +940,9 @@ func (r *reportEmit) EmitAnnotation(ctx context.Context, check string, level Lev
 	return nil
 }
 
-func (r *reportEmit) EmitArtifact(ctx context.Context, check, file string, content []byte) error {
+func (r *reportEmit) EmitArtifact(ctx context.Context, check, root, file string, content []byte) error {
 	r.mu.Lock()
-	r.artifacts = append(r.artifacts, artifact{Check: check, File: file, Content: content})
+	r.artifacts = append(r.artifacts, artifact{Check: check, Root: root, File: file, Content: content})
 	r.mu.Unlock()
 	return nil
 }

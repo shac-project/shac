@@ -17,7 +17,9 @@ package engine
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path"
@@ -71,15 +73,20 @@ func ctxIoReadFile(ctx context.Context, s *state, name string, args starlark.Tup
 	}
 	size, ok := argsize.Int64()
 	if !ok {
-		return nil, errors.New("invalid size")
+		return nil, fmt.Errorf("for parameter \"size\": %s is an invalid size", argsize)
 	}
 	dst, err := absPath(string(argfilepath), s.inputs.root)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("for parameter \"filepath\": %s %w", argfilepath, err)
 	}
 	b, err := readFile(dst, size)
 	if err != nil {
-		return nil, err
+		if errors.Is(err, fs.ErrNotExist) {
+			// Hide the underlying error for determinism.
+			return nil, fmt.Errorf("for parameter \"filepath\": %s not found", argfilepath)
+		}
+		// Something other than a file not found error, return it as is.
+		return nil, fmt.Errorf("for parameter \"filepath\": %s %w", argfilepath, err)
 	}
 	// TODO(maruel): Use unsafe conversion to save a memory copy.
 	return starlark.Bytes(b), nil
@@ -155,6 +162,9 @@ func readFile(name string, max int64) ([]byte, error) {
 	info, err := f.Stat()
 	if err != nil {
 		return nil, err
+	}
+	if info.IsDir() {
+		return nil, fmt.Errorf("is a directory")
 	}
 	size := info.Size()
 	if max > 0 && size > max {
