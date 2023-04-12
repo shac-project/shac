@@ -151,7 +151,7 @@ def _ctx_io_read_file(filepath, size = None):
   pass
 
 
-def _ctx_os_exec(cmd, cwd = None, raise_on_failure = True):
+def _ctx_os_exec(cmd, cwd = None, env = None, raise_on_failure = True):
   """Runs a command as a subprocess.
 
   Example:
@@ -163,6 +163,9 @@ def _ctx_os_exec(cmd, cwd = None, raise_on_failure = True):
     shac.register_check(cb)
     ```
 
+    Use `raise_on_failure = False` to prevent a non-zero retcode from
+    automatically failing the check:
+
     ```python
     def cb(ctx):
       res = ctx.os.exec(["cat", "does-not-exist.txt"], raise_on_failure = False)
@@ -172,10 +175,21 @@ def _ctx_os_exec(cmd, cwd = None, raise_on_failure = True):
     shac.register_check(cb)
     ```
 
+    Use `env` to pass environment variables:
+
+    ```python
+    def cb(ctx):
+      ctx.os.exec(["foo"], env = {"FOO_CONFIG": "foo.config"})
+
+    shac.register_check(cb)
+    ```
+
   Args:
     cmd: Subprocess command line.
     cwd: (optional) Relative path to cwd for the subprocess. Defaults to the
       directory containing shac.star.
+    env: (optional) Dictionary of environment variables to set for the
+      subprocess.
     raise_on_failure: (optional): Whether the running check should automatically
       fail if the subcommand returns a non-zero exit code. Defaults to true.
 

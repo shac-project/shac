@@ -539,6 +539,16 @@ func TestTestDataFailOrThrow(t *testing.T) {
 			"  //ctx-os-exec-bad_arg.star:16:14: in cb\n",
 		},
 		{
+			"ctx-os-exec-bad_env_key.star",
+			"ctx.os.exec: \"env\" key is not a string: 1",
+			"  //ctx-os-exec-bad_env_key.star:16:14: in cb\n",
+		},
+		{
+			"ctx-os-exec-bad_env_value.star",
+			"ctx.os.exec: \"env\" value is not a string: 1",
+			"  //ctx-os-exec-bad_env_value.star:16:14: in cb\n",
+		},
+		{
 			"ctx-os-exec-bad_type_in_args.star",
 			"ctx.os.exec: for parameter \"cmd\": got list, want sequence of str",
 			"  //ctx-os-exec-bad_type_in_args.star:16:14: in cb\n",
@@ -845,50 +855,62 @@ func TestTestDataPrint(t *testing.T) {
 	p, got := enumDir(t, "print")
 	v := fmt.Sprintf("(%d, %d, %d)", version[0], version[1], version[2])
 	data := []struct {
-		name string
-		want string
+		name        string
+		want        string
+		skipWindows bool
 	}{
 		{
-			"ctx-io-read_file-size.star",
-			"[//ctx-io-read_file-size.star:16] {\n  \"key\":\n",
+			name: "ctx-io-read_file-size.star",
+			want: "[//ctx-io-read_file-size.star:16] {\n  \"key\":\n",
 		},
 		{
-			"ctx-io-read_file.star",
-			"[//ctx-io-read_file.star:17] {\"key\": \"value\"}\n",
+			name: "ctx-io-read_file.star",
+			want: "[//ctx-io-read_file.star:17] {\"key\": \"value\"}\n",
 		},
 		{
-			"ctx-os-exec-success.star",
-			"[//ctx-os-exec-success.star:17] retcode: 0\n" +
-				"[//ctx-os-exec-success.star:18] stdout: hello world\n",
+			name: "ctx-os-exec-env.star",
+			want: "[//ctx-os-exec-env.star:17] FOO=foo-value\nBAR=bar-value\n",
+			// TODO(olivernewman): Make this test support Windows by running a
+			// batch file instead of a shell script.
+			skipWindows: true,
 		},
 		{
-			"ctx-re-allmatches.star",
-			"[//ctx-re-allmatches.star:17] ()\n" +
+			name: "ctx-os-exec-success.star",
+			want: "[//ctx-os-exec-success.star:17] retcode: 0\n" +
+				"[//ctx-os-exec-success.star:18] stdout: hello from stdout\n" +
+				"[//ctx-os-exec-success.star:19] stderr: hello from stderr\n",
+			// TODO(olivernewman): Make this test support Windows by running a
+			// batch file instead of a shell script.
+			skipWindows: true,
+		},
+		{
+			name: "ctx-re-allmatches.star",
+			want: "[//ctx-re-allmatches.star:17] ()\n" +
 				"[//ctx-re-allmatches.star:19] (match(groups = (\"TODO(foo)\",), offset = 4), match(groups = (\"TODO(bar)\",), offset = 14))\n" +
 				"[//ctx-re-allmatches.star:21] (match(groups = (\"anc\", \"n\", \"c\"), offset = 0),)\n",
 		},
 		{
-			"ctx-re-match.star",
-			"[//ctx-re-match.star:17] None\n" +
+			name: "ctx-re-match.star",
+			want: "[//ctx-re-match.star:17] None\n" +
 				"[//ctx-re-match.star:19] match(groups = (\"TODO(foo)\",), offset = 4)\n" +
 				"[//ctx-re-match.star:21] match(groups = (\"anc\", \"n\", \"c\"), offset = 0)\n" +
 				"[//ctx-re-match.star:23] match(groups = (\"a\", None), offset = 0)\n",
 		},
 		{
-			"dir-ctx.star",
-			"[//dir-ctx.star:16] [\"emit\", \"io\", \"os\", \"re\", \"scm\"]\n",
+			name: "dir-ctx.star",
+			want: "[//dir-ctx.star:16] [\"emit\", \"io\", \"os\", \"re\", \"scm\"]\n",
 		},
 		{
-			"dir-shac.star",
-			"[//dir-shac.star:15] [\"commit_hash\", \"register_check\", \"version\"]\n",
+			name: "dir-shac.star",
+			want: "[//dir-shac.star:15] [\"commit_hash\", \"register_check\", \"version\"]\n",
 		},
 		{
-			"print-shac-version.star",
-			"[//print-shac-version.star:15] " + v + "\n",
+			name: "print-shac-version.star",
+			want: "[//print-shac-version.star:15] " + v + "\n",
 		},
 		{
-			"shac-register_check.star",
-			"[//shac-register_check.star:16] running\n",
+			name: "shac-register_check.star",
+			want: "[//shac-register_check.star:16] running\n",
 		},
 	}
 	want := make([]string, len(data))
@@ -901,6 +923,9 @@ func TestTestDataPrint(t *testing.T) {
 	for i := range data {
 		i := i
 		t.Run(data[i].name, func(t *testing.T) {
+			if runtime.GOOS == "windows" && data[i].skipWindows {
+				t.Skip("not supported on windows")
+			}
 			testStarlarkPrint(t, p, data[i].name, false, data[i].want)
 		})
 	}

@@ -1,3 +1,4 @@
+#!/usr/bin/sh
 # Copyright 2023 The Shac Authors
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,10 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-def cb(ctx):
-  res = ctx.os.exec(["./stdio.sh"])
-  print("retcode: %d" % res.retcode)
-  print("stdout: %s" % res.stdout.strip())
-  print("stderr: %s" % res.stderr.strip())
+set -eu
 
-shac.register_check(cb)
+echo "hello from stdout"
+echo "hello from stderr" >&2

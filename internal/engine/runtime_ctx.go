@@ -98,10 +98,12 @@ func ctxIoReadFile(ctx context.Context, s *state, name string, args starlark.Tup
 func ctxOsExec(ctx context.Context, s *state, name string, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	var argcmd starlark.Sequence
 	var argcwd starlark.String
+	var argenv = starlark.NewDict(0)
 	var argraiseOnFailure starlark.Bool = true
 	if err := starlark.UnpackArgs(name, args, kwargs,
 		"cmd", &argcmd,
 		"cwd?", &argcwd,
+		"env?", &argenv,
 		"raise_on_failure?", &argraiseOnFailure,
 	); err != nil {
 		return nil, err
@@ -134,6 +136,19 @@ func ctxOsExec(ctx context.Context, s *state, name string, args starlark.Tuple, 
 	var stderr strings.Builder
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
+
+	cmd.Env = os.Environ()
+	for _, item := range argenv.Items() {
+		k, ok := item[0].(starlark.String)
+		if !ok {
+			return nil, fmt.Errorf("\"env\" key is not a string: %s", item[0])
+		}
+		v, ok := item[1].(starlark.String)
+		if !ok {
+			return nil, fmt.Errorf("\"env\" value is not a string: %s", item[1])
+		}
+		cmd.Env = append(cmd.Env, fmt.Sprintf("%s=%s", string(k), string(v)))
+	}
 
 	err := cmd.Run()
 	var retcode int

@@ -13,9 +13,6 @@
 # limitations under the License.
 
 def cb(ctx):
-  res = ctx.os.exec(["./stdio.sh"])
-  print("retcode: %d" % res.retcode)
-  print("stdout: %s" % res.stdout.strip())
-  print("stderr: %s" % res.stderr.strip())
+  ctx.os.exec(["true"], env = {"foo": 1})
 
 shac.register_check(cb)
