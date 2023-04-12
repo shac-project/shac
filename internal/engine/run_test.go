@@ -644,6 +644,11 @@ func TestTestDataFailOrThrow(t *testing.T) {
 			"  //shac-register_check-kwarg.star:18:20: in <toplevel>\n",
 		},
 		{
+			"shac-register_check-lambda.star",
+			"shac.register_check: \"name\" must be set when callback is a lambda",
+			"  //shac-register_check-lambda.star:18:20: in <toplevel>\n",
+		},
+		{
 			"shac-register_check-no_arg.star",
 			"shac.register_check: missing argument for callback",
 			"  //shac-register_check-no_arg.star:15:20: in <toplevel>\n",

@@ -122,6 +122,9 @@ func shacRegisterCheck(ctx context.Context, s *state, name string, args starlark
 	}
 	cname := string(argname)
 	if cname == "" {
+		if cb.Name() == "lambda" {
+			return errors.New("\"name\" must be set when callback is a lambda")
+		}
 		cname = strings.TrimPrefix(cb.Name(), "_")
 	}
 	// We may want to optimize this if we register hundreds of checks.
