@@ -61,6 +61,19 @@ def staticcheck(ctx, version = "v0.4.3"):
     ctx.emit.annotation(level="error", message="failed staticcheck")
 
 
+def shadow(ctx, version = "v0.7.0"):
+  """Runs go vet -vettool=shadow on a Go code base.
+
+  Args:
+    ctx: A ctx instance.
+    version: shadow version to install. Defaults to a recent version, that will
+      be rolled from time to time.
+  """
+  exe = _go_install(ctx, "golang.org/x/tools/go/analysis/passes/shadow/cmd/shadow", version)
+  if ctx.os.exec([exe, "./..."], raise_on_failure = False).retcode:
+    ctx.emit.annotation(level="error", message="failed go vet -vettool=shadow")
+
+
 def _go_install(ctx, pkg, version):
   tool_name = pkg.split("/")[-1]
 

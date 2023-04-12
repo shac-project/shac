@@ -133,10 +133,6 @@ jobs:
       uses: arduino/setup-protoc@v1
       with:
         version: '21.12'
-    - name: 'go install necessary tools'
-      if: always()
-      run: |
-        go install golang.org/x/tools/go/analysis/passes/shadow/cmd/shadow@latest
     - name: 'go install necessary tools (ubuntu)'
       if: always() && matrix.os == 'ubuntu-latest'
       run: |
@@ -145,15 +141,6 @@ jobs:
     - name: 'Check: go vet'
       if: always()
       run: go vet -unsafeptr=false ./...
-    - name: 'Check: go vet shadow; shadowed variables'
-      if: always()
-      run: |
-        SHADOW_TOOL="$(which shadow)"
-        if [ -f "${SHADOW_TOOL}.exe" ]; then
-          SHADOW_TOOL="${SHADOW_TOOL}.exe"
-        fi
-        go vet -vettool=$SHADOW_TOOL ./...
-      # The following checks are not dependent on the OS or go build tags. Only
       # run them on ubuntu-latest since it's the fastest one.
     - name: 'Check: no executable was committed (ubuntu)'
       if: always() && matrix.os == 'ubuntu-latest'
