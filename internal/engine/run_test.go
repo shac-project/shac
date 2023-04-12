@@ -356,7 +356,7 @@ func TestTestDataFailOrThrow(t *testing.T) {
 		},
 		{
 			"ctx-emit-annotation-replacements.star",
-			"ctx.emit.annotation: for parameter \"replacements\": got tuple, want tuple of str",
+			"ctx.emit.annotation: for parameter \"replacements\": got tuple, want sequence of str",
 			"  //ctx-emit-annotation-replacements.star:16:22: in cb\n",
 		},
 		{

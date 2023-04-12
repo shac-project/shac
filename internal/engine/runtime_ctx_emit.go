@@ -32,7 +32,7 @@ func ctxEmitAnnotation(ctx context.Context, s *state, name string, args starlark
 	var argcol starlark.Int
 	var argendCol starlark.Int
 	var argendLine starlark.Int
-	var argreplacements starlark.Tuple
+	var argreplacements starlark.Sequence
 	if err := starlark.UnpackArgs(name, args, kwargs,
 		"level", &arglevel,
 		"message", &argmessage,
@@ -92,9 +92,9 @@ func ctxEmitAnnotation(ctx context.Context, s *state, name string, args starlark
 			return errors.New("for parameter \"col\": \"line\" must be specified")
 		}
 	}
-	replacements := tupleToString(argreplacements)
+	replacements := sequenceToStrings(argreplacements)
 	if replacements == nil {
-		return fmt.Errorf("for parameter \"replacements\": got %s, want tuple of str", argreplacements.Type())
+		return fmt.Errorf("for parameter \"replacements\": got %s, want sequence of str", argreplacements.Type())
 	}
 	c := ctxCheck(ctx)
 	if level == "error" {
@@ -152,15 +152,20 @@ func ctxEmitArtifact(ctx context.Context, s *state, name string, args starlark.T
 	return nil
 }
 
-// tupleToString returns nil on failure.
-func tupleToString(t starlark.Tuple) []string {
-	out := make([]string, len(t))
-	for i := range t {
-		s, ok := t[i].(starlark.String)
+// sequenceToStrings returns nil on failure.
+func sequenceToStrings(s starlark.Sequence) []string {
+	if s == nil {
+		return []string{}
+	}
+	out := make([]string, 0, s.Len())
+	iter := s.Iterate()
+	var x starlark.Value
+	for iter.Next(&x) {
+		s, ok := x.(starlark.String)
 		if !ok {
 			return nil
 		}
-		out[i] = string(s)
+		out = append(out, string(s))
 	}
 	return out
 }

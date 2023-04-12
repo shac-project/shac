@@ -21,6 +21,6 @@ def cb(ctx):
       col=1,
       end_line=10,
       end_col=1,
-      replacements=("nothing", "broken code"))
+      replacements=["nothing", "broken code"])
 
 shac.register_check(cb)
