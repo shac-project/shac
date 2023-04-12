@@ -13,6 +13,8 @@
 # limitations under the License.
 
 def cb(ctx):
-  print("retcode: %d" % ctx.os.exec(["echo", "hello world"]))
+  res = ctx.os.exec(["echo", "hello world"])
+  print("retcode: %d" % res.retcode)
+  print("stdout: %s" % res.stdout.strip())
 
 shac.register_check(cb)

@@ -94,42 +94,34 @@ func ctxIoReadFile(ctx context.Context, s *state, name string, args starlark.Tup
 
 // ctxOsExec implements the native function ctx.os.exec().
 //
-// TODO(olivernewman): Return a struct with stdout and stderr in addition to the
-// exit code.
-//
 // Make sure to update //doc/stdlib.star whenever this function is modified.
 func ctxOsExec(ctx context.Context, s *state, name string, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
-	var rawCmd *starlark.List
-	var cwd starlark.String
+	var argcmd starlark.Sequence
+	var argcwd starlark.String
+	var argraiseOnFailure starlark.Bool = true
 	if err := starlark.UnpackArgs(name, args, kwargs,
-		"cmd", &rawCmd,
-		"cwd?", &cwd,
+		"cmd", &argcmd,
+		"cwd?", &argcwd,
+		"raise_on_failure?", &argraiseOnFailure,
 	); err != nil {
 		return nil, err
 	}
-	if rawCmd.Len() == 0 {
+	if argcmd.Len() == 0 {
 		return nil, errors.New("cmdline must not be an empty list")
 	}
 
-	var parsedCmd []string
-	var val starlark.Value
-	iter := rawCmd.Iterate()
-	defer iter.Done()
-	for iter.Next(&val) {
-		str, ok := val.(starlark.String)
-		if !ok {
-			return nil, errors.New("command args must be strings")
-		}
-		parsedCmd = append(parsedCmd, str.GoString())
+	parsedCmd := sequenceToStrings(argcmd)
+	if parsedCmd == nil {
+		return nil, fmt.Errorf("for parameter \"cmd\": got %s, want sequence of str", argcmd.Type())
 	}
 
 	// TODO(olivernewman): Wrap with nsjail on linux.
 	//#nosec G204
 	cmd := exec.CommandContext(ctx, parsedCmd[0], parsedCmd[1:]...)
 
-	if cwd.GoString() != "" {
+	if argcwd.GoString() != "" {
 		var err error
-		cmd.Dir, err = absPath(cwd.GoString(), s.inputs.root)
+		cmd.Dir, err = absPath(argcwd.GoString(), s.inputs.root)
 		if err != nil {
 			return nil, err
 		}
@@ -137,13 +129,36 @@ func ctxOsExec(ctx context.Context, s *state, name string, args starlark.Tuple, 
 		cmd.Dir = s.inputs.root
 	}
 
-	if err := cmd.Run(); err != nil {
+	// TODO(olivernewman): Also handle commands that may output non-utf-8 bytes.
+	var stdout strings.Builder
+	var stderr strings.Builder
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	err := cmd.Run()
+	var retcode int
+	if err != nil {
 		if errExit := (&exec.ExitError{}); errors.As(err, &errExit) {
-			return starlark.MakeInt(errExit.ExitCode()), nil
+			if argraiseOnFailure {
+				var msgBuilder strings.Builder
+				msgBuilder.WriteString(fmt.Sprintf("command failed with exit code %d: %s", errExit.ExitCode(), argcmd))
+				if stderr.Len() > 0 {
+					msgBuilder.WriteString("\n")
+					msgBuilder.WriteString(stderr.String())
+				}
+				return nil, fmt.Errorf(msgBuilder.String())
+			}
+			retcode = errExit.ExitCode()
+		} else {
+			return nil, err
 		}
-		return nil, err
 	}
-	return starlark.MakeInt(0), nil
+
+	return toValue("completed_subprocess", starlark.StringDict{
+		"retcode": starlark.MakeInt(retcode),
+		"stdout":  starlark.String(stdout.String()),
+		"stderr":  starlark.String(stderr.String()),
+	}), nil
 }
 
 // Support functions.

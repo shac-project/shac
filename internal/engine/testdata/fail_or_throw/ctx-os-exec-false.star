@@ -13,6 +13,6 @@
 # limitations under the License.
 
 def cb(ctx):
-  print("retcode: %d" % ctx.os.exec(["false"]))
+  ctx.os.exec(["false"])
 
 shac.register_check(cb)

@@ -24,9 +24,8 @@ def gosec(ctx, version = "v2.15.0"):
       be rolled from time to time.
   """
   # TODO(maruel): Always install locally with GOBIN=.tools
-  if ctx.os.exec(["go", "install", "github.com/securego/gosec/v2/cmd/gosec@" + version]):
-    fail("failed to install")
-  if ctx.os.exec(["gosec", "-fmt=golint", "-quiet", "-exclude=G304", "-exclude-dir=.tools", "./..."]):
+  ctx.os.exec(["go", "install", "github.com/securego/gosec/v2/cmd/gosec@" + version])
+  if ctx.os.exec(["gosec", "-fmt=golint", "-quiet", "-exclude=G304", "-exclude-dir=.tools", "./..."], raise_on_failure = False).retcode:
     # TODO(maruel): Emits lines.
     ctx.emit.annotation(level="error", message="failed gosec")
 
@@ -42,8 +41,7 @@ def staticcheck(ctx, version = "v0.4.3"):
     will be rolled from time to time.
   """
   # TODO(maruel): Always install locally with GOBIN=.tools
-  if ctx.os.exec(["go", "install", "honnef.co/go/tools/cmd/staticcheck@" + version]):
-    fail("failed to install")
-  if ctx.os.exec(["staticcheck", "./..."]):
+  ctx.os.exec(["go", "install", "honnef.co/go/tools/cmd/staticcheck@" + version])
+  if ctx.os.exec(["staticcheck", "./..."], raise_on_failure = False).retcode:
     # TODO(maruel): Emits lines.
     ctx.emit.annotation(level="error", message="failed staticcheck")

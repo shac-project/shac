@@ -456,7 +456,7 @@ func TestTestDataFailOrThrow(t *testing.T) {
 		},
 		{
 			"ctx-os-exec-bad_type_in_args.star",
-			"ctx.os.exec: command args must be strings",
+			"ctx.os.exec: for parameter \"cmd\": got list, want sequence of str",
 			"  //ctx-os-exec-bad_type_in_args.star:16:14: in cb\n",
 		},
 		{
@@ -468,6 +468,11 @@ func TestTestDataFailOrThrow(t *testing.T) {
 				return "ctx.os.exec: exec: \"this-command-does-not-exist\": executable file not found in $PATH"
 			}(),
 			"  //ctx-os-exec-command_not_in_path.star:16:14: in cb\n",
+		},
+		{
+			"ctx-os-exec-false.star",
+			"ctx.os.exec: command failed with exit code 1: [\"false\"]",
+			"  //ctx-os-exec-false.star:16:14: in cb\n",
 		},
 		{
 			"ctx-os-exec-invalid_cwd.star",
@@ -750,12 +755,9 @@ func TestTestDataPrint(t *testing.T) {
 			"[//ctx-io-read_file.star:17] {\"key\": \"value\"}\n",
 		},
 		{
-			"ctx-os-exec-false.star",
-			"[//ctx-os-exec-false.star:16] retcode: 1\n",
-		},
-		{
 			"ctx-os-exec-success.star",
-			"[//ctx-os-exec-success.star:16] retcode: 0\n",
+			"[//ctx-os-exec-success.star:17] retcode: 0\n" +
+				"[//ctx-os-exec-success.star:18] stdout: hello world\n",
 		},
 		{
 			"ctx-re-allmatches.star",
