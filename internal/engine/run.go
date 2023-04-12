@@ -120,7 +120,7 @@ func Run(ctx context.Context, o *Options) error {
 	if root == "" {
 		root = "."
 	}
-	root, err := filepath.Abs(o.Root)
+	root, err := filepath.Abs(root)
 	if err != nil {
 		return err
 	}
@@ -146,14 +146,14 @@ func Run(ctx context.Context, o *Options) error {
 	}
 	// Parse the starlark file.
 	ctx = context.WithValue(ctx, &stateCtxKey, s)
-	if err := s.parse(ctx); err != nil {
+	if err = s.parse(ctx); err != nil {
 		return err
 	}
 	if len(s.checks) == 0 && !s.printCalled {
 		return errors.New("did you forget to call shac.register_check?")
 	}
 	// Last phase where checks are called.
-	if err := s.callAllChecks(ctx); err != nil {
+	if err = s.callAllChecks(ctx); err != nil {
 		return err
 	}
 	// If any check failed, return an error.

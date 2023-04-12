@@ -18,7 +18,7 @@ This file will evolve as new shac functionality is being added.
 """
 
 load("//check_doc.star", "check_docs")
-load("//go.star", "gosec", "staticcheck")
+load("//go.star", "gosec", "ineffassign", "staticcheck")
 load("//licenses.star", "check_license_headers")
 
 
@@ -61,5 +61,6 @@ def new_todos(ctx):
 shac.register_check(check_docs)
 shac.register_check(check_license_headers)
 shac.register_check(lambda ctx: gosec(ctx))
+shac.register_check(lambda ctx: ineffassign(ctx))
 shac.register_check(new_todos)
 shac.register_check(lambda ctx: staticcheck(ctx))

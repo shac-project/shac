@@ -30,6 +30,23 @@ def gosec(ctx, version = "v2.15.0"):
     ctx.emit.annotation(level="error", message="failed gosec")
 
 
+def ineffassign(ctx, version = "v0.0.0-20230107090616-13ace0543b28"):
+  """Runs ineffassign on a Go code base.
+
+  See https://github.com/gordonklaus/ineffassign for more details.
+
+  Args:
+    ctx: A ctx instance.
+    version: ineffassign version to install. Defaults to a recent version, that will
+      be rolled from time to time.
+  """
+  # TODO(maruel): Always install locally with GOBIN=.tools
+  ctx.os.exec(["go", "install", "github.com/gordonklaus/ineffassign@" + version])
+  if ctx.os.exec(["ineffassign", "./..."], raise_on_failure = False).retcode:
+    # TODO(maruel): Emits lines.
+    ctx.emit.annotation(level="error", message="failed ineffassign")
+
+
 def staticcheck(ctx, version = "v0.4.3"):
   """Runs staticcheck on a Go code base.
 
