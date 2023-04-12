@@ -88,7 +88,7 @@ func (l Level) isValid() bool {
 type Report interface {
 	// EmitAnnotation emits an annotation by a check for a specific file. This is
 	// not a failure by itself, unless level "error" is used.
-	EmitAnnotation(ctx context.Context, check string, level Level, message, file string, s Span, replacements []string) error
+	EmitAnnotation(ctx context.Context, check string, level Level, message, root, file string, s Span, replacements []string) error
 	// EmitArtifact emits an artifact by a check.
 	//
 	// Only one of root or content can be specified. If root is specified, it is

@@ -62,9 +62,17 @@ type basic struct {
 	out io.Writer
 }
 
-func (b *basic) EmitAnnotation(ctx context.Context, check string, level engine.Level, message, file string, s engine.Span, replacements []string) error {
-	// TODO(maruel): Do not drop span and replacements!
-	_, err := fmt.Fprintf(b.out, "[%s/%s] %s(%d): %s\n", check, level, file, s.Start.Line, message)
+func (b *basic) EmitAnnotation(ctx context.Context, check string, level engine.Level, message, root, file string, s engine.Span, replacements []string) error {
+	if file != "" {
+		// TODO(maruel): Do not drop span and replacements!
+		if s.Start.Line > 0 {
+			_, err := fmt.Fprintf(b.out, "[%s/%s] %s(%d): %s\n", check, level, file, s.Start.Line, message)
+			return err
+		}
+		_, err := fmt.Fprintf(b.out, "[%s/%s] %s: %s\n", check, level, file, message)
+		return err
+	}
+	_, err := fmt.Fprintf(b.out, "[%s/%s] %s\n", check, level, message)
 	return err
 }
 
@@ -84,7 +92,7 @@ type github struct {
 	out io.Writer
 }
 
-func (g *github) EmitAnnotation(ctx context.Context, check string, level engine.Level, message, file string, s engine.Span, replacements []string) error {
+func (g *github) EmitAnnotation(ctx context.Context, check string, level engine.Level, message, root, file string, s engine.Span, replacements []string) error {
 	// TODO(maruel): Do not drop replacements!
 	_, err := fmt.Fprintf(g.out, "::%s ::file=%s,line=%d,col=%d,endLine=%d,endCol=%d,title=%s::%s\n",
 		level, file, s.Start.Line, s.Start.Col, s.End.Line, s.End.Col, check, message)
@@ -107,8 +115,7 @@ type interactive struct {
 	out io.Writer
 }
 
-func (i *interactive) EmitAnnotation(ctx context.Context, check string, level engine.Level, message, file string, s engine.Span, replacements []string) error {
-	// TODO(maruel): Do not drop span and replacements!
+func (i *interactive) EmitAnnotation(ctx context.Context, check string, level engine.Level, message, root, file string, s engine.Span, replacements []string) error {
 	l := ""
 	switch level {
 	case engine.Notice:
@@ -118,7 +125,16 @@ func (i *interactive) EmitAnnotation(ctx context.Context, check string, level en
 	case engine.Error:
 		l = fgRed.String() + "Error"
 	}
-	_, err := fmt.Fprintf(i.out, "%s[%s%s%s/%s%s] %s(%d): %s\n", reset, fgHiCyan, check, reset, l, reset, file, s.Start.Line, message)
+	if file != "" {
+		// TODO(maruel): Do not drop span and replacements!
+		if s.Start.Line > 0 {
+			_, err := fmt.Fprintf(i.out, "%s[%s%s%s/%s%s] %s(%d): %s\n", reset, fgHiCyan, check, reset, l, reset, file, s.Start.Line, message)
+			return err
+		}
+		_, err := fmt.Fprintf(i.out, "%s[%s%s%s/%s%s] %s: %s\n", reset, fgHiCyan, check, reset, l, reset, file, message)
+		return err
+	}
+	_, err := fmt.Fprintf(i.out, "%s[%s%s%s/%s%s] %s\n", reset, fgHiCyan, check, reset, l, reset, message)
 	return err
 }
 

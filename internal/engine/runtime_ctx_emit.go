@@ -105,7 +105,11 @@ func ctxEmitAnnotation(ctx context.Context, s *state, name string, args starlark
 	if level == "error" {
 		c.hadError = true
 	}
-	if err := s.r.EmitAnnotation(ctx, c.name, level, message, file, span, replacements); err != nil {
+	root := ""
+	if file != "" {
+		root = s.inputs.root
+	}
+	if err := s.r.EmitAnnotation(ctx, c.name, level, message, root, file, span, replacements); err != nil {
 		return fmt.Errorf("failed to emit: %w", err)
 	}
 	return nil

@@ -722,6 +722,7 @@ func TestTestDataEmit(t *testing.T) {
 					Check:        "cb",
 					Level:        Error,
 					Message:      "bad code",
+					Root:         root,
 					File:         "file.txt",
 					Span:         Span{Start: Cursor{Line: 1, Col: 1}, End: Cursor{Line: 10, Col: 1}},
 					Replacements: []string{"nothing", "broken code"},
@@ -737,6 +738,7 @@ func TestTestDataEmit(t *testing.T) {
 					Check:        "cb",
 					Level:        Warning,
 					Message:      "please fix",
+					Root:         root,
 					File:         "file.txt",
 					Span:         Span{Start: Cursor{Line: 1, Col: 1}, End: Cursor{Line: 10, Col: 1}},
 					Replacements: []string{"a", "tuple"},
@@ -751,6 +753,7 @@ func TestTestDataEmit(t *testing.T) {
 					Check:        "cb",
 					Level:        Warning,
 					Message:      "please fix",
+					Root:         root,
 					File:         "file.txt",
 					Span:         Span{Start: Cursor{Line: 1, Col: 1}, End: Cursor{Line: 10, Col: 1}},
 					Replacements: []string{"a", "list"},
@@ -999,8 +1002,8 @@ type reportNoPrint struct {
 	t *testing.T
 }
 
-func (r *reportNoPrint) EmitAnnotation(ctx context.Context, check string, level Level, message, file string, s Span, replacements []string) error {
-	r.t.Errorf("unexpected annotation: %s: %s, %q, %s, %# v, %v", check, level, message, file, s, replacements)
+func (r *reportNoPrint) EmitAnnotation(ctx context.Context, check string, level Level, message, root, file string, s Span, replacements []string) error {
+	r.t.Errorf("unexpected annotation: %s: %s, %q, %s, %s, %# v, %v", check, level, message, root, file, s, replacements)
 	return errors.New("not implemented")
 }
 
@@ -1036,6 +1039,7 @@ type annotation struct {
 	Check        string
 	Level        Level
 	Message      string
+	Root         string
 	File         string
 	Span         Span
 	Replacements []string
@@ -1048,12 +1052,13 @@ type artifact struct {
 	Content []byte
 }
 
-func (r *reportEmit) EmitAnnotation(ctx context.Context, check string, level Level, message, file string, s Span, replacements []string) error {
+func (r *reportEmit) EmitAnnotation(ctx context.Context, check string, level Level, message, root, file string, s Span, replacements []string) error {
 	r.mu.Lock()
 	r.annotations = append(r.annotations, annotation{
 		Check:        check,
 		Level:        level,
 		Message:      message,
+		Root:         root,
 		File:         file,
 		Span:         s,
 		Replacements: replacements,
