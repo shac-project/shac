@@ -323,7 +323,6 @@ func (g *gitCheckout) newLines(path string, allFiles bool) builtin {
 				panic(fmt.Sprintf("unexpected line %q", l))
 			}
 		}
-		t.Freeze()
 		return t, nil
 	}
 }
@@ -399,7 +398,6 @@ func ctxScmFilesCommon(ctx context.Context, s *state, name string, args starlark
 			"new_lines": newBuiltin("new_lines", s.scm.newLines(f.path, s.inputs.allFiles)),
 		}))
 	}
-	out.Freeze()
 	return out, nil
 }
 
@@ -440,6 +438,5 @@ func newLinesWhole(root, path string) (starlark.Value, error) {
 	for i := range items {
 		t[i] = starlark.Tuple{starlark.MakeInt(i + 1), starlark.String(items[i])}
 	}
-	t.Freeze()
 	return t, nil
 }

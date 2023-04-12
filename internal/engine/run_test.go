@@ -480,6 +480,11 @@ func TestTestDataFailOrThrow(t *testing.T) {
 			"  //ctx-os-exec-invalid_cwd.star:16:14: in cb\n",
 		},
 		{
+			"ctx-os-exec-mutate_result.star",
+			"can't assign to .retcode field of struct",
+			"  //ctx-os-exec-mutate_result.star:17:6: in cb\n",
+		},
+		{
 			"ctx-os-exec-no_cmd.star",
 			"ctx.os.exec: cmdline must not be an empty list",
 			"  //ctx-os-exec-no_cmd.star:16:14: in cb\n",
@@ -597,7 +602,7 @@ func TestTestDataFailOrThrow(t *testing.T) {
 				t.Fatal("expecting an error")
 			}
 			if diff := cmp.Diff(data[i].err, err.Error()); diff != "" {
-				t.Fatalf("mismatch (-want +got):\n%s", diff)
+				t.Errorf("mismatch (-want +got):\n%s", diff)
 			}
 			expectTrace := data[i].trace != ""
 			var err2 BacktracableError
@@ -610,7 +615,7 @@ func TestTestDataFailOrThrow(t *testing.T) {
 			}
 			if expectTrace {
 				if diff := cmp.Diff("Traceback (most recent call last):\n"+data[i].trace, err2.Backtrace()); diff != "" {
-					t.Fatalf("mismatch (-want +got):\n%s", diff)
+					t.Errorf("mismatch (-want +got):\n%s", diff)
 				}
 			}
 		})
@@ -726,10 +731,10 @@ func TestTestDataEmit(t *testing.T) {
 				t.Fatal(err)
 			}
 			if diff := cmp.Diff(data[i].annotations, r.annotations); diff != "" {
-				t.Fatalf("mismatch (-want +got):\n%s", diff)
+				t.Errorf("mismatch (-want +got):\n%s", diff)
 			}
 			if diff := cmp.Diff(data[i].artifacts, r.artifacts); diff != "" {
-				t.Fatalf("mismatch (-want +got):\n%s", diff)
+				t.Errorf("mismatch (-want +got):\n%s", diff)
 			}
 		})
 	}

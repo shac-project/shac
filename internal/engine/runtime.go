@@ -163,6 +163,12 @@ func newBuiltin(name string, impl builtin) *starlark.Builtin {
 		if err != nil && !strings.HasPrefix(err.Error(), name+": ") {
 			err = fmt.Errorf("%s: %w", name, err)
 		}
+		if val != nil {
+			// All values returned by builtins are immutable. This is not a hard
+			// requirement, and can be relaxed if there's a use case for mutable
+			// return values, but it's still a sensible default.
+			val.Freeze()
+		}
 		return val, err
 	}
 	return starlark.NewBuiltin(name, wrapper)

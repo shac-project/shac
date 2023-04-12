@@ -138,7 +138,8 @@ func ctxOsExec(ctx context.Context, s *state, name string, args starlark.Tuple, 
 	err := cmd.Run()
 	var retcode int
 	if err != nil {
-		if errExit := (&exec.ExitError{}); errors.As(err, &errExit) {
+		var errExit *exec.ExitError
+		if errors.As(err, &errExit) {
 			if argraiseOnFailure {
 				var msgBuilder strings.Builder
 				msgBuilder.WriteString(fmt.Sprintf("command failed with exit code %d: %s", errExit.ExitCode(), argcmd))
