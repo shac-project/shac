@@ -25,12 +25,95 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
 )
+
+func TestRun_Fail(t *testing.T) {
+	t.Parallel()
+	data := []struct {
+		o   Options
+		err string
+	}{
+		{
+			Options{
+				Config: "/dev/null",
+			},
+			"no such module",
+		},
+		{
+			Options{
+				Config: ".",
+			},
+			func() string {
+				if runtime.GOOS == "windows" {
+					return "...Incorrect function."
+				}
+				return "... is a directory"
+			}(),
+		},
+		{
+			Options{
+				Main: func() string {
+					if runtime.GOOS == "windows" {
+						return "c:\\invalid"
+					}
+					return "/dev/null"
+				}(),
+			},
+			"main file must not be an absolute path",
+		},
+		{
+			Options{
+				Config: "testdata/config/min_shac_version-high.textproto",
+			},
+			"unsupported min_shac_version \"1000\", running 0.0.1",
+		},
+		{
+			Options{
+				Config: "testdata/config/min_shac_version-long.textproto",
+			},
+			"invalid min_shac_version",
+		},
+		{
+			Options{
+				Config: "testdata/config/min_shac_version-str.textproto",
+			},
+			"invalid min_shac_version",
+		},
+		{
+			Options{
+				Config: "testdata/config/syntax.textproto",
+			},
+			// The encoding is not deterministic.
+			"...: unknown field: bad",
+		},
+	}
+	for i := range data {
+		i := i
+		t.Run(strconv.Itoa(i), func(t *testing.T) {
+			t.Parallel()
+			o := data[i].o
+			o.Report = &reportNoPrint{t: t}
+			err := Run(context.Background(), &o)
+			if err == nil {
+				t.Fatal("expecting an error")
+			}
+			s := err.Error()
+			if strings.HasPrefix(data[i].err, "...") {
+				if !strings.HasSuffix(s, data[i].err[3:]) {
+					t.Fatal(err)
+				}
+			} else if diff := cmp.Diff(data[i].err, s); diff != "" {
+				t.Fatalf("mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
 
 func TestRun_SCM_Raw(t *testing.T) {
 	t.Parallel()
@@ -717,7 +800,7 @@ func TestTestDataEmit(t *testing.T) {
 		i := i
 		t.Run(data[i].name, func(t *testing.T) {
 			r := reportEmit{reportNoPrint: reportNoPrint{t: t}}
-			o := Options{Report: &r, Root: root, Main: data[i].name}
+			o := Options{Report: &r, Root: root, Main: data[i].name, Config: "../config/valid.textproto"}
 			err := Run(context.Background(), &o)
 			if data[i].err != "" {
 				if err == nil {

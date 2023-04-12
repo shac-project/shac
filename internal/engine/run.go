@@ -21,14 +21,19 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
+	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
+	"strings"
 	"sync"
 
 	"go.chromium.org/luci/starlark/interpreter"
 	"go.starlark.net/resolve"
 	"go.starlark.net/starlark"
 	"golang.org/x/sync/errgroup"
+	"google.golang.org/protobuf/encoding/prototext"
 )
 
 func init() {
@@ -107,6 +112,8 @@ type Options struct {
 	Root string
 	// Main source file to run. Defaults to shac.star.
 	Main string
+	// Configuration file. Defaults to shac.textproto.
+	Config string
 	// AllFiles tells to consider all files as affected.
 	AllFiles bool
 
@@ -131,6 +138,37 @@ func Run(ctx context.Context, o *Options) error {
 	if filepath.IsAbs(main) {
 		return errors.New("main file must not be an absolute path")
 	}
+	config := o.Config
+	if config == "" {
+		config = "shac.textproto"
+	}
+	allowNetwork := false
+	p := filepath.Join(root, config)
+	var b []byte
+	if b, err = os.ReadFile(p); err == nil {
+		doc := Document{}
+		if err = prototext.Unmarshal(b, &doc); err != nil {
+			return err
+		}
+		if doc.MinShacVersion != "" {
+			v := parseVersion(doc.MinShacVersion)
+			if v == nil || len(v) > len(version) {
+				return errors.New("invalid min_shac_version")
+			}
+			for i := range v {
+				if v[i] > version[i] {
+					return fmt.Errorf("unsupported min_shac_version %q, running %d.%d.%d", doc.MinShacVersion, version[0], version[1], version[2])
+				}
+				if v[i] < version[i] {
+					break
+				}
+			}
+		}
+		allowNetwork = doc.AllowNetwork
+	} else if !errors.Is(err, fs.ErrNotExist) {
+		return err
+	}
+
 	s := &state{
 		inputs: &inputs{
 			code:     interpreter.FileSystemLoader(root),
@@ -138,12 +176,14 @@ func Run(ctx context.Context, o *Options) error {
 			main:     main,
 			allFiles: o.AllFiles,
 		},
-		r: o.Report,
+		r:            o.Report,
+		allowNetwork: allowNetwork,
 	}
 	s.scm, err = getSCM(ctx, root)
 	if err != nil {
 		return err
 	}
+
 	// Parse the starlark file.
 	ctx = context.WithValue(ctx, &stateCtxKey, s)
 	if err = s.parse(ctx); err != nil {
@@ -175,9 +215,10 @@ type inputs struct {
 
 // state represents the parsing and running state of an execution tree.
 type state struct {
-	inputs *inputs
-	r      Report
-	scm    scmCheckout
+	inputs       *inputs
+	r            Report
+	scm          scmCheckout
+	allowNetwork bool
 
 	// TODO(maruel): There will be one shacState per shac.star found in
 	// subdirectories.
@@ -308,4 +349,16 @@ func (c *check) call(ctx context.Context, intr *interpreter.Interpreter) error {
 		return fmt.Errorf("check %q returned an object of type %s, expected None", c.name, r.Type())
 	}
 	return nil
+}
+
+func parseVersion(s string) []int {
+	var out []int
+	for _, x := range strings.Split(s, ".") {
+		i, err := strconv.Atoi(x)
+		if err != nil {
+			return nil
+		}
+		out = append(out, i)
+	}
+	return out
 }
