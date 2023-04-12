@@ -95,23 +95,50 @@ type Report interface {
 	Print(ctx context.Context, file string, line int, message string)
 }
 
+// Options is the options for Run().
+type Options struct {
+	// Report gets all the emitted annotations and artifacts from the checks.
+	//
+	// This is the only required argument. It is recommended to use
+	// reporting.Get() which returns the right implementation based on the
+	// environment (CI, interactive, etc).
+	Report Report
+	// Root directory. Defaults to the current working directory.
+	Root string
+	// Main source file to run. Defaults to shac.star.
+	Main string
+	// AllFiles tells to consider all files as affected.
+	AllFiles bool
+
+	// Require keyed arguments.
+	_ struct{}
+}
+
 // Run loads a main shac.star file from a root directory and runs it.
-func Run(ctx context.Context, root, main string, allFiles bool, r Report) error {
+func Run(ctx context.Context, o *Options) error {
+	root := o.Root
+	if root == "" {
+		root = "."
+	}
+	root, err := filepath.Abs(o.Root)
+	if err != nil {
+		return err
+	}
+	main := o.Main
+	if main == "" {
+		main = "shac.star"
+	}
 	if filepath.IsAbs(main) {
 		return errors.New("main file must not be an absolute path")
-	}
-	var err error
-	if root, err = filepath.Abs(root); err != nil {
-		return err
 	}
 	s := &state{
 		inputs: &inputs{
 			code:     interpreter.FileSystemLoader(root),
 			root:     root,
 			main:     main,
-			allFiles: allFiles,
+			allFiles: o.AllFiles,
 		},
-		r: r,
+		r: o.Report,
 	}
 	s.scm, err = getSCM(ctx, root)
 	if err != nil {

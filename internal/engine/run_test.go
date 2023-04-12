@@ -266,8 +266,8 @@ func TestRun_SCM_Git_Broken(t *testing.T) {
 	}
 	// Git reports paths separated with "/" even on Windows.
 	dotGit = strings.ReplaceAll(dotGit, string(os.PathSeparator), "/")
-	r := reportNoPrint{t: t}
-	if err = Run(context.Background(), root, "scm_affected_files.star", false, &r); err == nil {
+	o := Options{Report: &reportNoPrint{t: t}, Root: root, Main: "scm_affected_files.star"}
+	if err = Run(context.Background(), &o); err == nil {
 		t.Fatal("expected error")
 	}
 	want := "error running git --no-optional-locks rev-parse --show-toplevel: exit status 128\nfatal: invalid gitfile format: " + dotGit + "\n"
@@ -281,7 +281,7 @@ func TestRun_SCM_Git_Broken(t *testing.T) {
 // These test cases call fail() or throw an exception.
 func TestTestDataFailOrThrow(t *testing.T) {
 	t.Parallel()
-	p, got := enumDir(t, "fail_or_throw")
+	root, got := enumDir(t, "fail_or_throw")
 	data := []struct {
 		name  string
 		err   string
@@ -586,7 +586,8 @@ func TestTestDataFailOrThrow(t *testing.T) {
 		i := i
 		t.Run(data[i].name, func(t *testing.T) {
 			t.Parallel()
-			err := Run(context.Background(), p, data[i].name, false, &reportNoPrint{t: t})
+			o := Options{Report: &reportNoPrint{t: t}, Root: root, Main: data[i].name}
+			err := Run(context.Background(), &o)
 			if err == nil {
 				t.Fatal("expecting an error")
 			}
@@ -706,7 +707,8 @@ func TestTestDataEmit(t *testing.T) {
 		i := i
 		t.Run(data[i].name, func(t *testing.T) {
 			r := reportEmit{reportNoPrint: reportNoPrint{t: t}}
-			err := Run(context.Background(), root, data[i].name, false, &r)
+			o := Options{Report: &r, Root: root, Main: data[i].name}
+			err := Run(context.Background(), &o)
 			if data[i].err != "" {
 				if err == nil {
 					t.Fatal("expected error")
@@ -805,7 +807,8 @@ func TestTestDataPrint(t *testing.T) {
 // testStarlarkPrint test a starlark file that calls print().
 func testStarlarkPrint(t *testing.T, root, name string, all bool, want string) {
 	r := reportPrint{reportNoPrint: reportNoPrint{t: t}}
-	if err := Run(context.Background(), root, name, all, &r); err != nil {
+	o := Options{Report: &r, Root: root, Main: name, AllFiles: all}
+	if err := Run(context.Background(), &o); err != nil {
 		t.Helper()
 		t.Fatal(err)
 	}
