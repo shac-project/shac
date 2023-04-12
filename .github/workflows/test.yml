@@ -79,7 +79,9 @@ jobs:
       run: |
         # Nothing should have changed in the tree up to that point and no
         # unsuspected file was created.
-        TOUCHED=$(git status --porcelain --ignored)
+        # TODO(olivernewman): Add --ignored flag once go tools are installed
+        # outside the checkout instead of in the .tools directory.
+        TOUCHED=$(git status --porcelain)
         if ! test -z "$TOUCHED"; then
           echo "Oops, something touched these files, please cleanup:"
           echo "$TOUCHED"
