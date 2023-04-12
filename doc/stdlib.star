@@ -63,8 +63,6 @@ def _ctx_emit_annotation(level, message, filepath = None, line = None, col = Non
             level="notice",
             message="great code",
             filepath=path,
-            line=1,
-            col=1,
         )
 
     shac.register_check(cb)
@@ -99,7 +97,8 @@ def _ctx_emit_annotation(level, message, filepath = None, line = None, col = Non
       span. 1 based.
     end_col: (optional) Column where the annotation should end if it represents a
       span. 1 based.
-    replacements: (optional) List of possible replacements.
+    replacements: (optional) A sequence of str, representing possible
+      replacement suggestions. The sequence can be a list or a tuple.
   """
   pass
 

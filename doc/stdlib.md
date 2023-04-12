@@ -73,8 +73,6 @@ def cb(ctx):
         level="notice",
         message="great code",
         filepath=path,
-        line=1,
-        col=1,
     )
 
 shac.register_check(cb)
@@ -108,7 +106,7 @@ shac.register_check(cb)
 * **col**: (optional) Column where the annotation should start. 1 based.
 * **end_line**: (optional) Line where the annotation should end if it represents a span. 1 based.
 * **end_col**: (optional) Column where the annotation should end if it represents a span. 1 based.
-* **replacements**: (optional) List of possible replacements.
+* **replacements**: (optional) A sequence of str, representing possible replacement suggestions. The sequence can be a list or a tuple.
 
 ## ctx.emit.artifact
 

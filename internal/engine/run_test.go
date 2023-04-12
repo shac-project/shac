@@ -306,7 +306,7 @@ func TestTestDataFailOrThrow(t *testing.T) {
 		},
 		{
 			"ctx-emit-annotation-end_col-col-reverse.star",
-			"ctx.emit.annotation: for parameter \"end_col\": must be greater than \"col\"",
+			"ctx.emit.annotation: for parameter \"end_col\": must be greater than or equal to \"col\"",
 			"  //ctx-emit-annotation-end_col-col-reverse.star:16:22: in cb\n",
 		},
 		{
@@ -321,7 +321,7 @@ func TestTestDataFailOrThrow(t *testing.T) {
 		},
 		{
 			"ctx-emit-annotation-end_line-line-reverse.star",
-			"ctx.emit.annotation: for parameter \"end_line\": must be greater than \"line\"",
+			"ctx.emit.annotation: for parameter \"end_line\": must be greater than or equal to \"line\"",
 			"  //ctx-emit-annotation-end_line-line-reverse.star:16:22: in cb\n",
 		},
 		{
@@ -355,9 +355,24 @@ func TestTestDataFailOrThrow(t *testing.T) {
 			"  //ctx-emit-annotation-message.star:16:22: in cb\n",
 		},
 		{
-			"ctx-emit-annotation-replacements.star",
+			"ctx-emit-annotation-replacements-end_line.star",
+			"ctx.emit.annotation: for parameter \"replacements\": \"end_line\" must be specified",
+			"  //ctx-emit-annotation-replacements-end_line.star:16:22: in cb\n",
+		},
+		{
+			"ctx-emit-annotation-replacements-list.star",
+			"ctx.emit.annotation: for parameter \"replacements\": got list, want sequence of str",
+			"  //ctx-emit-annotation-replacements-list.star:16:22: in cb\n",
+		},
+		{
+			"ctx-emit-annotation-replacements-str.star",
+			"ctx.emit.annotation: for parameter \"replacements\": got string, want starlark.Sequence",
+			"  //ctx-emit-annotation-replacements-str.star:16:22: in cb\n",
+		},
+		{
+			"ctx-emit-annotation-replacements-tuple.star",
 			"ctx.emit.annotation: for parameter \"replacements\": got tuple, want sequence of str",
-			"  //ctx-emit-annotation-replacements.star:16:22: in cb\n",
+			"  //ctx-emit-annotation-replacements-tuple.star:16:22: in cb\n",
 		},
 		{
 			"ctx-emit-artifact-dir.star",
@@ -630,14 +645,28 @@ func TestTestDataEmit(t *testing.T) {
 					Message:      "please fix",
 					File:         "file.txt",
 					Span:         Span{Start: Cursor{Line: 1, Col: 1}, End: Cursor{Line: 10, Col: 1}},
-					Replacements: []string{"nothing", "broken code"},
+					Replacements: []string{"a", "tuple"},
+				},
+				{
+					Check:   "cb",
+					Level:   Notice,
+					Message: "great code",
+					Span:    Span{Start: Cursor{Line: 100, Col: 2}},
 				},
 				{
 					Check:        "cb",
-					Level:        Notice,
-					Message:      "great code",
-					Span:         Span{Start: Cursor{Line: 100, Col: 2}},
-					Replacements: []string{},
+					Level:        Warning,
+					Message:      "please fix",
+					File:         "file.txt",
+					Span:         Span{Start: Cursor{Line: 1, Col: 1}, End: Cursor{Line: 10, Col: 1}},
+					Replacements: []string{"a", "list"},
+				},
+				{
+					Check:        "cb",
+					Level:        "warning",
+					Message:      "weird",
+					Span:         Span{Start: Cursor{Line: 1}, End: Cursor{Line: 10}},
+					Replacements: []string{"a", "dict"},
 				},
 			},
 			nil,

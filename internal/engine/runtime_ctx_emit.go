@@ -79,9 +79,9 @@ func ctxEmitAnnotation(ctx context.Context, s *state, name string, args starlark
 	if span.Start.Line > 0 {
 		if span.End.Line > 0 {
 			if span.End.Line < span.Start.Line {
-				return errors.New("for parameter \"end_line\": must be greater than \"line\"")
+				return errors.New("for parameter \"end_line\": must be greater than or equal to \"line\"")
 			} else if span.End.Line == span.Start.Line && span.End.Col > 0 && span.End.Col < span.Start.Col {
-				return errors.New("for parameter \"end_col\": must be greater than \"col\"")
+				return errors.New("for parameter \"end_col\": must be greater than or equal to \"col\"")
 			}
 		}
 	} else {
@@ -92,9 +92,14 @@ func ctxEmitAnnotation(ctx context.Context, s *state, name string, args starlark
 			return errors.New("for parameter \"col\": \"line\" must be specified")
 		}
 	}
-	replacements := sequenceToStrings(argreplacements)
-	if replacements == nil {
-		return fmt.Errorf("for parameter \"replacements\": got %s, want sequence of str", argreplacements.Type())
+	var replacements []string
+	if argreplacements != nil {
+		if replacements = sequenceToStrings(argreplacements); replacements == nil {
+			return fmt.Errorf("for parameter \"replacements\": got %s, want sequence of str", argreplacements.Type())
+		}
+		if span.End.Line == 0 {
+			return errors.New("for parameter \"replacements\": \"end_line\" must be specified")
+		}
 	}
 	c := ctxCheck(ctx)
 	if level == "error" {
@@ -152,11 +157,8 @@ func ctxEmitArtifact(ctx context.Context, s *state, name string, args starlark.T
 	return nil
 }
 
-// sequenceToStrings returns nil on failure.
+// sequenceToStrings converts a starlark sequence (list, tuple) into a list of strings.
 func sequenceToStrings(s starlark.Sequence) []string {
-	if s == nil {
-		return []string{}
-	}
 	out := make([]string, 0, s.Len())
 	iter := s.Iterate()
 	var x starlark.Value
