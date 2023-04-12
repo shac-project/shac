@@ -60,7 +60,7 @@ def new_todos(ctx):
 
 shac.register_check(check_docs)
 shac.register_check(check_license_headers)
-shac.register_check(lambda ctx: gosec(ctx))
-shac.register_check(lambda ctx: ineffassign(ctx))
+shac.register_check(lambda ctx: gosec(ctx), name="gosec")
+shac.register_check(lambda ctx: ineffassign(ctx), name="ineffassign")
 shac.register_check(new_todos)
-shac.register_check(lambda ctx: staticcheck(ctx))
+shac.register_check(lambda ctx: staticcheck(ctx), name="staticcheck")

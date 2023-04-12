@@ -109,7 +109,10 @@ func fail(th *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs
 // Make sure to update //doc/stdlib.star whenever this function is modified.
 func shacRegisterCheck(ctx context.Context, s *state, name string, args starlark.Tuple, kwargs []starlark.Tuple) error {
 	var argcallback starlark.Callable
-	if err := starlark.UnpackArgs(name, args, kwargs, "callback", &argcallback); err != nil {
+	var argname starlark.String
+	if err := starlark.UnpackArgs(name, args, kwargs,
+		"callback", &argcallback,
+		"name?", &argname); err != nil {
 		return err
 	}
 	// Inspect callback to verify that it accepts one argument and that it is not a builtin.
@@ -117,11 +120,21 @@ func shacRegisterCheck(ctx context.Context, s *state, name string, args starlark
 	if !ok || cb.NumParams() != 1 {
 		return errors.New("callback must be a function accepting one \"ctx\" argument")
 	}
+	cname := string(argname)
+	if cname == "" {
+		cname = strings.TrimPrefix(cb.Name(), "_")
+	}
+	// We may want to optimize this if we register hundreds of checks.
+	for i := range s.checks {
+		if s.checks[i].name == cname {
+			return fmt.Errorf("can't register two checks with the same name %q", cname)
+		}
+	}
 	if s.doneLoading {
 		return errors.New("can't register checks after done loading")
 	}
 	// Register the new callback.
-	s.checks = append(s.checks, check{cb: cb, name: strings.TrimPrefix(cb.Name(), "_")})
+	s.checks = append(s.checks, check{cb: cb, name: cname})
 	return nil
 }
 

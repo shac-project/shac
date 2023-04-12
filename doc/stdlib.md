@@ -528,7 +528,7 @@ def _gosec(ctx):
   # Use a specific gosec version, instead of upstream's default version.
   gosec(ctx, version="v2.9.6")
 
-register_checks(_gosec)
+register_check(_gosec)
 ```
 
 ### Arguments
@@ -579,7 +579,7 @@ The semver version number of shac.
 Registers a shac check.
 
 It must be called at least once for the starlark file be a valid check file.
-Each callback will be run in parallel.
+Each callback will be run in parallel. Each check must have a different name.
 
 ### Example
 
@@ -587,12 +587,13 @@ Each callback will be run in parallel.
 def cb(ctx):
   fail("implement me")
 
-shac.register_check(cb)
+shac.register_check(cb, name="fail_often")
 ```
 
 ### Arguments
 
 * **callback**: Starlark function that is called back to implement the check. The callback must accept one ctx(...) argument and return None.
+* **name**: (optional) Name of the check. Defaults to the callback function name.
 
 ## struct
 

@@ -659,6 +659,11 @@ func TestTestDataFailOrThrow(t *testing.T) {
 			"",
 		},
 		{
+			"shac-register_check-twice.star",
+			"shac.register_check: can't register two checks with the same name \"cb\"",
+			"  //shac-register_check-twice.star:22:20: in <toplevel>\n",
+		},
+		{
 			"syntax_error.star",
 			"//syntax_error.star:15:3: got '//', want primary expression",
 			"",

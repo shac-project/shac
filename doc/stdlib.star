@@ -525,7 +525,7 @@ def load_(module, *symbols, **kwsymbols):
       # Use a specific gosec version, instead of upstream's default version.
       gosec(ctx, version="v2.9.6")
 
-    register_checks(_gosec)
+    register_check(_gosec)
     ```
 
   Args:
@@ -561,23 +561,24 @@ def print(*args, sep = " "):
 ## Methods inside the shac object.
 
 
-def _shac_register_check(callback):
+def _shac_register_check(callback, name = None):
   """Registers a shac check.
 
   It must be called at least once for the starlark file be a valid check file.
-  Each callback will be run in parallel.
+  Each callback will be run in parallel. Each check must have a different name.
 
   Example:
     ```python
     def cb(ctx):
       fail("implement me")
 
-    shac.register_check(cb)
+    shac.register_check(cb, name="fail_often")
     ```
 
   Args:
     callback: Starlark function that is called back to implement the check. The
       callback must accept one ctx(...) argument and return None.
+    name: (optional) Name of the check. Defaults to the callback function name.
   """
   pass
 
