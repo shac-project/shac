@@ -869,7 +869,7 @@ func TestTestDataPrint(t *testing.T) {
 		},
 		{
 			name: "ctx-os-exec-env.star",
-			want: "[//ctx-os-exec-env.star:17] FOO=foo-value\nBAR=bar-value\n",
+			want: "[//ctx-os-exec-env.star:20] FOO=foo-value\nBAR=bar-value\n",
 			// TODO(olivernewman): Make this test support Windows by running a
 			// batch file instead of a shell script.
 			skipWindows: true,

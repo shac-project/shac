@@ -13,7 +13,7 @@
 # limitations under the License.
 
 def cb(ctx):
-  res = ctx.os.exec(["./stdio.sh"])
+  res = ctx.os.exec([ctx.scm.root + "/stdio.sh"])
   print("retcode: %d" % res.retcode)
   print("stdout: %s" % res.stdout.strip())
   print("stderr: %s" % res.stderr.strip())
