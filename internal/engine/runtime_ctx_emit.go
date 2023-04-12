@@ -102,8 +102,8 @@ func ctxEmitAnnotation(ctx context.Context, s *state, name string, args starlark
 		}
 	}
 	c := ctxCheck(ctx)
-	if level == "error" {
-		c.hadError = true
+	if c.highestLevel == "" || level == Error || (level == Warning && c.highestLevel != Error) {
+		c.highestLevel = level
 	}
 	root := ""
 	if file != "" {

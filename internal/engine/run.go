@@ -28,6 +28,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"go.chromium.org/luci/starlark/interpreter"
 	"go.starlark.net/resolve"
@@ -72,6 +73,7 @@ const (
 	Notice  Level = "notice"
 	Warning Level = "warning"
 	Error   Level = "error"
+	Nothing Level = ""
 )
 
 func (l Level) isValid() bool {
@@ -96,6 +98,11 @@ type Report interface {
 	// root is not specified, content is the artifact. Either way, file is the
 	// display name of the artifact.
 	EmitArtifact(ctx context.Context, check, root, file string, content []byte) error
+	// CheckCompleted is called when a check is completed.
+	//
+	// It returns the wallclock duration, the highest level emitted and an error
+	// if an abnormal error occurred.
+	CheckCompleted(ctx context.Context, check string, d time.Duration, r Level, err error)
 	// Print is called when print() starlark function is called.
 	Print(ctx context.Context, file string, line int, message string)
 }
@@ -198,7 +205,7 @@ func Run(ctx context.Context, o *Options) error {
 	}
 	// If any check failed, return an error.
 	for i := range s.checks {
-		if s.checks[i].hadError {
+		if s.checks[i].highestLevel == Error {
 			return ErrCheckFailed
 		}
 	}
@@ -298,12 +305,16 @@ type shacState struct {
 // It creates a separate thread per check, limited by the number of CPU cores +
 // 2. This permits to run them concurrently.
 func (s *shacState) callAllChecks(ctx context.Context) error {
+	st := ctxState(ctx)
 	eg, ctx := errgroup.WithContext(ctx)
 	eg.SetLimit(runtime.NumCPU() + 2)
 	for i := range s.checks {
 		i := i
 		eg.Go(func() error {
-			return s.checks[i].call(ctx, s.intr)
+			start := time.Now()
+			err := s.checks[i].call(ctx, s.intr)
+			st.r.CheckCompleted(ctx, s.checks[i].name, time.Since(start), s.checks[i].highestLevel, err)
+			return err
 		})
 	}
 	return eg.Wait()
@@ -311,10 +322,10 @@ func (s *shacState) callAllChecks(ctx context.Context) error {
 
 // check represents one check added via shac.register_check().
 type check struct {
-	cb       starlark.Callable
-	name     string
-	failErr  *failure // set when fail() is called from within the check, an abnormal failure.
-	hadError bool     // set when an error is emitted via Report, a normal error.
+	cb           starlark.Callable
+	name         string
+	failErr      *failure // set when fail() is called from within the check, an abnormal failure.
+	highestLevel Level    // highest level emitted by EmitAnnotation.
 }
 
 var checkCtxKey = "shac.check"

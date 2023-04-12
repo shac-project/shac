@@ -29,6 +29,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/google/go-cmp/cmp"
 )
@@ -1010,6 +1011,9 @@ func (r *reportNoPrint) EmitAnnotation(ctx context.Context, check string, level 
 func (r *reportNoPrint) EmitArtifact(ctx context.Context, check, root, file string, content []byte) error {
 	r.t.Errorf("unexpected artifact: %s: %s", check, file)
 	return errors.New("not implemented")
+}
+
+func (r *reportNoPrint) CheckCompleted(ctx context.Context, check string, d time.Duration, l Level, err error) {
 }
 
 func (r *reportNoPrint) Print(ctx context.Context, file string, line int, message string) {

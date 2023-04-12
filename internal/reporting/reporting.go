@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"time"
 
 	"github.com/mattn/go-colorable"
 	"github.com/mattn/go-isatty"
@@ -80,6 +81,18 @@ func (b *basic) EmitArtifact(ctx context.Context, check, root, file string, cont
 	return errors.New("not implemented")
 }
 
+func (b *basic) CheckCompleted(ctx context.Context, check string, d time.Duration, level engine.Level, err error) {
+	l := string(level)
+	if level == "" || level == engine.Notice {
+		l = "Success"
+	}
+	if err != nil {
+		fmt.Fprintf(b.out, "- %s (%s in %s): %s\n", check, l, d.Round(time.Millisecond), err)
+	} else {
+		fmt.Fprintf(b.out, "- %s (%s in %s)\n", check, l, d.Round(time.Millisecond))
+	}
+}
+
 func (b *basic) Print(ctx context.Context, file string, line int, message string) {
 	fmt.Fprintf(b.out, "[%s:%d] %s\n", file, line, message)
 }
@@ -103,6 +116,9 @@ func (g *github) EmitArtifact(ctx context.Context, check, root, file string, con
 	return errors.New("not implemented")
 }
 
+func (g *github) CheckCompleted(ctx context.Context, check string, d time.Duration, l engine.Level, err error) {
+}
+
 func (g *github) Print(ctx context.Context, file string, line int, message string) {
 	// Use debug here instead of notice since the file/line reference comes from
 	// starlark, which will likely not be in the delta or even in your source
@@ -116,25 +132,17 @@ type interactive struct {
 }
 
 func (i *interactive) EmitAnnotation(ctx context.Context, check string, level engine.Level, message, root, file string, s engine.Span, replacements []string) error {
-	l := ""
-	switch level {
-	case engine.Notice:
-		l = fgGreen.String() + "Notice"
-	case engine.Warning:
-		l = fgYellow.String() + "Warning"
-	case engine.Error:
-		l = fgRed.String() + "Error"
-	}
+	c := levelColor[level]
 	if file != "" {
 		// TODO(maruel): Do not drop span and replacements!
 		if s.Start.Line > 0 {
-			_, err := fmt.Fprintf(i.out, "%s[%s%s%s/%s%s] %s(%d): %s\n", reset, fgHiCyan, check, reset, l, reset, file, s.Start.Line, message)
+			_, err := fmt.Fprintf(i.out, "%s[%s%s%s/%s%s%s] %s(%d): %s\n", reset, fgHiCyan, check, reset, c, level, reset, file, s.Start.Line, message)
 			return err
 		}
-		_, err := fmt.Fprintf(i.out, "%s[%s%s%s/%s%s] %s: %s\n", reset, fgHiCyan, check, reset, l, reset, file, message)
+		_, err := fmt.Fprintf(i.out, "%s[%s%s%s/%s%s%s] %s: %s\n", reset, fgHiCyan, check, reset, c, level, reset, file, message)
 		return err
 	}
-	_, err := fmt.Fprintf(i.out, "%s[%s%s%s/%s%s] %s\n", reset, fgHiCyan, check, reset, l, reset, message)
+	_, err := fmt.Fprintf(i.out, "%s[%s%s%s/%s%s%s] %s\n", reset, fgHiCyan, check, reset, c, level, reset, message)
 	return err
 }
 
@@ -142,6 +150,26 @@ func (i *interactive) EmitArtifact(ctx context.Context, root, check, file string
 	return errors.New("not implemented")
 }
 
+func (i *interactive) CheckCompleted(ctx context.Context, check string, d time.Duration, level engine.Level, err error) {
+	c := levelColor[level]
+	l := string(level)
+	if level == "" || level == engine.Notice {
+		l = "Success"
+	}
+	if err != nil {
+		fmt.Fprintf(i.out, "- %s%s%s%s (%s in %s): %s\n", reset, c, check, reset, l, d.Round(time.Millisecond), err)
+	} else {
+		fmt.Fprintf(i.out, "- %s%s%s%s (%s in %s)\n", reset, c, check, reset, l, d.Round(time.Millisecond))
+	}
+}
+
 func (i *interactive) Print(ctx context.Context, file string, line int, message string) {
 	fmt.Fprintf(i.out, "%s[%s%s:%d%s] %s%s%s\n", reset, fgHiBlue, file, line, reset, bold, message, reset)
+}
+
+var levelColor = map[engine.Level]ansiCode{
+	engine.Notice:  fgGreen,
+	engine.Warning: fgYellow,
+	engine.Error:   fgRed,
+	engine.Nothing: fgGreen,
 }
