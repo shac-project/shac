@@ -70,8 +70,40 @@ def shadow(ctx, version = "v0.7.0"):
       be rolled from time to time.
   """
   exe = _go_install(ctx, "golang.org/x/tools/go/analysis/passes/shadow/cmd/shadow", version)
-  if ctx.os.exec([exe, "./..."], raise_on_failure = False).retcode:
-    ctx.emit.annotation(level="error", message="failed go vet -vettool=shadow")
+  res = ctx.os.exec([
+    exe,
+    # TODO(olivernewman): For some reason, including tests results in duplicate
+    # findings in non-test files.
+    "-test=false",
+    "-json",
+    "./...",
+  ])
+
+  # Example output:
+  # {
+  #   "github.com/foo/bar": {
+  #     "shadow": [
+  #       {
+  #         "posn": "/abs/path/to/project/file.go:123:8",
+  #         "message": "declaration of \"err\" shadows declaration at line 123"
+  #       }
+  #     ]
+  #   }
+  # }
+  output = json.decode(res.stdout)
+  findings = []
+  for pkg_findings in output.values():
+    findings.extend(pkg_findings["shadow"])
+
+  for finding in findings:
+    match = ctx.re.match(r"%s/(.+):(\d+):(\d+)" % ctx.scm.root, finding["posn"])
+    ctx.emit.annotation(
+      level="error",
+      filepath=match.groups[1],
+      line=int(match.groups[2]),
+      col=int(match.groups[3]),
+      message=finding["message"],
+    )
 
 
 def _go_install(ctx, pkg, version):
