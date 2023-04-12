@@ -339,6 +339,8 @@ ctx = struct(
   # ctx.scm is the object exposes the API to query the source control
   # management (e.g. git).
   scm = struct(
+    # ctx.scm.root is the absolute path to the project root.
+    root = "",
     affected_files = _ctx_scm_affected_files,
     all_files = _ctx_scm_all_files,
   ),

@@ -281,8 +281,13 @@ management (e.g. git).
 
 Fields:
 
+- root
 - affected_files
 - all_files
+
+## ctx.scm.root
+
+ctx.scm.root is the absolute path to the project root.
 
 ## ctx.scm.affected_files
 

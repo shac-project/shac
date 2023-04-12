@@ -23,9 +23,8 @@ def gosec(ctx, version = "v2.15.0"):
     version: gosec version to install. Defaults to a recent version, that will
       be rolled from time to time.
   """
-  # TODO(maruel): Always install locally with GOBIN=.tools
-  ctx.os.exec(["go", "install", "github.com/securego/gosec/v2/cmd/gosec@" + version])
-  if ctx.os.exec(["gosec", "-fmt=golint", "-quiet", "-exclude=G304", "-exclude-dir=.tools", "./..."], raise_on_failure = False).retcode:
+  exe = _go_install(ctx, "github.com/securego/gosec/v2/cmd/gosec", version)
+  if ctx.os.exec([exe, "-fmt=golint", "-quiet", "-exclude=G304", "-exclude-dir=.tools", "./..."], raise_on_failure = False).retcode:
     # TODO(maruel): Emits lines.
     ctx.emit.annotation(level="error", message="failed gosec")
 
@@ -37,12 +36,11 @@ def ineffassign(ctx, version = "v0.0.0-20230107090616-13ace0543b28"):
 
   Args:
     ctx: A ctx instance.
-    version: ineffassign version to install. Defaults to a recent version, that will
-      be rolled from time to time.
+    version: ineffassign version to install. Defaults to a recent version, that
+      will be rolled from time to time.
   """
-  # TODO(maruel): Always install locally with GOBIN=.tools
-  ctx.os.exec(["go", "install", "github.com/gordonklaus/ineffassign@" + version])
-  if ctx.os.exec(["ineffassign", "./..."], raise_on_failure = False).retcode:
+  exe = _go_install(ctx, "github.com/gordonklaus/ineffassign", version)
+  if ctx.os.exec([exe, "./..."], raise_on_failure = False).retcode:
     # TODO(maruel): Emits lines.
     ctx.emit.annotation(level="error", message="failed ineffassign")
 
@@ -57,8 +55,26 @@ def staticcheck(ctx, version = "v0.4.3"):
     version: staticcheck version to install. Defaults to a recent version, that
     will be rolled from time to time.
   """
-  # TODO(maruel): Always install locally with GOBIN=.tools
-  ctx.os.exec(["go", "install", "honnef.co/go/tools/cmd/staticcheck@" + version])
-  if ctx.os.exec(["staticcheck", "./..."], raise_on_failure = False).retcode:
+  exe = _go_install(ctx, "honnef.co/go/tools/cmd/staticcheck", version)
+  if ctx.os.exec([exe, "./..."], raise_on_failure = False).retcode:
     # TODO(maruel): Emits lines.
     ctx.emit.annotation(level="error", message="failed staticcheck")
+
+
+def _go_install(ctx, pkg, version):
+  tool_name = pkg.split("/")[-1]
+
+  # TODO(olivernewman): Stop using a separate GOPATH for each tool, and instead
+  # install the tools sequentially. Multiple concurrent `go install` runs on the
+  # same GOPATH results in race conditions.
+  gopath = "%s/.tools/gopath/%s" % (ctx.scm.root, tool_name)
+  gobin = "%s/bin" % gopath
+  ctx.os.exec(
+    ["go", "install", "%s@%s" % (pkg, version)],
+    env = {
+      "GOPATH": gopath,
+      "GOBIN": gobin,
+    },
+  )
+
+  return "%s/%s" % (gobin, tool_name)

@@ -22,10 +22,6 @@ CIPD_ROOT="$REPO_ROOT/.tools"
 if [ ! -d "$CIPD_ROOT" ]; then
   mkdir "$CIPD_ROOT"
 fi
-# Make it so "go install" installs locally.
-export GOPATH="$CIPD_ROOT"
-export GOBIN="$CIPD_ROOT/bin"
-export PATH="$CIPD_ROOT/bin:$PATH"
 
 # Install Go using CIPD if it's not on $PATH.
 if ! command -v "go" > /dev/null; then

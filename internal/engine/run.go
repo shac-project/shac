@@ -345,7 +345,7 @@ func (c *check) call(ctx context.Context, intr *interpreter.Interpreter) error {
 	ctx = context.WithValue(ctx, &checkCtxKey, c)
 	th := intr.Thread(ctx)
 	th.Name = c.name
-	args := starlark.Tuple{getCtx()}
+	args := starlark.Tuple{getCtx(ctxState(ctx).inputs.root)}
 	args.Freeze()
 	if r, err := starlark.Call(th, c.cb, args, nil); err != nil {
 		if c.failErr != nil {

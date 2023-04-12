@@ -31,7 +31,7 @@ import (
 // getCtx returns the ctx object to pass to a registered check callback.
 //
 // Make sure to update //doc/stdlib.star whenever this function is modified.
-func getCtx() starlark.Value {
+func getCtx(root string) starlark.Value {
 	return toValue("ctx", starlark.StringDict{
 		// Implemented in runtime_ctx_emit.go
 		"emit": toValue("ctx.emit", starlark.StringDict{
@@ -51,6 +51,7 @@ func getCtx() starlark.Value {
 		}),
 		// Implemented in runtime_ctx_scm.go
 		"scm": toValue("ctx.scm", starlark.StringDict{
+			"root":           starlark.String(root),
 			"affected_files": newBuiltin("ctx.scm.affected_files", ctxScmAffectedFiles),
 			"all_files":      newBuiltin("ctx.scm.all_files", ctxScmAllFiles),
 		}),
