@@ -1048,7 +1048,7 @@ func (r *reportNoPrint) EmitArtifact(ctx context.Context, check, root, file stri
 	return errors.New("not implemented")
 }
 
-func (r *reportNoPrint) CheckCompleted(ctx context.Context, check string, d time.Duration, l Level, err error) {
+func (r *reportNoPrint) CheckCompleted(ctx context.Context, check string, start time.Time, d time.Duration, l Level, err error) {
 }
 
 func (r *reportNoPrint) Print(ctx context.Context, file string, line int, message string) {

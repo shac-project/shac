@@ -81,7 +81,7 @@ func (b *basic) EmitArtifact(ctx context.Context, check, root, file string, cont
 	return errors.New("not implemented")
 }
 
-func (b *basic) CheckCompleted(ctx context.Context, check string, d time.Duration, level engine.Level, err error) {
+func (b *basic) CheckCompleted(ctx context.Context, check string, start time.Time, d time.Duration, level engine.Level, err error) {
 	l := string(level)
 	if level == "" || level == engine.Notice {
 		l = "Success"
@@ -116,7 +116,7 @@ func (g *github) EmitArtifact(ctx context.Context, check, root, file string, con
 	return errors.New("not implemented")
 }
 
-func (g *github) CheckCompleted(ctx context.Context, check string, d time.Duration, l engine.Level, err error) {
+func (g *github) CheckCompleted(ctx context.Context, check string, start time.Time, d time.Duration, l engine.Level, err error) {
 }
 
 func (g *github) Print(ctx context.Context, file string, line int, message string) {
@@ -150,7 +150,7 @@ func (i *interactive) EmitArtifact(ctx context.Context, root, check, file string
 	return errors.New("not implemented")
 }
 
-func (i *interactive) CheckCompleted(ctx context.Context, check string, d time.Duration, level engine.Level, err error) {
+func (i *interactive) CheckCompleted(ctx context.Context, check string, start time.Time, d time.Duration, level engine.Level, err error) {
 	c := levelColor[level]
 	l := string(level)
 	if level == "" || level == engine.Notice {

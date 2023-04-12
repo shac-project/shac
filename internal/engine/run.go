@@ -100,9 +100,9 @@ type Report interface {
 	EmitArtifact(ctx context.Context, check, root, file string, content []byte) error
 	// CheckCompleted is called when a check is completed.
 	//
-	// It returns the wallclock duration, the highest level emitted and an error
+	// It is called with the start time, wall clock duration, the highest level emitted and an error
 	// if an abnormal error occurred.
-	CheckCompleted(ctx context.Context, check string, d time.Duration, r Level, err error)
+	CheckCompleted(ctx context.Context, check string, start time.Time, d time.Duration, r Level, err error)
 	// Print is called when print() starlark function is called.
 	Print(ctx context.Context, file string, line int, message string)
 }
@@ -313,7 +313,7 @@ func (s *shacState) callAllChecks(ctx context.Context) error {
 		eg.Go(func() error {
 			start := time.Now()
 			err := s.checks[i].call(ctx, s.intr)
-			st.r.CheckCompleted(ctx, s.checks[i].name, time.Since(start), s.checks[i].highestLevel, err)
+			st.r.CheckCompleted(ctx, s.checks[i].name, start, time.Since(start), s.checks[i].highestLevel, err)
 			return err
 		})
 	}
