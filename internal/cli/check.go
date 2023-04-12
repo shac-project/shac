@@ -47,11 +47,19 @@ func (c *checkCmd) Execute(ctx context.Context, args []string) error {
 	if len(args) != 0 {
 		return errors.New("unsupported arguments")
 	}
+	r, err := reporting.Get(ctx)
+	if err != nil {
+		return err
+	}
 	o := engine.Options{
-		Report:   reporting.Get(),
+		Report:   r,
 		Root:     c.root,
 		Main:     c.main,
 		AllFiles: c.allFiles,
 	}
-	return engine.Run(ctx, &o)
+	err = engine.Run(ctx, &o)
+	if err2 := r.Close(); err == nil {
+		err = err2
+	}
+	return err
 }

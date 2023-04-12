@@ -27,40 +27,53 @@ import (
 	"go.fuchsia.dev/shac-project/shac/internal/engine"
 )
 
+// Report is a closable engine.Report.
+type Report interface {
+	io.Closer
+	engine.Report
+}
+
 // Get returns the right reporting implementation based on the current
 // environment.
-func Get() engine.Report {
+func Get(ctx context.Context) (Report, error) {
 	// On LUCI/Swarming. ResultDB!
-	if os.Getenv("SWARMING_TASK_ID") != "" {
-		// TODO(maruel): Emits LUCI_CONTEXT.
-		return &basic{out: os.Stdout}
+	if os.Getenv("LUCI_CONTEXT") != "" {
+		l := &luci{basic: basic{out: os.Stdout}}
+		if err := l.init(ctx); err != nil {
+			return nil, err
+		}
+		return l, nil
 	}
 
 	// On GitHub Actions.
 	if os.Getenv("GITHUB_RUN_ID") != "" {
 		// Emits GitHub Workflows commands.
-		return &github{out: os.Stdout}
+		return &github{out: os.Stdout}, nil
 	}
 
 	// Active terminal. Colors! This includes VSCode's integrated terminal.
 	if os.Getenv("TERM") != "dumb" && isatty.IsTerminal(os.Stderr.Fd()) {
 		return &interactive{
 			out: colorable.NewColorableStdout(),
-		}
+		}, nil
 	}
 
 	// VSCode extension.
 	if os.Getenv("VSCODE_GIT_IPC_HANDLE") != "" {
 		// TODO(maruel): Return SARIF.
-		return &basic{out: os.Stdout}
+		return &basic{out: os.Stdout}, nil
 	}
 
 	// Anything else, e.g. redirected output.
-	return &basic{out: os.Stdout}
+	return &basic{out: os.Stdout}, nil
 }
 
 type basic struct {
 	out io.Writer
+}
+
+func (b *basic) Close() error {
+	return nil
 }
 
 func (b *basic) EmitAnnotation(ctx context.Context, check string, level engine.Level, message, root, file string, s engine.Span, replacements []string) error {
@@ -105,10 +118,37 @@ type github struct {
 	out io.Writer
 }
 
+func (g *github) Close() error {
+	return nil
+}
+
 func (g *github) EmitAnnotation(ctx context.Context, check string, level engine.Level, message, root, file string, s engine.Span, replacements []string) error {
-	// TODO(maruel): Do not drop replacements!
-	_, err := fmt.Fprintf(g.out, "::%s ::file=%s,line=%d,col=%d,endLine=%d,endCol=%d,title=%s::%s\n",
-		level, file, s.Start.Line, s.Start.Col, s.End.Line, s.End.Col, check, message)
+	if file != "" {
+		// TODO(maruel): Do not drop replacements!
+		if s.Start.Line > 0 {
+			if s.End.Line > 0 {
+				if s.End.Col > 0 {
+					_, err := fmt.Fprintf(g.out, "::%s ::file=%s,line=%d,col=%d,endLine=%d,endCol=%d,title=%s::%s\n",
+						level, file, s.Start.Line, s.Start.Col, s.End.Line, s.End.Col, check, message)
+					return err
+				}
+				_, err := fmt.Fprintf(g.out, "::%s ::file=%s,line=%d,endLine=%d,title=%s::%s\n",
+					level, file, s.Start.Line, s.End.Line, check, message)
+				return err
+			}
+			if s.Start.Col > 0 {
+				_, err := fmt.Fprintf(g.out, "::%s ::file=%s,line=%d,col=%d,title=%s::%s\n",
+					level, file, s.Start.Line, s.Start.Col, check, message)
+				return err
+			}
+			_, err := fmt.Fprintf(g.out, "::%s ::file=%s,line=%d,title=%s::%s\n",
+				level, file, s.Start.Line, check, message)
+			return err
+		}
+		_, err := fmt.Fprintf(g.out, "::%s ::file=%stitle=%s::%s\n", level, file, check, message)
+		return err
+	}
+	_, err := fmt.Fprintf(g.out, "::%s ::title=%s::%s\n", level, check, message)
 	return err
 }
 
@@ -129,6 +169,10 @@ func (g *github) Print(ctx context.Context, file string, line int, message strin
 
 type interactive struct {
 	out io.Writer
+}
+
+func (i *interactive) Close() error {
+	return nil
 }
 
 func (i *interactive) EmitAnnotation(ctx context.Context, check string, level engine.Level, message, root, file string, s engine.Span, replacements []string) error {
