@@ -40,9 +40,29 @@ def ineffassign(ctx, version = "v0.0.0-20230107090616-13ace0543b28"):
       will be rolled from time to time.
   """
   exe = _go_install(ctx, "github.com/gordonklaus/ineffassign", version)
-  if ctx.os.exec([exe, "./..."], raise_on_failure = False).retcode:
-    # TODO(maruel): Emits lines.
-    ctx.emit.annotation(level="error", message="failed ineffassign")
+  res = ctx.os.exec([exe, "./..."], raise_on_failure = False)
+  # ineffassign's README claims that it emits a retcode of 1 if it returns any
+  # findings, but it actually emits a retcode of 3.
+  # https://github.com/gordonklaus/ineffassign/blob/4cc7213b9bc8b868b2990c372f6fa057fa88b91c/ineffassign.go#L70
+  if res.retcode not in (0, 3):
+    ctx.emit.annotation(
+      level="error",
+      message="unexpected error from ineffassign (retcode %d):\n%s" % (
+        res.retcode,
+        res.stderr,
+      ),
+    )
+
+  # ineffassign emits some duplicate lines.
+  for line in set(res.stderr.splitlines()):
+    match = ctx.re.match(r"^%s/(.+):(\d+):(\d+): (.+)$" % ctx.scm.root, line)
+    ctx.emit.annotation(
+      level="error",
+      filepath=match.groups[1],
+      line=int(match.groups[2]),
+      col=int(match.groups[3]),
+      message=match.groups[4],
+    )
 
 
 def staticcheck(ctx, version = "v0.4.3"):
@@ -96,7 +116,7 @@ def shadow(ctx, version = "v0.7.0"):
     findings.extend(pkg_findings["shadow"])
 
   for finding in findings:
-    match = ctx.re.match(r"%s/(.+):(\d+):(\d+)" % ctx.scm.root, finding["posn"])
+    match = ctx.re.match(r"^%s/(.+):(\d+):(\d+)$" % ctx.scm.root, finding["posn"])
     ctx.emit.annotation(
       level="error",
       filepath=match.groups[1],
