@@ -107,9 +107,32 @@ def staticcheck(ctx, version = "v0.4.3"):
     will be rolled from time to time.
   """
   exe = _go_install(ctx, "honnef.co/go/tools/cmd/staticcheck", version)
-  if ctx.os.exec([exe, "./..."], raise_on_failure = False).retcode:
-    # TODO(maruel): Emits lines.
-    ctx.emit.annotation(level="error", message="failed staticcheck")
+  res = ctx.os.exec([exe, "-f=json", "./..."], raise_on_failure = False)
+  if res.retcode not in (0, 1):
+    ctx.emit.annotation(
+      level="error",
+      message="unexpected error from staticcheck (retcode %d):\n%s" % (
+        res.retcode,
+        res.stderr,
+      ),
+    )
+
+  # Output is JSON-lines.
+  # https://staticcheck.io/docs/running-staticcheck/cli/formatters/#json
+  for line in res.stdout.splitlines():
+    f = json.decode(line)
+    ctx.emit.annotation(
+      # Either "error" or "warning".
+      level=f["severity"],
+      message=f["message"],
+      # TODO(olivernewman): Add a relpath method for converting abs paths to
+      # relative.
+      filepath=f["location"]["file"][len(ctx.scm.root)+1:],
+      line=f["location"]["line"],
+      col=f["location"]["column"],
+      end_line=f["end"]["line"],
+      end_col=f["end"]["column"],
+    )
 
 
 def shadow(ctx, version = "v0.7.0"):
