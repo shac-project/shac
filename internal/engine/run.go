@@ -55,8 +55,13 @@ type Cursor struct {
 
 // Span represents a section in a source file or a change description.
 type Span struct {
+	// Start is the beginning of the span. If Col is specified, Line must be
+	// specified.
 	Start Cursor
-	End   Cursor
+	// End is the end of the span. If not specified, the span has only one line.
+	// If Col is specified, Start.Col must be specified too. It is inclusive.
+	// That is, it is impossible to do a 0 width span.
+	End Cursor
 
 	// Require keyed arguments.
 	_ struct{}

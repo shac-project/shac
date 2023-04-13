@@ -15,11 +15,13 @@
 package reporting
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/mattn/go-colorable"
@@ -178,9 +180,52 @@ func (i *interactive) Close() error {
 func (i *interactive) EmitAnnotation(ctx context.Context, check string, level engine.Level, message, root, file string, s engine.Span, replacements []string) error {
 	c := levelColor[level]
 	if file != "" {
-		// TODO(maruel): Do not drop span and replacements!
+		// TODO(maruel): Do not drop replacements!
 		if s.Start.Line > 0 {
-			_, err := fmt.Fprintf(i.out, "%s[%s%s%s/%s%s%s] %s(%d): %s\n", reset, fgHiCyan, check, reset, c, level, reset, file, s.Start.Line, message)
+			fmt.Fprintf(i.out, "%s[%s%s%s/%s%s%s] %s(%d): %s\n", reset, fgHiCyan, check, reset, c, level, reset, file, s.Start.Line, message)
+
+			// Emit the line and a bit of context in interactive mode.
+			b, err := os.ReadFile(filepath.Join(root, file))
+			if err != nil {
+				return err
+			}
+			lines := bytes.Split(b, []byte("\n"))
+			end := s.End.Line
+			if end == 0 {
+				end = s.Start.Line
+			}
+			fmt.Fprintf(i.out, "\n")
+			for l := s.Start.Line - 2; l <= end; l++ {
+				if l < 0 || l >= len(lines) {
+					continue
+				}
+				if l == s.Start.Line-1 {
+					// First highlighted line.
+					if s.Start.Col > 0 {
+						if s.End.Line == s.Start.Line && s.End.Col > 0 {
+							// Intra-line highlight.
+							fmt.Fprintf(i.out, "  %s%s%s%s%s\n", lines[l][:s.Start.Col-1], c, lines[l][s.Start.Col-1:s.End.Col], reset, lines[l][s.End.Col:])
+						} else {
+							fmt.Fprintf(i.out, "  %s%s%s%s\n", lines[l][:s.Start.Col-1], c, lines[l][s.Start.Col-1:], reset)
+						}
+					} else {
+						fmt.Fprintf(i.out, "  %s%s%s\n", c, lines[l], reset)
+					}
+				} else if l > s.Start.Line-1 && l < end-1 {
+					// Middle lines.
+					fmt.Fprintf(i.out, "  %s%s%s\n", c, lines[l], reset)
+				} else if l >= s.Start.Line && l == end-1 {
+					// Last highlighted line.
+					if s.End.Col > 0 {
+						fmt.Fprintf(i.out, "  %s%s%s%s\n", c, lines[l][:s.End.Col], reset, lines[l][s.End.Col:])
+					} else {
+						fmt.Fprintf(i.out, "  %s%s%s\n", c, lines[l], reset)
+					}
+				} else {
+					fmt.Fprintf(i.out, "  %s\n", lines[l])
+				}
+			}
+			_, err = fmt.Fprintf(i.out, "\n")
 			return err
 		}
 		_, err := fmt.Fprintf(i.out, "%s[%s%s%s/%s%s%s] %s: %s\n", reset, fgHiCyan, check, reset, c, level, reset, file, message)
@@ -201,9 +246,9 @@ func (i *interactive) CheckCompleted(ctx context.Context, check string, start ti
 		l = "Success"
 	}
 	if err != nil {
-		fmt.Fprintf(i.out, "- %s%s%s%s (%s in %s): %s\n", reset, c, check, reset, l, d.Round(time.Millisecond), err)
+		fmt.Fprintf(i.out, "%s- %s%s%s (%s in %s): %s\n", reset, c, check, reset, l, d.Round(time.Millisecond), err)
 	} else {
-		fmt.Fprintf(i.out, "- %s%s%s%s (%s in %s)\n", reset, c, check, reset, l, d.Round(time.Millisecond))
+		fmt.Fprintf(i.out, "%s- %s%s%s (%s in %s)\n", reset, c, check, reset, l, d.Round(time.Millisecond))
 	}
 }
 
