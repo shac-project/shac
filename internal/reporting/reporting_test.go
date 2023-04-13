@@ -64,8 +64,8 @@ func TestBasic(t *testing.T) {
 	want := "[mycheck/notice] message1\n" +
 		"[mycheck/notice] testdata/file.txt: message2\n" +
 		"[mycheck/notice] testdata/file.txt(10): message3\n" +
-		"- mycheck (Success in 1ms)\n" +
-		"- badcheck (Success in 1ms): bad\n" +
+		"- mycheck (success in 1ms)\n" +
+		"- badcheck (error in 1ms): bad\n" +
 		"[src.star:12] debugmsg\n"
 	if diff := cmp.Diff(want, buf.String()); diff != "" {
 		t.Fatalf("mismatch (-want +got):\n%s", diff)
@@ -280,8 +280,8 @@ func TestInteractive(t *testing.T) {
 	if err := r.Close(); err != nil {
 		t.Fatal(err)
 	}
-	want := "<R>- <G>mycheck<R> (Success in 1ms)\n" +
-		"<R>- <G>badcheck<R> (Success in 1ms): bad\n" +
+	want := "<R>- <G>mycheck<R> (success in 1ms)\n" +
+		"<R>- <Re>badcheck<R> (error in 1ms): bad\n" +
 		"<R>[src.star:12<R>] <B>debugmsg<R>\n"
 
 	if diff := cmp.Diff(want, buf.String()); diff != "" {

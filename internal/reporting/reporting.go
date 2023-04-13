@@ -97,9 +97,12 @@ func (b *basic) EmitArtifact(ctx context.Context, check, root, file string, cont
 }
 
 func (b *basic) CheckCompleted(ctx context.Context, check string, start time.Time, d time.Duration, level engine.Level, err error) {
+	if err != nil {
+		level = engine.Error
+	}
 	l := string(level)
 	if level == "" || level == engine.Notice {
-		l = "Success"
+		l = "success"
 	}
 	if err != nil {
 		fmt.Fprintf(b.out, "- %s (%s in %s): %s\n", check, l, d.Round(time.Millisecond), err)
@@ -240,10 +243,13 @@ func (i *interactive) EmitArtifact(ctx context.Context, root, check, file string
 }
 
 func (i *interactive) CheckCompleted(ctx context.Context, check string, start time.Time, d time.Duration, level engine.Level, err error) {
+	if err != nil {
+		level = engine.Error
+	}
 	c := levelColor[level]
 	l := string(level)
 	if level == "" || level == engine.Notice {
-		l = "Success"
+		l = "success"
 	}
 	if err != nil {
 		fmt.Fprintf(i.out, "%s- %s%s%s (%s in %s): %s\n", reset, c, check, reset, l, d.Round(time.Millisecond), err)
