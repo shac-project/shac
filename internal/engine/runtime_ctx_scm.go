@@ -51,6 +51,8 @@ type file struct {
 }
 
 // scmCheckout is the generic interface for version controlled sources.
+//
+// Returned files must be sorted.
 type scmCheckout interface {
 	affectedFiles(ctx context.Context) ([]file, error)
 	allFiles(ctx context.Context) ([]file, error)
@@ -99,6 +101,10 @@ func getSCM(ctx context.Context, root string, allFiles bool) (scmCheckout, error
 	g := &gitCheckout{returnAll: allFiles}
 	err := g.init(ctx, root)
 	if err == nil {
+		if g.checkoutRoot != root {
+			// Offset accordingly.
+			return &subdirSCM{s: g, subdir: root[len(g.checkoutRoot)+1:] + "/"}, nil
+		}
 		return g, nil
 	}
 	if errors.Is(err, exec.ErrNotFound) {
@@ -117,9 +123,8 @@ func getSCM(ctx context.Context, root string, allFiles bool) (scmCheckout, error
 // gitCheckout represents a git checkout.
 type gitCheckout struct {
 	// Configuration.
-	originalRoot string
-	env          []string
-	returnAll    bool
+	env       []string
+	returnAll bool
 
 	// Detected environment at initialization.
 	checkoutRoot string
@@ -134,7 +139,6 @@ type gitCheckout struct {
 }
 
 func (g *gitCheckout) init(ctx context.Context, root string) error {
-	g.originalRoot = root
 	// Find root.
 	g.checkoutRoot = root
 	g.checkoutRoot = g.run(ctx, "rev-parse", "--show-toplevel")
@@ -240,7 +244,6 @@ func (g *gitCheckout) affectedFiles(ctx context.Context) ([]file, error) {
 				break
 			}
 			if !g.isSubmodule(path) {
-				// TODO(maruel): Filter on g.originalRoot.
 				g.modified = append(g.modified, file{action: action, path: path})
 			}
 		}
@@ -266,7 +269,6 @@ func (g *gitCheckout) allFiles(ctx context.Context) ([]file, error) {
 			for _, path := range items {
 				if !g.isSubmodule(path) {
 					// TODO(maruel): Still include action from affectedFiles()?
-					// TODO(maruel): Filter on g.originalRoot.
 					g.all = append(g.all, file{action: "A", path: path})
 				}
 			}
@@ -395,6 +397,7 @@ func (r *rawTree) allFiles(ctx context.Context) ([]file, error) {
 			}
 			return nil
 		})
+		sort.Slice(r.all, func(i, j int) bool { return r.all[i].path < r.all[j].path })
 	}
 	return r.all, err
 }

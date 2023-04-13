@@ -192,7 +192,7 @@ func Run(ctx context.Context, o *Options) error {
 			allowNetwork: allowNetwork,
 			main:         main,
 			root:         root,
-			scm:          &subdirSCM{s: scm, subdir: ""},
+			scm:          scm,
 		},
 	}
 

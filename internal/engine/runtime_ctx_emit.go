@@ -20,6 +20,8 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"sort"
+	"strings"
 
 	"go.starlark.net/starlark"
 )
@@ -108,6 +110,14 @@ func ctxEmitAnnotation(ctx context.Context, s *shacState, name string, args star
 	root := ""
 	if file != "" {
 		root = s.root
+		// The file must be tracked by scm.
+		f, err := s.scm.allFiles(ctx)
+		if err != nil {
+			return err
+		}
+		if _, found := sort.Find(len(f), func(i int) int { return strings.Compare(file, f[i].path) }); !found {
+			return fmt.Errorf("for parameter \"filepath\": %s is not tracked", argfilepath)
+		}
 	}
 	if err := s.r.EmitAnnotation(ctx, c.name, level, message, root, file, span, replacements); err != nil {
 		return fmt.Errorf("failed to emit: %w", err)
