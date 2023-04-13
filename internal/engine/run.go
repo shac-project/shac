@@ -123,6 +123,8 @@ type Options struct {
 	Config string
 	// AllFiles tells to consider all files as affected.
 	AllFiles bool
+	// Recurse tells the engine to run all Main files found in subdirectories.
+	Recurse bool
 
 	// Require keyed arguments.
 	_ struct{}
@@ -183,9 +185,8 @@ func Run(ctx context.Context, o *Options) error {
 
 	// Each found shac.star is run in its own interpreter for maximum
 	// parallelism.
-	// TODO(maruel): Discover recursively and run them in parallel.
 	shacStates := []*shacState{
-		&shacState{
+		{
 			code:         interpreter.FileSystemLoader(root),
 			r:            o.Report,
 			allowNetwork: allowNetwork,
@@ -195,7 +196,36 @@ func Run(ctx context.Context, o *Options) error {
 		},
 	}
 
+	if o.Recurse {
+		// Discover all the main files via the SCM. This enables us to not walk
+		// ignored files.
+		files, err := scm.allFiles(ctx)
+		if err != nil {
+			return err
+		}
+		for i := range files {
+			n := files[i].path
+			if filepath.Base(n) == main {
+				d := filepath.Dir(n)
+				if d == "." {
+					continue
+				}
+				nr := filepath.Join(root, d)
+				shacStates = append(shacStates,
+					&shacState{
+						code:         interpreter.FileSystemLoader(nr),
+						r:            o.Report,
+						allowNetwork: allowNetwork,
+						main:         main,
+						root:         nr,
+						scm:          &subdirSCM{s: scm, subdir: d + "/"},
+					})
+			}
+		}
+	}
+
 	// Parse the starlark files.
+	// TODO(maruel): Run in parallel.
 	for _, s := range shacStates {
 		if err := s.parseAndRun(ctx); err != nil {
 			return err

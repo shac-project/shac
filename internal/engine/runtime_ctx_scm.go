@@ -359,7 +359,7 @@ func (g *gitCheckout) newLines(path string) builtin {
 				// Track the current line number.
 				t = append(t, starlark.Tuple{starlark.MakeInt(curr), starlark.String(l[1:])})
 				curr++
-			} else if !strings.HasPrefix(l, "-") {
+			} else if !strings.HasPrefix(l, "-") && l != "\\ No newline at end of file" {
 				panic(fmt.Sprintf("unexpected line %q", l))
 			}
 		}

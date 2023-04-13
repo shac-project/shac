@@ -360,6 +360,103 @@ func TestRun_SCM_Git_Broken(t *testing.T) {
 	}
 }
 
+func TestRun_SCM_Git_Recursive(t *testing.T) {
+	t.Parallel()
+	// Tree content:
+	//   shac.star
+	//   a/
+	//     shac.star
+	//     a.txt  (not affected)
+	//   b/
+	//     shac.star
+	//     b.txt
+	root := t.TempDir()
+	initGit(t, root)
+	for _, p := range []string{"a", "b", "c"} {
+		if err := os.Mkdir(filepath.Join(root, p), 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// a/a.txt is in the initial commit, thus is not affected in commit HEAD.
+	writeFile(t, root, "a/a.txt", "content a")
+	runGit(t, root, "add", "a/a.txt")
+	runGit(t, root, "commit", "-m", "Initial commit")
+	// The affected files:
+	writeFile(t, root, "shac.star", ""+
+		"def cb(ctx):\n"+
+		"  name = \"root\"\n"+
+		"  for p, m in ctx.scm.affected_files().items():\n"+
+		"    if p.endswith(\".txt\"):\n"+
+		"      print(name + \": \" + p + \"=\" + m.new_lines()[0][1])\n"+
+		"      ctx.emit.annotation(level=\"notice\", message=name, filepath=p)\n"+
+		"    else:\n"+
+		"      print(name + \": \" + p)\n"+
+		"shac.register_check(cb)\n")
+	writeFile(t, root, "a/shac.star", ""+
+		"def cb(ctx):\n"+
+		"  name = \"a\"\n"+
+		"  for p, m in ctx.scm.affected_files().items():\n"+
+		"    if p.endswith(\".txt\"):\n"+
+		"      print(name + \": \" + p + \"=\" + m.new_lines()[0][1])\n"+
+		"      ctx.emit.annotation(level=\"notice\", message=name, filepath=p)\n"+
+		"    else:\n"+
+		"      print(name + \": \" + p)\n"+
+		"shac.register_check(cb)\n")
+	writeFile(t, root, "b/b.txt", "content b")
+	writeFile(t, root, "b/shac.star", ""+
+		"def cb(ctx):\n"+
+		"  name = \"b\"\n"+
+		"  for p, m in ctx.scm.affected_files().items():\n"+
+		"    if p.endswith(\".txt\"):\n"+
+		"      print(name + \": \" + p + \"=\" + m.new_lines()[0][1])\n"+
+		"      ctx.emit.annotation(level=\"notice\", message=name, filepath=p)\n"+
+		"    else:\n"+
+		"      print(name + \": \" + p)\n"+
+		"shac.register_check(cb)\n")
+	runGit(t, root, "add", ".")
+	runGit(t, root, "commit", "-m", "Second commit")
+	r := reportEmitPrint{reportPrint: reportPrint{reportNoPrint: reportNoPrint{t: t}}}
+	o := Options{Report: &r, Root: root, Recurse: true}
+	if err := Run(context.Background(), &o); err != nil {
+		t.Fatal(err)
+	}
+	// a/a.txt is skipped because it was in the first commit.
+	// shac.star see all files.
+	// a/shac.star only see files in a/.
+	// b/shac.star only see files in b/.
+	want := "" +
+		"[//shac.star:8] root: a/shac.star\n" +
+		"[//shac.star:5] root: b/b.txt=content b\n" +
+		"[//shac.star:8] root: b/shac.star\n" +
+		"[//shac.star:8] root: shac.star\n" +
+		"[//shac.star:8] a: shac.star\n" +
+		"[//shac.star:5] b: b.txt=content b\n" +
+		"[//shac.star:8] b: shac.star\n"
+	if diff := cmp.Diff(want, r.b.String()); diff != "" {
+		t.Fatalf("mismatch (-want +got):\n%s", diff)
+	}
+	annotations :=
+		[]annotation{
+			{
+				Check:   "cb",
+				Level:   "notice",
+				Message: "root",
+				Root:    root,
+				File:    "b/b.txt",
+			},
+			{
+				Check:   "cb",
+				Level:   "notice",
+				Message: "b",
+				Root:    filepath.Join(root, "b"),
+				File:    "b.txt",
+			},
+		}
+	if diff := cmp.Diff(annotations, r.annotations); diff != "" {
+		t.Errorf("mismatch (-want +got):\n%s", diff)
+	}
+}
+
 // TestTestDataFailOrThrow runs all the files under testdata/fail_or_throw/.
 //
 // These test cases call fail() or throw an exception.
@@ -823,7 +920,7 @@ func TestTestDataEmit(t *testing.T) {
 	for i := range data {
 		i := i
 		t.Run(data[i].name, func(t *testing.T) {
-			r := reportEmit{reportNoPrint: reportNoPrint{t: t}}
+			r := reportEmitNoPrint{reportNoPrint: reportNoPrint{t: t}}
 			o := Options{Report: &r, Root: root, Main: data[i].name, Config: "../config/valid.textproto"}
 			err := Run(context.Background(), &o)
 			if data[i].err != "" {
@@ -1067,13 +1164,6 @@ func (r *reportPrint) Print(ctx context.Context, file string, line int, message 
 	r.mu.Unlock()
 }
 
-type reportEmit struct {
-	reportNoPrint
-	mu          sync.Mutex
-	annotations []annotation
-	artifacts   []artifact
-}
-
 type annotation struct {
 	Check        string
 	Level        Level
@@ -1091,7 +1181,14 @@ type artifact struct {
 	Content []byte
 }
 
-func (r *reportEmit) EmitAnnotation(ctx context.Context, check string, level Level, message, root, file string, s Span, replacements []string) error {
+type reportEmitNoPrint struct {
+	reportNoPrint
+	mu          sync.Mutex
+	annotations []annotation
+	artifacts   []artifact
+}
+
+func (r *reportEmitNoPrint) EmitAnnotation(ctx context.Context, check string, level Level, message, root, file string, s Span, replacements []string) error {
 	r.mu.Lock()
 	r.annotations = append(r.annotations, annotation{
 		Check:        check,
@@ -1106,7 +1203,35 @@ func (r *reportEmit) EmitAnnotation(ctx context.Context, check string, level Lev
 	return nil
 }
 
-func (r *reportEmit) EmitArtifact(ctx context.Context, check, root, file string, content []byte) error {
+func (r *reportEmitNoPrint) EmitArtifact(ctx context.Context, check, root, file string, content []byte) error {
+	r.mu.Lock()
+	r.artifacts = append(r.artifacts, artifact{Check: check, Root: root, File: file, Content: content})
+	r.mu.Unlock()
+	return nil
+}
+
+type reportEmitPrint struct {
+	reportPrint
+	annotations []annotation
+	artifacts   []artifact
+}
+
+func (r *reportEmitPrint) EmitAnnotation(ctx context.Context, check string, level Level, message, root, file string, s Span, replacements []string) error {
+	r.mu.Lock()
+	r.annotations = append(r.annotations, annotation{
+		Check:        check,
+		Level:        level,
+		Message:      message,
+		Root:         root,
+		File:         file,
+		Span:         s,
+		Replacements: replacements,
+	})
+	r.mu.Unlock()
+	return nil
+}
+
+func (r *reportEmitPrint) EmitArtifact(ctx context.Context, check, root, file string, content []byte) error {
 	r.mu.Lock()
 	r.artifacts = append(r.artifacts, artifact{Check: check, Root: root, File: file, Content: content})
 	r.mu.Unlock()
