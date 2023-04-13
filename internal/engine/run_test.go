@@ -25,6 +25,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -424,34 +425,39 @@ func TestRun_SCM_Git_Recursive(t *testing.T) {
 	// shac.star see all files.
 	// a/shac.star only see files in a/.
 	// b/shac.star only see files in b/.
-	want := "" +
-		"[//shac.star:8] root: a/shac.star\n" +
-		"[//shac.star:5] root: b/b.txt=content b\n" +
-		"[//shac.star:8] root: b/shac.star\n" +
-		"[//shac.star:8] root: shac.star\n" +
-		"[//shac.star:8] a: shac.star\n" +
+	want := "\n" +
 		"[//shac.star:5] b: b.txt=content b\n" +
-		"[//shac.star:8] b: shac.star\n"
-	if diff := cmp.Diff(want, r.b.String()); diff != "" {
+		"[//shac.star:5] root: b/b.txt=content b\n" +
+		"[//shac.star:8] a: shac.star\n" +
+		"[//shac.star:8] b: shac.star\n" +
+		"[//shac.star:8] root: a/shac.star\n" +
+		"[//shac.star:8] root: b/shac.star\n" +
+		"[//shac.star:8] root: shac.star"
+	// With parallel execution, the output will not be deterministic. Sort it manually.
+	a := strings.Split(r.b.String(), "\n")
+	sort.Strings(a)
+	got := strings.Join(a, "\n")
+	if diff := cmp.Diff(want, got); diff != "" {
 		t.Fatalf("mismatch (-want +got):\n%s", diff)
 	}
-	annotations :=
-		[]annotation{
-			{
-				Check:   "cb",
-				Level:   "notice",
-				Message: "root",
-				Root:    root,
-				File:    "b/b.txt",
-			},
-			{
-				Check:   "cb",
-				Level:   "notice",
-				Message: "b",
-				Root:    filepath.Join(root, "b"),
-				File:    "b.txt",
-			},
-		}
+	annotations := []annotation{
+		{
+			Check:   "cb",
+			Level:   "notice",
+			Message: "b",
+			Root:    filepath.Join(root, "b"),
+			File:    "b.txt",
+		},
+		{
+			Check:   "cb",
+			Level:   "notice",
+			Message: "root",
+			Root:    root,
+			File:    "b/b.txt",
+		},
+	}
+	// With parallel execution, the output will not be deterministic. Sort it manually.
+	sort.Slice(r.annotations, func(i, j int) bool { return r.annotations[i].File < r.annotations[j].File })
 	if diff := cmp.Diff(annotations, r.annotations); diff != "" {
 		t.Errorf("mismatch (-want +got):\n%s", diff)
 	}

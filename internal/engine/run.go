@@ -229,11 +229,53 @@ func Run(ctx context.Context, o *Options) error {
 		}
 	}
 
-	// Parse the starlark files.
-	// TODO(maruel): Run in parallel.
+	// Parse the starlark files. Run everything from our errgroup.
+	eg, ctx := errgroup.WithContext(ctx)
+	eg.SetLimit(runtime.NumCPU() + 2)
+	// Make it so each shac can submit at least one item.
+	ch := make(chan func() error, len(shacStates))
+	done := make(chan struct{})
 	for _, s := range shacStates {
-		if err := s.parseAndRun(ctx); err != nil {
+		s := s
+		eg.Go(func() error {
+			err := s.parseAndBuffer(ctx, ch)
+			done <- struct{}{}
 			return err
+		})
+	}
+	count := len(shacStates)
+	for loop := true; loop; {
+		select {
+		case cb := <-ch:
+			if cb == nil {
+				loop = false
+			} else {
+				eg.Go(cb)
+			}
+		case <-done:
+			count--
+			if count == 0 {
+				// All shac.star processing is done, we can now send a nil to the
+				// channel to tell it to stop.
+				// Since we are pushing from the same loop that we are pulling, this is
+				// blocking. Instead of making the channel buffered, which would slow
+				// it down, use a one time goroutine. It's kind of a gross hack but
+				// it'll work just fine.
+				go func() {
+					ch <- nil
+				}()
+			}
+		}
+	}
+	if err := eg.Wait(); err != nil {
+		return err
+	}
+	// If any check failed, return an error.
+	for _, s := range shacStates {
+		for i := range s.checks {
+			if s.checks[i].highestLevel == Error {
+				return ErrCheckFailed
+			}
 		}
 	}
 	return nil
@@ -280,8 +322,8 @@ func ctxShacState(ctx context.Context) *shacState {
 
 var shacStateCtxKey = "shac.shacState"
 
-// parseAndRun parses and run a single shac.star file.
-func (s *shacState) parseAndRun(ctx context.Context) error {
+// parseAndBuffer parses and run a single shac.star file, then buffer all its checks.
+func (s *shacState) parseAndBuffer(ctx context.Context, ch chan<- func() error) error {
 	ctx = context.WithValue(ctx, &shacStateCtxKey, s)
 	if err := s.parse(ctx); err != nil {
 		return err
@@ -290,15 +332,7 @@ func (s *shacState) parseAndRun(ctx context.Context) error {
 		return errors.New("did you forget to call shac.register_check?")
 	}
 	// Last phase where checks are called.
-	if err := s.callAllChecks(ctx); err != nil {
-		return err
-	}
-	// If any check failed, return an error.
-	for i := range s.checks {
-		if s.checks[i].highestLevel == Error {
-			return ErrCheckFailed
-		}
-	}
+	s.bufferAllChecks(ctx, ch)
 	return nil
 }
 
@@ -334,18 +368,13 @@ func (s *shacState) parse(ctx context.Context) error {
 	return nil
 }
 
-// callAllChecks calls all the checks.
-//
-// It creates a separate thread per check, limited by the number of CPU cores +
-// 2. This permits to run them concurrently.
-func (s *shacState) callAllChecks(ctx context.Context) error {
-	eg, ctx := errgroup.WithContext(ctx)
-	eg.SetLimit(runtime.NumCPU() + 2)
+// bufferAllChecks adds all the checks to the channel for execution.
+func (s *shacState) bufferAllChecks(ctx context.Context, ch chan<- func() error) {
 	args := starlark.Tuple{getCtx(s.root)}
 	args.Freeze()
 	for i := range s.checks {
 		i := i
-		eg.Go(func() error {
+		ch <- func() error {
 			start := time.Now()
 			err := s.checks[i].call(ctx, s.intr, args)
 			if err != nil && ctx.Err() != nil {
@@ -358,9 +387,8 @@ func (s *shacState) callAllChecks(ctx context.Context) error {
 			}
 			s.r.CheckCompleted(ctx, s.checks[i].name, start, time.Since(start), s.checks[i].highestLevel, err)
 			return err
-		})
+		}
 	}
-	return eg.Wait()
 }
 
 // check represents one check added via shac.register_check().
