@@ -13,7 +13,7 @@
 # limitations under the License.
 
 
-def gosec(ctx, version = "v2.15.0"):
+def gosec(ctx, version = "v2.15.0", level = "error"):
   """Runs gosec on a Go code base.
 
   See https://github.com/securego/gosec for more details.
@@ -22,11 +22,23 @@ def gosec(ctx, version = "v2.15.0"):
     ctx: A ctx instance.
     version: gosec version to install. Defaults to a recent version, that will
       be rolled from time to time.
+    level: level at which issues should be emitted.
   """
   exe = _go_install(ctx, "github.com/securego/gosec/v2/cmd/gosec", version)
-  if ctx.os.exec([exe, "-fmt=golint", "-quiet", "-exclude=G304", "-exclude-dir=.tools", "./..."], raise_on_failure = False).retcode:
-    # TODO(maruel): Emits lines.
-    ctx.emit.annotation(level="error", message="failed gosec")
+  res = ctx.os.exec([exe, "-fmt=json", "-quiet", "-exclude=G304", "-exclude-dir=.tools", "./..."], raise_on_failure = False)
+  if res.retcode:
+    # Schema is https://pkg.go.dev/github.com/securego/gosec/v2#ReportInfo
+    d = json.decode(res.stdout)
+    o = len(ctx.scm.root)+1
+    for file, data in d["Golang errors"]:
+      ctx.emit.annotation(
+          level="error", message=i["error"], filepath=file[o:], line=int(i["line"]),
+          col=int(i["column"]))
+    for i in d["Issues"]:
+      line = i["line"].split("-")[0]
+      ctx.emit.annotation(
+          level=level, message=i["rule_id"] + ": " + i["details"],
+          filepath=i["file"][o:], line=int(line), col=int(i["column"]))
 
 
 def ineffassign(ctx, version = "v0.0.0-20230107090616-13ace0543b28"):
