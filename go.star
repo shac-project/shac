@@ -108,7 +108,7 @@ def staticcheck(ctx, version = "v0.4.3"):
   """
   exe = _go_install(ctx, "honnef.co/go/tools/cmd/staticcheck", version)
   res = ctx.os.exec([exe, "-f=json", "./..."], raise_on_failure = False)
-  if res.retcode not in (0, 1):
+  if res.retcode not in (0, 1) or res.stderr:
     ctx.emit.annotation(
       level="error",
       message="unexpected error from staticcheck (retcode %d):\n%s" % (
@@ -116,6 +116,7 @@ def staticcheck(ctx, version = "v0.4.3"):
         res.stderr,
       ),
     )
+    return
 
   # Output is JSON-lines.
   # https://staticcheck.io/docs/running-staticcheck/cli/formatters/#json
