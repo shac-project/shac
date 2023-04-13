@@ -176,111 +176,47 @@ func Run(ctx context.Context, o *Options) error {
 		return err
 	}
 
-	s := &state{
-		inputs: &inputs{
-			code:     interpreter.FileSystemLoader(root),
-			root:     root,
-			main:     main,
-			allFiles: o.AllFiles,
-		},
-		r:            o.Report,
-		allowNetwork: allowNetwork,
-	}
-	s.scm, err = getSCM(ctx, root)
+	scm, err := getSCM(ctx, root, o.AllFiles)
 	if err != nil {
 		return err
 	}
 
-	// Parse the starlark file.
-	ctx = context.WithValue(ctx, &stateCtxKey, s)
-	if err = s.parse(ctx); err != nil {
-		return err
-	}
-	if len(s.checks) == 0 && !s.printCalled {
-		return errors.New("did you forget to call shac.register_check?")
-	}
-	// Last phase where checks are called.
-	if err = s.callAllChecks(ctx); err != nil {
-		return err
-	}
-	// If any check failed, return an error.
-	for i := range s.checks {
-		if s.checks[i].highestLevel == Error {
-			return ErrCheckFailed
-		}
-	}
-	return nil
-}
-
-// inputs represents a starlark package.
-type inputs struct {
-	code     interpreter.Loader
-	root     string
-	main     string
-	allFiles bool
-}
-
-// state represents the parsing and running state of an execution tree.
-type state struct {
-	inputs       *inputs
-	r            Report
-	scm          scmCheckout
-	allowNetwork bool
-
-	// TODO(maruel): There will be one shacState per shac.star found in
-	// subdirectories.
-	shacState
-}
-
-// ctxState pulls out *state from the context.
-//
-// Panics if not there.
-func ctxState(ctx context.Context) *state {
-	return ctx.Value(&stateCtxKey).(*state)
-}
-
-var stateCtxKey = "shac.state"
-
-// parse parses a single shac.star file.
-//
-// TODO(maruel): Returns one new shacState for the input.
-func (s *state) parse(ctx context.Context) error {
-	s.intr = &interpreter.Interpreter{
-		Predeclared: getPredeclared(),
-		Packages: map[string]interpreter.Loader{
-			interpreter.MainPkg: s.inputs.code,
-		},
-		Logger: func(file string, line int, message string) {
-			s.mu.Lock()
-			s.printCalled = true
-			s.mu.Unlock()
-			s.r.Print(ctx, file, line, message)
+	// Each found shac.star is run in its own interpreter for maximum
+	// parallelism.
+	// TODO(maruel): Discover recursively and run them in parallel.
+	shacStates := []*shacState{
+		&shacState{
+			code:         interpreter.FileSystemLoader(root),
+			r:            o.Report,
+			allowNetwork: allowNetwork,
+			main:         main,
+			root:         root,
+			scm:          &subdirSCM{s: scm, subdir: ""},
 		},
 	}
 
-	var err error
-	if err = s.intr.Init(ctx); err == nil {
-		_, err = s.intr.ExecModule(ctx, interpreter.MainPkg, s.inputs.main)
-	}
-	if err != nil {
-		if s.failErr != nil {
-			// We got a fail() call, use this instead.
-			return s.failErr
+	// Parse the starlark files.
+	for _, s := range shacStates {
+		if err := s.parseAndRun(ctx); err != nil {
+			return err
 		}
-		var evalErr *starlark.EvalError
-		if errors.As(err, &evalErr) {
-			return &evalError{evalErr}
-		}
-		return err
 	}
-	s.doneLoading = true
 	return nil
 }
 
 // shacState represents a parsing state of one shac.star.
 type shacState struct {
-	intr *interpreter.Interpreter
-	// checks is the list of registered checks callbacks via shac.register_check().
+	code         interpreter.Loader
+	intr         *interpreter.Interpreter
+	r            Report
+	allowNetwork bool
+	main         string
+	// root is the root for this shac.star.
+	root string
+	// scm is a filtered view of runState.scm.
+	scm scmCheckout
+	// checks is the list of registered checks callbacks via
+	// shac.register_check().
 	//
 	// Checks are added serially, so no lock is needed.
 	//
@@ -300,20 +236,84 @@ type shacState struct {
 	printCalled bool
 }
 
+// ctxShacState pulls out *runState from the context.
+//
+// Panics if not there.
+func ctxShacState(ctx context.Context) *shacState {
+	return ctx.Value(&shacStateCtxKey).(*shacState)
+}
+
+var shacStateCtxKey = "shac.shacState"
+
+// parseAndRun parses and run a single shac.star file.
+func (s *shacState) parseAndRun(ctx context.Context) error {
+	ctx = context.WithValue(ctx, &shacStateCtxKey, s)
+	if err := s.parse(ctx); err != nil {
+		return err
+	}
+	if len(s.checks) == 0 && !s.printCalled {
+		return errors.New("did you forget to call shac.register_check?")
+	}
+	// Last phase where checks are called.
+	if err := s.callAllChecks(ctx); err != nil {
+		return err
+	}
+	// If any check failed, return an error.
+	for i := range s.checks {
+		if s.checks[i].highestLevel == Error {
+			return ErrCheckFailed
+		}
+	}
+	return nil
+}
+
+// parse parses a single shac.star file.
+func (s *shacState) parse(ctx context.Context) error {
+	s.intr = &interpreter.Interpreter{
+		Predeclared: getPredeclared(),
+		Packages:    map[string]interpreter.Loader{interpreter.MainPkg: s.code},
+		Logger: func(file string, line int, message string) {
+			s.mu.Lock()
+			s.printCalled = true
+			s.mu.Unlock()
+			s.r.Print(ctx, file, line, message)
+		},
+	}
+
+	var err error
+	if err = s.intr.Init(ctx); err == nil {
+		_, err = s.intr.ExecModule(ctx, interpreter.MainPkg, s.main)
+	}
+	if err != nil {
+		if s.failErr != nil {
+			// We got a fail() call, use this instead.
+			return s.failErr
+		}
+		var evalErr *starlark.EvalError
+		if errors.As(err, &evalErr) {
+			return &evalError{evalErr}
+		}
+		return err
+	}
+	s.doneLoading = true
+	return nil
+}
+
 // callAllChecks calls all the checks.
 //
 // It creates a separate thread per check, limited by the number of CPU cores +
 // 2. This permits to run them concurrently.
 func (s *shacState) callAllChecks(ctx context.Context) error {
-	st := ctxState(ctx)
 	eg, ctx := errgroup.WithContext(ctx)
 	eg.SetLimit(runtime.NumCPU() + 2)
+	args := starlark.Tuple{getCtx(s.root)}
+	args.Freeze()
 	for i := range s.checks {
 		i := i
 		eg.Go(func() error {
 			start := time.Now()
-			err := s.checks[i].call(ctx, s.intr)
-			st.r.CheckCompleted(ctx, s.checks[i].name, start, time.Since(start), s.checks[i].highestLevel, err)
+			err := s.checks[i].call(ctx, s.intr, args)
+			s.r.CheckCompleted(ctx, s.checks[i].name, start, time.Since(start), s.checks[i].highestLevel, err)
 			return err
 		})
 	}
@@ -341,12 +341,10 @@ func ctxCheck(ctx context.Context) *check {
 // call calls the check callback and returns an error if an abnormal error happened.
 //
 // A "normal" error will still have this function return nil.
-func (c *check) call(ctx context.Context, intr *interpreter.Interpreter) error {
+func (c *check) call(ctx context.Context, intr *interpreter.Interpreter, args starlark.Tuple) error {
 	ctx = context.WithValue(ctx, &checkCtxKey, c)
 	th := intr.Thread(ctx)
 	th.Name = c.name
-	args := starlark.Tuple{getCtx(ctxState(ctx).inputs.root)}
-	args.Freeze()
 	if r, err := starlark.Call(th, c.cb, args, nil); err != nil {
 		if c.failErr != nil {
 			// fail() was called, return this error since this is an abnormal failure.

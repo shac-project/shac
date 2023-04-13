@@ -98,7 +98,7 @@ func fail(th *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs
 		c.failErr = failErr
 	} else {
 		// Save the error in the shacState object since we are in the first phase.
-		s := ctxState(ctx)
+		s := ctxShacState(ctx)
 		s.failErr = failErr
 	}
 	return nil, errors.New(fn.Name() + ": " + msg)
@@ -107,7 +107,7 @@ func fail(th *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs
 // shacRegisterCheck implements native function shac.register_check().
 //
 // Make sure to update //doc/stdlib.star whenever this function is modified.
-func shacRegisterCheck(ctx context.Context, s *state, name string, args starlark.Tuple, kwargs []starlark.Tuple) error {
+func shacRegisterCheck(ctx context.Context, s *shacState, name string, args starlark.Tuple, kwargs []starlark.Tuple) error {
 	var argcallback starlark.Callable
 	var argname starlark.String
 	if err := starlark.UnpackArgs(name, args, kwargs,
@@ -162,7 +162,7 @@ func toValue(name string, d starlark.StringDict) starlark.Value {
 	return starlarkstruct.FromStringDict(starlark.String(name), d)
 }
 
-type builtin func(ctx context.Context, s *state, name string, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error)
+type builtin func(ctx context.Context, s *shacState, name string, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error)
 
 // newBuiltin registers a go function as a Starlark builtin.
 //
@@ -171,7 +171,7 @@ type builtin func(ctx context.Context, s *state, name string, args starlark.Tupl
 func newBuiltin(name string, impl builtin) *starlark.Builtin {
 	wrapper := func(th *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 		ctx := interpreter.Context(th)
-		s := ctxState(ctx)
+		s := ctxShacState(ctx)
 		val, err := impl(ctx, s, name, args, kwargs)
 		// starlark.UnpackArgs already adds the function name prefix to errors
 		// it returns, so make sure not to duplicate the prefix if it's already
@@ -190,10 +190,10 @@ func newBuiltin(name string, impl builtin) *starlark.Builtin {
 	return starlark.NewBuiltin(name, wrapper)
 }
 
-func newBuiltinNone(name string, f func(ctx context.Context, s *state, name string, args starlark.Tuple, kwargs []starlark.Tuple) error) *starlark.Builtin {
+func newBuiltinNone(name string, f func(ctx context.Context, s *shacState, name string, args starlark.Tuple, kwargs []starlark.Tuple) error) *starlark.Builtin {
 	return newBuiltin(
 		name,
-		func(ctx context.Context, s *state, name string, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+		func(ctx context.Context, s *shacState, name string, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 			return starlark.None, f(ctx, s, name, args, kwargs)
 		})
 }

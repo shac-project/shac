@@ -31,7 +31,7 @@ import (
 // It uses the RE2 engine as specified at https://golang.org/s/re2syntax.
 //
 // Make sure to update //doc/stdlib.star whenever this function is modified.
-func ctxReMatch(ctx context.Context, s *state, name string, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+func ctxReMatch(ctx context.Context, s *shacState, name string, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	str, r, err := reCommonPreamble(name, args, kwargs)
 	if err != nil {
 		return nil, err
@@ -52,7 +52,7 @@ func ctxReMatch(ctx context.Context, s *state, name string, args starlark.Tuple,
 // It uses the RE2 engine as specified at https://golang.org/s/re2syntax.
 //
 // Make sure to update //doc/stdlib.star whenever this function is modified.
-func ctxReAllMatches(ctx context.Context, s *state, name string, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+func ctxReAllMatches(ctx context.Context, s *shacState, name string, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	str, r, err := reCommonPreamble(name, args, kwargs)
 	if err != nil {
 		return nil, err

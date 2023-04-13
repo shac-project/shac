@@ -28,7 +28,7 @@ import (
 // ctxOsExec implements the native function ctx.os.exec().
 //
 // Make sure to update //doc/stdlib.star whenever this function is modified.
-func ctxOsExec(ctx context.Context, s *state, name string, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+func ctxOsExec(ctx context.Context, s *shacState, name string, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	var argcmd starlark.Sequence
 	var argcwd starlark.String
 	var argenv = starlark.NewDict(0)
@@ -56,12 +56,12 @@ func ctxOsExec(ctx context.Context, s *state, name string, args starlark.Tuple, 
 
 	if argcwd.GoString() != "" {
 		var err error
-		cmd.Dir, err = absPath(argcwd.GoString(), s.inputs.root)
+		cmd.Dir, err = absPath(argcwd.GoString(), s.root)
 		if err != nil {
 			return nil, err
 		}
 	} else {
-		cmd.Dir = s.inputs.root
+		cmd.Dir = s.root
 	}
 
 	// TODO(olivernewman): Also handle commands that may output non-utf-8 bytes.

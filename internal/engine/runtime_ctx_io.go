@@ -32,7 +32,7 @@ import (
 // Use POSIX style relative path. "..", "\" and absolute paths are denied.
 //
 // Make sure to update //doc/stdlib.star whenever this function is modified.
-func ctxIoReadFile(ctx context.Context, s *state, name string, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+func ctxIoReadFile(ctx context.Context, s *shacState, name string, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	var argfilepath starlark.String
 	var argsize starlark.Int
 	if err := starlark.UnpackArgs(name, args, kwargs,
@@ -45,7 +45,7 @@ func ctxIoReadFile(ctx context.Context, s *state, name string, args starlark.Tup
 	if !ok {
 		return nil, fmt.Errorf("for parameter \"size\": %s is an invalid size", argsize)
 	}
-	dst, err := absPath(string(argfilepath), s.inputs.root)
+	dst, err := absPath(string(argfilepath), s.root)
 	if err != nil {
 		return nil, fmt.Errorf("for parameter \"filepath\": %s %w", argfilepath, err)
 	}

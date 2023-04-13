@@ -54,13 +54,49 @@ type file struct {
 type scmCheckout interface {
 	affectedFiles(ctx context.Context) ([]file, error)
 	allFiles(ctx context.Context) ([]file, error)
-	newLines(path string, allFiles bool) builtin
+	newLines(path string) builtin
+}
+
+// subdirSCM is a scmCheckout that only reports files from a subdirectory.
+type subdirSCM struct {
+	s      scmCheckout
+	subdir string
+}
+
+func (s *subdirSCM) affectedFiles(ctx context.Context) ([]file, error) {
+	f, err := s.s.affectedFiles(ctx)
+	// TODO(maruel): Cache.
+	var out []file
+	l := len(s.subdir)
+	for i := range f {
+		if strings.HasPrefix(f[i].path, s.subdir) {
+			out = append(out, file{path: f[i].path[l:], action: f[i].action})
+		}
+	}
+	return out, err
+}
+
+func (s *subdirSCM) allFiles(ctx context.Context) ([]file, error) {
+	f, err := s.s.allFiles(ctx)
+	// TODO(maruel): Cache.
+	var out []file
+	l := len(s.subdir)
+	for i := range f {
+		if strings.HasPrefix(f[i].path, s.subdir) {
+			out = append(out, file{path: f[i].path[l:], action: f[i].action})
+		}
+	}
+	return out, err
+}
+
+func (s *subdirSCM) newLines(path string) builtin {
+	return s.s.newLines(s.subdir + path)
 }
 
 // Git support.
 
-func getSCM(ctx context.Context, root string) (scmCheckout, error) {
-	g := &gitCheckout{}
+func getSCM(ctx context.Context, root string, allFiles bool) (scmCheckout, error) {
+	g := &gitCheckout{returnAll: allFiles}
 	err := g.init(ctx, root)
 	if err == nil {
 		return g, nil
@@ -83,6 +119,7 @@ type gitCheckout struct {
 	// Configuration.
 	originalRoot string
 	env          []string
+	returnAll    bool
 
 	// Detected environment at initialization.
 	checkoutRoot string
@@ -163,6 +200,9 @@ func (g *gitCheckout) run(ctx context.Context, args ...string) string {
 //
 // The entries are lazy loaded and cached.
 func (g *gitCheckout) affectedFiles(ctx context.Context) ([]file, error) {
+	if g.returnAll {
+		return g.allFiles(ctx)
+	}
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	if g.modified == nil {
@@ -250,14 +290,14 @@ func (g *gitCheckout) isSubmodule(path string) bool {
 	return fi.IsDir()
 }
 
-func (g *gitCheckout) newLines(path string, allFiles bool) builtin {
+func (g *gitCheckout) newLines(path string) builtin {
 	// TODO(maruel): Revisit the design, it is likely not performance efficient
 	// to use a stack context.
-	return func(ctx context.Context, s *state, name string, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+	return func(ctx context.Context, s *shacState, name string, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 		if err := starlark.UnpackArgs(name, args, kwargs); err != nil {
 			return nil, err
 		}
-		if allFiles {
+		if g.returnAll {
 			// Include all lines when processing all files independent if the file
 			// was modified or not.
 			v, err := newLinesWhole(g.checkoutRoot, path)
@@ -359,9 +399,9 @@ func (r *rawTree) allFiles(ctx context.Context) ([]file, error) {
 	return r.all, err
 }
 
-func (r *rawTree) newLines(path string, allFiles bool) builtin {
+func (r *rawTree) newLines(path string) builtin {
 	// TODO(maruel): Revisit the design, it is likely not performance efficient.
-	return func(ctx context.Context, s *state, name string, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+	return func(ctx context.Context, s *shacState, name string, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 		if err := starlark.UnpackArgs(name, args, kwargs); err != nil {
 			return nil, err
 		}
@@ -375,13 +415,13 @@ func (r *rawTree) newLines(path string, allFiles bool) builtin {
 
 // Starlark adapter code.
 
-func ctxScmFilesCommon(ctx context.Context, s *state, name string, args starlark.Tuple, kwargs []starlark.Tuple, all bool) (starlark.Value, error) {
+func ctxScmFilesCommon(ctx context.Context, s *shacState, name string, args starlark.Tuple, kwargs []starlark.Tuple, all bool) (starlark.Value, error) {
 	if err := starlark.UnpackArgs(name, args, kwargs); err != nil {
 		return nil, err
 	}
 	var files []file
 	var err error
-	if s.inputs.allFiles || all {
+	if all {
 		files, err = s.scm.allFiles(ctx)
 	} else {
 		files, err = s.scm.affectedFiles(ctx)
@@ -395,7 +435,7 @@ func ctxScmFilesCommon(ctx context.Context, s *state, name string, args starlark
 		// Make sure to update //doc/stdlib.star whenever this function is modified.
 		_ = out.SetKey(starlark.String(f.path), toValue("file", starlark.StringDict{
 			"action":    starlark.String(f.action),
-			"new_lines": newBuiltin("new_lines", s.scm.newLines(f.path, s.inputs.allFiles)),
+			"new_lines": newBuiltin("new_lines", s.scm.newLines(f.path)),
 		}))
 	}
 	return out, nil
@@ -406,7 +446,7 @@ func ctxScmFilesCommon(ctx context.Context, s *state, name string, args starlark
 // It returns a dictionary.
 //
 // Make sure to update //doc/stdlib.star whenever this function is modified.
-func ctxScmAffectedFiles(ctx context.Context, s *state, name string, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+func ctxScmAffectedFiles(ctx context.Context, s *shacState, name string, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	return ctxScmFilesCommon(ctx, s, name, args, kwargs, false)
 }
 
@@ -415,7 +455,7 @@ func ctxScmAffectedFiles(ctx context.Context, s *state, name string, args starla
 // It returns a dictionary.
 //
 // Make sure to update //doc/stdlib.star whenever this function is modified.
-func ctxScmAllFiles(ctx context.Context, s *state, name string, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+func ctxScmAllFiles(ctx context.Context, s *shacState, name string, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	return ctxScmFilesCommon(ctx, s, name, args, kwargs, true)
 }
 

@@ -24,7 +24,7 @@ import (
 	"go.starlark.net/starlark"
 )
 
-func ctxEmitAnnotation(ctx context.Context, s *state, name string, args starlark.Tuple, kwargs []starlark.Tuple) error {
+func ctxEmitAnnotation(ctx context.Context, s *shacState, name string, args starlark.Tuple, kwargs []starlark.Tuple) error {
 	var arglevel starlark.String
 	var argmessage starlark.String
 	var argfilepath starlark.String
@@ -107,7 +107,7 @@ func ctxEmitAnnotation(ctx context.Context, s *state, name string, args starlark
 	}
 	root := ""
 	if file != "" {
-		root = s.inputs.root
+		root = s.root
 	}
 	if err := s.r.EmitAnnotation(ctx, c.name, level, message, root, file, span, replacements); err != nil {
 		return fmt.Errorf("failed to emit: %w", err)
@@ -115,7 +115,7 @@ func ctxEmitAnnotation(ctx context.Context, s *state, name string, args starlark
 	return nil
 }
 
-func ctxEmitArtifact(ctx context.Context, s *state, name string, args starlark.Tuple, kwargs []starlark.Tuple) error {
+func ctxEmitArtifact(ctx context.Context, s *shacState, name string, args starlark.Tuple, kwargs []starlark.Tuple) error {
 	var argfilepath starlark.String
 	var argcontent starlark.Value = starlark.None
 	if err := starlark.UnpackArgs(name, args, kwargs,
@@ -135,7 +135,7 @@ func ctxEmitArtifact(ctx context.Context, s *state, name string, args starlark.T
 		// TODO(maruel): Use unsafe conversion to save a memory copy.
 		content = []byte(v)
 	case starlark.NoneType:
-		root = s.inputs.root
+		root = s.root
 		dst, err := absPath(f, root)
 		if err != nil {
 			return fmt.Errorf("for parameter \"filepath\": %s %w", argfilepath, err)
