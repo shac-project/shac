@@ -348,6 +348,14 @@ func (s *shacState) callAllChecks(ctx context.Context) error {
 		eg.Go(func() error {
 			start := time.Now()
 			err := s.checks[i].call(ctx, s.intr, args)
+			if err != nil && ctx.Err() != nil {
+				// Don't report the check completion if the context was
+				// canceled. The error was probably caused by the context being
+				// canceled as a side effect of another check failing. Only the
+				// original check failure should be reported, not the canceled
+				// check failures.
+				return ctx.Err()
+			}
 			s.r.CheckCompleted(ctx, s.checks[i].name, start, time.Since(start), s.checks[i].highestLevel, err)
 			return err
 		})
