@@ -152,23 +152,6 @@ jobs:
     - name: 'Check: addlicense; all sources have a license header (ubuntu)'
       if: always() && matrix.os == 'ubuntu-latest'
       run: addlicense -check .
-    - name: 'Check: gofmt; code is well formatted (ubuntu)'
-      if: always() && matrix.os == 'ubuntu-latest'
-      run: |
-        FILES=$(gofmt -s -l .)
-        if ! test -z "$FILES"; then
-          echo 'Please run `gofmt -s -w` on the following files:' >> _gofmt.txt
-          echo "" >> _gofmt.txt
-          for FILE in ${FILES}; do
-            echo "- ${FILE}" >> _gofmt.txt
-          done
-          cat _gofmt.txt
-          echo "## ⚠ gofmt Failed" >> ../_comments.txt
-          echo "" >> ../_comments.txt
-          cat _gofmt.txt >> ../_comments.txt
-          echo "" >> ../_comments.txt
-          false
-        fi
     - name: "Check: misspelling; code doesn't contain misspelling (ubuntu)"
       if: always() && matrix.os == 'ubuntu-latest'
       run: |

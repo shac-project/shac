@@ -13,6 +13,25 @@
 # limitations under the License.
 
 
+def gofmt(ctx):
+  """Runs gofmt -s on a Go code base.
+
+  Args:
+    ctx: A ctx instance.
+  """
+  for f in ctx.scm.affected_files():
+    if not f.endswith(".go"):
+      continue
+    diff = ctx.os.exec([
+      "gofmt",
+      "-s",
+      "-d",
+      f,
+    ]).stdout
+    if diff:
+      ctx.emit.annotation(level="error", filepath=f, message="`gofmt -s` diff:\n%s" % diff)
+
+
 def gosec(ctx, version = "v2.15.0", level = "error"):
   """Runs gosec on a Go code base.
 
