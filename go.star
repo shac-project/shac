@@ -66,7 +66,7 @@ def ineffassign(ctx, version = "v0.0.0-20230107090616-13ace0543b28"):
     )
 
   # ineffassign emits some duplicate lines.
-  for line in set(res.stderr.splitlines()):
+  for line in sorted(set(res.stderr.splitlines())):
     match = ctx.re.match(r"^%s/(.+):(\d+):(\d+): (.+)$" % ctx.scm.root, line)
     ctx.emit.annotation(
       level="error",
