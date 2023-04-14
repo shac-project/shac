@@ -468,6 +468,11 @@ func TestRun_SCM_Git_Recursive(t *testing.T) {
 // These test cases call fail() or throw an exception.
 func TestTestDataFailOrThrow(t *testing.T) {
 	t.Parallel()
+	// When running on Windows, the git installation may not have added the git
+	// environment. This is the case on M-A's personal workstation. In this case,
+	// some tests fail. Defaults to true since this is the case on GitHub Actions
+	// Windows worker.
+	isBashAvail := true
 	root, got := enumDir(t, "fail_or_throw")
 	data := []struct {
 		name  string
@@ -668,7 +673,12 @@ func TestTestDataFailOrThrow(t *testing.T) {
 		},
 		{
 			"ctx-os-exec-false.star",
-			"ctx.os.exec: command failed with exit code 1: [\"false\"]",
+			func() string {
+				if !isBashAvail && runtime.GOOS == "windows" {
+					return "ctx.os.exec: exec: \"false\": executable file not found in %PATH%"
+				}
+				return "ctx.os.exec: command failed with exit code 1: [\"false\"]"
+			}(),
 			"  //ctx-os-exec-false.star:16:14: in cb\n",
 		},
 		{
@@ -678,8 +688,18 @@ func TestTestDataFailOrThrow(t *testing.T) {
 		},
 		{
 			"ctx-os-exec-mutate_result.star",
-			"can't assign to .retcode field of struct",
-			"  //ctx-os-exec-mutate_result.star:17:6: in cb\n",
+			func() string {
+				if !isBashAvail && runtime.GOOS == "windows" {
+					return "ctx.os.exec: exec: \"echo\": executable file not found in %PATH%"
+				}
+				return "can't assign to .retcode field of struct"
+			}(),
+			func() string {
+				if !isBashAvail && runtime.GOOS == "windows" {
+					return "  //ctx-os-exec-mutate_result.star:16:20: in cb\n"
+				}
+				return "  //ctx-os-exec-mutate_result.star:17:6: in cb\n"
+			}(),
 		},
 		{
 			"ctx-os-exec-no_cmd.star",

@@ -45,8 +45,11 @@ type commitRef struct {
 	ref string
 }
 
+// file is one tracked file.
 type file struct {
-	path   string
+	// path is the relative path of the file, POSIX style.
+	path string
+	// action is one of "A", "M", etc.
 	action string
 }
 
@@ -61,7 +64,9 @@ type scmCheckout interface {
 
 // subdirSCM is a scmCheckout that only reports files from a subdirectory.
 type subdirSCM struct {
-	s      scmCheckout
+	s scmCheckout
+	// subdir is the subdirectory to filter on. It must be a POSIX path.
+	// It must be non-empty and end with "/".
 	subdir string
 }
 
@@ -97,13 +102,33 @@ func (s *subdirSCM) newLines(path string) builtin {
 
 // Git support.
 
+// getSCM returns the scmCheckout implementation relevant for directory root.
+//
+// root is must be a clean path.
 func getSCM(ctx context.Context, root string, allFiles bool) (scmCheckout, error) {
+	// Flip to POSIX style path.
+	root = strings.ReplaceAll(root, string(os.PathSeparator), "/")
 	g := &gitCheckout{returnAll: allFiles}
 	err := g.init(ctx, root)
 	if err == nil {
 		if g.checkoutRoot != root {
+			if !strings.HasPrefix(root, g.checkoutRoot) {
+				// Fix both of these issues:
+				// - macOS, where $TMPDIR is a symlink or path case is different.
+				// - Windows, where path case is different.
+				if root, err = filepath.EvalSymlinks(root); err != nil {
+					return nil, err
+				}
+				if g.checkoutRoot, err = filepath.EvalSymlinks(g.checkoutRoot); err != nil {
+					return nil, err
+				}
+			}
 			// Offset accordingly.
-			return &subdirSCM{s: g, subdir: root[len(g.checkoutRoot)+1:] + "/"}, nil
+			if g.checkoutRoot != root {
+				// The API and git talks POSIX path, so use that.
+				subdir := root[len(g.checkoutRoot)+1:] + "/"
+				return &subdirSCM{s: g, subdir: subdir}, nil
+			}
 		}
 		return g, nil
 	}
@@ -127,6 +152,7 @@ type gitCheckout struct {
 	returnAll bool
 
 	// Detected environment at initialization.
+	// checkoutRoot is a POSIX path.
 	checkoutRoot string
 	head         commitRef
 	upstream     commitRef
@@ -142,6 +168,9 @@ func (g *gitCheckout) init(ctx context.Context, root string) error {
 	// Find root.
 	g.checkoutRoot = root
 	g.checkoutRoot = g.run(ctx, "rev-parse", "--show-toplevel")
+	// root will have normal Windows path but git returns a POSIX style path
+	// that may be incorrect. Clean it up.
+	g.checkoutRoot = strings.ReplaceAll(filepath.Clean(g.checkoutRoot), string(os.PathSeparator), "/")
 	g.head.hash = g.run(ctx, "rev-parse", "HEAD")
 	g.head.ref = g.run(ctx, "rev-parse", "--abbrev-ref=strict", "--symbolic-full-name", "HEAD")
 	if g.err != nil {
@@ -262,6 +291,7 @@ func (g *gitCheckout) allFiles(ctx context.Context) ([]file, error) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	if g.all == nil {
+		// Paths are returned in POSIX style even on Windows.
 		// TODO(maruel): Extract more information.
 		if o := g.run(ctx, "ls-files", "-z"); len(o) != 0 {
 			items := strings.Split(o[:len(o)-1], "\x00")
