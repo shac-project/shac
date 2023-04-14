@@ -173,6 +173,9 @@ Fields:
 
 Runs a command as a subprocess.
 
+Subprocesses are denied network access by default on Linux. Use
+`allow_network = True` to grant the subprocess network access.
+
 ### Example
 
 ```python
@@ -209,6 +212,7 @@ shac.register_check(cb)
 * **cmd**: Subprocess command line.
 * **cwd**: (optional) Relative path to cwd for the subprocess. Defaults to the directory containing shac.star.
 * **env**: (optional) Dictionary of environment variables to set for the subprocess.
+* **allow_network**: (optional) Allow network access. Defaults to false.
 * **raise_on_failure**: (optional): Whether the running check should automatically fail if the subcommand returns a non-zero exit code. Defaults to true.
 
 ### Returns

@@ -71,7 +71,11 @@ def ineffassign(ctx, version = "v0.0.0-20230107090616-13ace0543b28"):
       will be rolled from time to time.
   """
   exe = _go_install(ctx, "github.com/gordonklaus/ineffassign", version)
-  res = ctx.os.exec([exe, "./..."], raise_on_failure = False)
+  res = ctx.os.exec(
+    [exe, "./..."],
+    raise_on_failure = False,
+    env = _go_env(ctx, "ineffassign"),
+  )
   # ineffassign's README claims that it emits a retcode of 1 if it returns any
   # findings, but it actually emits a retcode of 3.
   # https://github.com/gordonklaus/ineffassign/blob/4cc7213b9bc8b868b2990c372f6fa057fa88b91c/ineffassign.go#L70
@@ -83,6 +87,7 @@ def ineffassign(ctx, version = "v0.0.0-20230107090616-13ace0543b28"):
         res.stderr,
       ),
     )
+    return
 
   # ineffassign emits some duplicate lines.
   for line in sorted(set(res.stderr.splitlines())):
@@ -107,7 +112,16 @@ def staticcheck(ctx, version = "v0.4.3"):
     will be rolled from time to time.
   """
   exe = _go_install(ctx, "honnef.co/go/tools/cmd/staticcheck", version)
-  res = ctx.os.exec([exe, "-f=json", "./..."], raise_on_failure = False)
+  env = _go_env(ctx, "staticcheck")
+  env["STATICCHECK_CACHE"] = env["GOCACHE"]
+  res = ctx.os.exec(
+    [exe, "-f=json", "./..."],
+    raise_on_failure = False,
+    env = env,
+    # TODO(olivernewman): Figure out why staticcheck needs network access and
+    # remove. We may need to make sure to `go get` all dependencies first?
+    allow_network = True,
+  )
   if res.retcode not in (0, 1) or res.stderr:
     ctx.emit.annotation(
       level="error",
@@ -145,14 +159,18 @@ def shadow(ctx, version = "v0.7.0"):
       be rolled from time to time.
   """
   exe = _go_install(ctx, "golang.org/x/tools/go/analysis/passes/shadow/cmd/shadow", version)
-  res = ctx.os.exec([
-    exe,
-    # TODO(olivernewman): For some reason, including tests results in duplicate
-    # findings in non-test files.
-    "-test=false",
-    "-json",
-    "./...",
-  ])
+  res = ctx.os.exec(
+    [
+      exe,
+      # TODO(olivernewman): For some reason, including tests results in
+      # duplicate findings in non-test files.
+      "-test=false",
+      "-json",
+      "./...",
+    ],
+    env=_go_env(ctx, "shadow"),
+    allow_network=True,
+  )
 
   # Example output:
   # {
@@ -183,18 +201,28 @@ def shadow(ctx, version = "v0.7.0"):
 
 def _go_install(ctx, pkg, version):
   tool_name = pkg.split("/")[-1]
+  env = _go_env(ctx, tool_name)
+  ctx.os.exec(
+    ["go", "install", "%s@%s" % (pkg, version)],
+    allow_network = True,
+    env = _go_env(ctx, tool_name)
+  )
 
+  return "%s/%s" % (env["GOBIN"], tool_name)
+
+
+def _go_env(ctx, key):
   # TODO(olivernewman): Stop using a separate GOPATH for each tool, and instead
   # install the tools sequentially. Multiple concurrent `go install` runs on the
   # same GOPATH results in race conditions.
-  gopath = "%s/.tools/gopath/%s" % (ctx.scm.root, tool_name)
-  gobin = "%s/bin" % gopath
-  ctx.os.exec(
-    ["go", "install", "%s@%s" % (pkg, version)],
-    env = {
-      "GOPATH": gopath,
-      "GOBIN": gobin,
-    },
-  )
-
-  return "%s/%s" % (gobin, tool_name)
+  gopath = "%s/.tools/gopath/%s" % (ctx.scm.root, key)
+  return {
+    "GOPATH": gopath,
+    "GOBIN": "%s/bin" % gopath,
+    # Cache within the directory to avoid writing to $HOME/.cache.
+    # TODO(olivernewman): Implement named caches.
+    "GOCACHE": "%s/.tools/gocache" % ctx.scm.root,
+    # TODO(olivernewman): The default gopackagesdriver is broken within an
+    # nsjail.
+    "GOPACKAGESDRIVER": "off",
+  }

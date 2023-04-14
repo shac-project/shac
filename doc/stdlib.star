@@ -151,8 +151,11 @@ def _ctx_io_read_file(filepath, size = None):
   pass
 
 
-def _ctx_os_exec(cmd, cwd = None, env = None, raise_on_failure = True):
+def _ctx_os_exec(cmd, cwd = None, env = None, allow_network = False, raise_on_failure = True):
   """Runs a command as a subprocess.
+
+  Subprocesses are denied network access by default on Linux. Use
+  `allow_network = True` to grant the subprocess network access.
 
   Example:
     ```python
@@ -190,6 +193,7 @@ def _ctx_os_exec(cmd, cwd = None, env = None, raise_on_failure = True):
       directory containing shac.star.
     env: (optional) Dictionary of environment variables to set for the
       subprocess.
+    allow_network: (optional) Allow network access. Defaults to false.
     raise_on_failure: (optional): Whether the running check should automatically
       fail if the subcommand returns a non-zero exit code. Defaults to true.
 

@@ -1054,6 +1054,34 @@ func TestTestDataPrint(t *testing.T) {
 	}
 }
 
+func TestRun_Filesystem_Sandboxing(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("sandboxing is only supported on linux")
+	}
+	t.Parallel()
+
+	dirOutsideRoot := t.TempDir()
+	exePath := filepath.Join(dirOutsideRoot, "foo.sh")
+	if err := os.WriteFile(exePath, []byte("#!/bin/sh\nexit 1"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	root := t.TempDir()
+	initGit(t, root)
+	runGit(t, root, "commit", "--allow-empty", "-m", "Initial commit")
+
+	writeFile(t, root, "shac.star", ""+
+		"def cb(ctx):\n"+
+		"  res = ctx.os.exec([\""+exePath+"\"], raise_on_failure = False)\n"+
+		"  print(\"retcode: %d\" % res.retcode)\n"+
+		"shac.register_check(cb)\n")
+	runGit(t, root, "add", ".")
+
+	// 255 means the executable does not exist (linux-only).
+	want := "[//shac.star:3] retcode: 255\n"
+	testStarlarkPrint(t, root, "shac.star", false, want)
+}
+
 // Utilities
 
 // testStarlarkPrint test a starlark file that calls print().

@@ -145,7 +145,10 @@ jobs:
     - name: 'Check: no executable was committed (ubuntu)'
       if: always() && matrix.os == 'ubuntu-latest'
       run: |
-        if find . -path '*.sh' -prune -o -path ./.git -prune -o -type f -executable -print | grep -e . ; then
+        if find . -path '*.sh' -prune -o \
+            -path ./.git -prune -o \
+            -path './internal/nsjail/nsjail-linux-*' -prune -o \
+            -type f -executable -print | grep -e . ; then
           echo 'Do not commit executables beside shell scripts'
           false
         fi

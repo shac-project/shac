@@ -53,7 +53,14 @@ def check_license_headers(ctx):
   for path in ctx.scm.affected_files():
     if any([ctx.re.match(r"^%s$" % regex, path) for regex in _SKIP_FILE_REGEXES]):
       continue
-    lines = str(ctx.io.read_file(path, 4096)).splitlines()
+    contents = str(ctx.io.read_file(path, 4096))
+    # TODO(olivernewman): Add an argument to affected_files() to skip binary
+    # files so they don't need to be handled hackily here.
+    if "\0" in contents:
+      # Assume that a file is binary if it contains a null byte in its first N
+      # bytes.
+      continue
+    lines = contents.splitlines()
     # Only files with shebangs are allowed to not have a license header on the
     # first line.
     if lines[0].startswith("#!"):
