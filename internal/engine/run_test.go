@@ -1060,9 +1060,10 @@ func TestRun_Filesystem_Sandboxing(t *testing.T) {
 	}
 	t.Parallel()
 
-	dirOutsideRoot := t.TempDir()
-	exePath := filepath.Join(dirOutsideRoot, "foo.sh")
-	if err := os.WriteFile(exePath, []byte("#!/bin/sh\nexit 0\n"), 0o700); err != nil {
+	// This file should appear to be nonexistent to commands run within the
+	// sandbox.
+	fileOutsideRoot := filepath.Join(t.TempDir(), "foo.txt")
+	if err := os.WriteFile(fileOutsideRoot, []byte("foo"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1070,15 +1071,23 @@ func TestRun_Filesystem_Sandboxing(t *testing.T) {
 	initGit(t, root)
 	runGit(t, root, "commit", "--allow-empty", "-m", "Initial commit")
 
+	writeFile(t, root, "foo.sh", ""+
+		"#!/bin/sh\n"+
+		"set -e\n"+
+		"cat \""+fileOutsideRoot+"\"\n")
+	if err := os.Chmod(filepath.Join(root, "foo.sh"), 0o700); err != nil {
+		t.Fatal(err)
+	}
 	writeFile(t, root, "shac.star", ""+
 		"def cb(ctx):\n"+
-		"  res = ctx.os.exec([\""+exePath+"\"], raise_on_failure = False)\n"+
+		"  res = ctx.os.exec([ctx.scm.root + \"/foo.sh\"], raise_on_failure = False)\n"+
 		"  print(\"retcode: %d\" % res.retcode)\n"+
+		"  print(res.stderr)\n"+
 		"shac.register_check(cb)\n")
 	runGit(t, root, "add", ".")
 
-	// 255 means the executable does not exist (linux-only).
-	want := "[//shac.star:3] retcode: 255\n"
+	want := "[//shac.star:3] retcode: 1\n" +
+		"[//shac.star:4] cat: " + fileOutsideRoot + ": No such file or directory\n\n"
 	testStarlarkPrint(t, root, "shac.star", false, want)
 }
 
