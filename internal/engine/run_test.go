@@ -1062,7 +1062,7 @@ func TestRun_Filesystem_Sandboxing(t *testing.T) {
 
 	dirOutsideRoot := t.TempDir()
 	exePath := filepath.Join(dirOutsideRoot, "foo.sh")
-	if err := os.WriteFile(exePath, []byte("#!/bin/sh\nexit 1"), 0o700); err != nil {
+	if err := os.WriteFile(exePath, []byte("#!/bin/sh\nexit 0\n"), 0o700); err != nil {
 		t.Fatal(err)
 	}
 
