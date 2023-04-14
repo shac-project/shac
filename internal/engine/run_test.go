@@ -1068,8 +1068,6 @@ func TestRun_Filesystem_Sandboxing(t *testing.T) {
 	}
 
 	root := t.TempDir()
-	initGit(t, root)
-	runGit(t, root, "commit", "--allow-empty", "-m", "Initial commit")
 
 	writeFile(t, root, "foo.sh", ""+
 		"#!/bin/sh\n"+
@@ -1084,7 +1082,6 @@ func TestRun_Filesystem_Sandboxing(t *testing.T) {
 		"  print(\"retcode: %d\" % res.retcode)\n"+
 		"  print(res.stderr)\n"+
 		"shac.register_check(cb)\n")
-	runGit(t, root, "add", ".")
 
 	want := "[//shac.star:3] retcode: 1\n" +
 		"[//shac.star:4] cat: " + fileOutsideRoot + ": No such file or directory\n\n"
