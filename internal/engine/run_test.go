@@ -33,6 +33,7 @@ import (
 	"time"
 
 	"github.com/google/go-cmp/cmp"
+	"go.fuchsia.dev/shac-project/shac/internal/nsjail"
 )
 
 func TestRun_Fail(t *testing.T) {
@@ -1055,8 +1056,8 @@ func TestTestDataPrint(t *testing.T) {
 }
 
 func TestRun_Filesystem_Sandboxing(t *testing.T) {
-	if runtime.GOOS != "linux" {
-		t.Skip("sandboxing is only supported on linux")
+	if !nsjail.Supported() {
+		t.Skip("sandboxing is only supported on linux-{arm64,amd64}")
 	}
 	t.Parallel()
 

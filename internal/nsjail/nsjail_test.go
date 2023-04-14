@@ -12,13 +12,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package nsjail contains a local copy of nsjail for linux.
 package nsjail
 
-//go:generate go run download.go
+import (
+	"runtime"
+	"testing"
+)
 
-// Supported returns whether nsjail is supported on the current os/arch
-// combination.
-func Supported() bool {
-	return len(Exec) != 0
+func TestSupported(t *testing.T) {
+	want := runtime.GOOS == "linux" && (runtime.GOARCH == "amd64" || runtime.GOARCH == "arm64")
+
+	got := Supported()
+	if got != want {
+		t.Errorf("nsjail.Supported() = %t is wrong for platform %s/%s", got, runtime.GOOS, runtime.GOARCH)
+	}
 }

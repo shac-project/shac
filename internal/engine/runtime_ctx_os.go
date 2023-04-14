@@ -78,7 +78,7 @@ func ctxOsExec(ctx context.Context, s *shacState, name string, args starlark.Tup
 	}
 
 	var fullCmd []string
-	if nsjail.Exec != nil {
+	if nsjail.Supported() {
 		// TODO(olivernewman): Cache the written nsjail executable.
 		nsjailDir, err := os.MkdirTemp("", "nsjail")
 		if err != nil {
@@ -154,7 +154,7 @@ func ctxOsExec(ctx context.Context, s *shacState, name string, args starlark.Tup
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 
-	if nsjail.Exec == nil {
+	if !nsjail.Supported() {
 		cmd.Dir = cwd
 		cmd.Env = os.Environ()
 		for k, v := range parsedEnv {
