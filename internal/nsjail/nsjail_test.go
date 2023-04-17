@@ -19,11 +19,12 @@ import (
 	"testing"
 )
 
-func TestSupported(t *testing.T) {
-	want := runtime.GOOS == "linux" && (runtime.GOARCH == "amd64" || runtime.GOARCH == "arm64")
+func TestPlatforms(t *testing.T) {
+	shouldSupport := runtime.GOOS == "linux" && (runtime.GOARCH == "amd64" || runtime.GOARCH == "arm64")
 
-	got := Supported()
-	if got != want {
-		t.Errorf("nsjail.Supported() = %t is wrong for platform %s/%s", got, runtime.GOOS, runtime.GOARCH)
+	if shouldSupport && len(Exec) == 0 {
+		t.Errorf("nsjail should be supported for platform %s/%s", runtime.GOOS, runtime.GOARCH)
+	} else if !shouldSupport && len(Exec) != 0 {
+		t.Errorf("nsjail should not be supported for platform %s/%s", runtime.GOOS, runtime.GOARCH)
 	}
 }

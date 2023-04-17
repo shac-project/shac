@@ -1056,7 +1056,7 @@ func TestTestDataPrint(t *testing.T) {
 }
 
 func TestRun_Filesystem_Sandboxing(t *testing.T) {
-	if !nsjail.Supported() {
+	if len(nsjail.Exec) == 0 {
 		t.Skip("sandboxing is only supported on linux-{arm64,amd64}")
 	}
 	t.Parallel()

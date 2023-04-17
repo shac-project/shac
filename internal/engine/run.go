@@ -31,6 +31,7 @@ import (
 	"time"
 
 	"go.chromium.org/luci/starlark/interpreter"
+	"go.fuchsia.dev/shac-project/shac/internal/nsjail"
 	"go.starlark.net/resolve"
 	"go.starlark.net/starlark"
 	"golang.org/x/sync/errgroup"
@@ -200,6 +201,11 @@ func Run(ctx context.Context, o *Options) error {
 }
 
 func runInner(ctx context.Context, root, tmpdir, main string, r Report, allowNetwork, recurse bool, scm scmCheckout) error {
+	nsjailPath, err := nsjail.WriteExecutable(tmpdir)
+	if err != nil {
+		return err
+	}
+
 	// Each found shac.star is run in its own interpreter for maximum
 	// parallelism.
 	shacStates := []*shacState{
@@ -211,6 +217,7 @@ func runInner(ctx context.Context, root, tmpdir, main string, r Report, allowNet
 			root:         root,
 			tmpdir:       filepath.Join(tmpdir, "0"),
 			scm:          scm,
+			nsjailPath:   nsjailPath,
 		},
 	}
 
@@ -238,6 +245,7 @@ func runInner(ctx context.Context, root, tmpdir, main string, r Report, allowNet
 						root:         nr,
 						tmpdir:       filepath.Join(tmpdir, strconv.Itoa(i+1)),
 						scm:          &subdirSCM{s: scm, subdir: d + "/"},
+						nsjailPath:   nsjailPath,
 					})
 			}
 		}
@@ -307,6 +315,9 @@ type shacState struct {
 	tmpdir string
 	// scm is a filtered view of runState.scm.
 	scm scmCheckout
+	// nsjailPath is a path to an nsjail executable. It may not be set on all
+	// platforms.
+	nsjailPath string
 	// checks is the list of registered checks callbacks via
 	// shac.register_check().
 	//
