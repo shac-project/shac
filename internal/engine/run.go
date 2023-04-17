@@ -188,20 +188,33 @@ func Run(ctx context.Context, o *Options) error {
 		return err
 	}
 
+	tmpdir, err := os.MkdirTemp("", "shac")
+	if err != nil {
+		return nil
+	}
+	err = runInner(ctx, root, tmpdir, main, o.Report, allowNetwork, o.Recurse, scm)
+	if err2 := os.RemoveAll(tmpdir); err == nil {
+		err = err2
+	}
+	return err
+}
+
+func runInner(ctx context.Context, root, tmpdir, main string, r Report, allowNetwork, recurse bool, scm scmCheckout) error {
 	// Each found shac.star is run in its own interpreter for maximum
 	// parallelism.
 	shacStates := []*shacState{
 		{
 			code:         interpreter.FileSystemLoader(root),
-			r:            o.Report,
+			r:            r,
 			allowNetwork: allowNetwork,
 			main:         main,
 			root:         root,
+			tmpdir:       filepath.Join(tmpdir, "0"),
 			scm:          scm,
 		},
 	}
 
-	if o.Recurse {
+	if recurse {
 		// Discover all the main files via the SCM. This enables us to not walk
 		// ignored files.
 		files, err := scm.allFiles(ctx)
@@ -219,10 +232,11 @@ func Run(ctx context.Context, o *Options) error {
 				shacStates = append(shacStates,
 					&shacState{
 						code:         interpreter.FileSystemLoader(nr),
-						r:            o.Report,
+						r:            r,
 						allowNetwork: allowNetwork,
 						main:         main,
 						root:         nr,
+						tmpdir:       filepath.Join(tmpdir, strconv.Itoa(i+1)),
 						scm:          &subdirSCM{s: scm, subdir: d + "/"},
 					})
 			}
@@ -289,7 +303,8 @@ type shacState struct {
 	allowNetwork bool
 	main         string
 	// root is the root for this shac.star.
-	root string
+	root   string
+	tmpdir string
 	// scm is a filtered view of runState.scm.
 	scm scmCheckout
 	// checks is the list of registered checks callbacks via
@@ -311,6 +326,7 @@ type shacState struct {
 
 	mu          sync.Mutex
 	printCalled bool
+	tmpdirIndex int
 }
 
 // ctxShacState pulls out *runState from the context.
@@ -389,6 +405,26 @@ func (s *shacState) bufferAllChecks(ctx context.Context, ch chan<- func() error)
 			return err
 		}
 	}
+}
+
+func (s *shacState) tempDir() (string, error) {
+	var err error
+	s.mu.Lock()
+	i := s.tmpdirIndex
+	s.tmpdirIndex++
+	if i == 0 {
+		// First use, lazy create the temporary directory.
+		err = os.Mkdir(s.tmpdir, 0o700)
+	}
+	s.mu.Unlock()
+	if err != nil {
+		return "", err
+	}
+	p := filepath.Join(s.tmpdir, strconv.Itoa(i))
+	if err = os.Mkdir(p, 0o700); err != nil {
+		return "", err
+	}
+	return p, nil
 }
 
 // check represents one check added via shac.register_check().

@@ -77,11 +77,18 @@ func ctxOsExec(ctx context.Context, s *shacState, name string, args starlark.Tup
 		return nil, fmt.Errorf("for parameter \"cmd\": got %s, want sequence of str", argcmd.Type())
 	}
 
+	tempDir, err := s.tempDir()
+	if err != nil {
+		return nil, err
+	}
+	// TODO(olivernewman): Catch errors.
+	defer os.RemoveAll(tempDir)
+
 	var fullCmd []string
 	if nsjail.Supported() {
 		// TODO(olivernewman): Cache the written nsjail executable.
-		nsjailDir, err := os.MkdirTemp("", "nsjail")
-		if err != nil {
+		var nsjailDir string
+		if nsjailDir, err = os.MkdirTemp("", "nsjail"); err != nil {
 			return nil, err
 		}
 		// TODO(olivernewman): Catch errors.
@@ -92,13 +99,6 @@ func ctxOsExec(ctx context.Context, s *shacState, name string, args starlark.Tup
 		if err = os.WriteFile(nsjailPath, nsjail.Exec, 0o700); err != nil {
 			return nil, err
 		}
-
-		tempDir, err := os.MkdirTemp("", "")
-		if err != nil {
-			return nil, err
-		}
-		// TODO(olivernewman): Catch errors.
-		defer os.RemoveAll(tempDir)
 
 		fullCmd = append(fullCmd,
 			nsjailPath,
@@ -120,6 +120,10 @@ func ctxOsExec(ctx context.Context, s *shacState, name string, args starlark.Tup
 		for k, v := range parsedEnv {
 			fullCmd = append(fullCmd, "--env", fmt.Sprintf("%s=%s", k, v))
 		}
+		fullCmd = append(fullCmd, "--env", "TEMP=/tmp")
+		fullCmd = append(fullCmd, "--env", "TMPDIR=/tmp")
+		fullCmd = append(fullCmd, "--env", "TEMPDIR=/tmp")
+
 		// Mount $GOROOT unless it's a subdirectory of the checkout dir, in
 		// which case it will already be mounted.
 		// TODO(olivernewman): Use a hermetic go installation for shac's own
@@ -160,11 +164,13 @@ func ctxOsExec(ctx context.Context, s *shacState, name string, args starlark.Tup
 		for k, v := range parsedEnv {
 			cmd.Env = append(cmd.Env, fmt.Sprintf("%s=%s", k, v))
 		}
+		cmd.Env = append(cmd.Env, "TEMP="+tempDir)
+		cmd.Env = append(cmd.Env, "TMPDIR="+tempDir)
+		cmd.Env = append(cmd.Env, "TEMPDIR="+tempDir)
 	}
 
-	err := cmd.Run()
 	var retcode int
-	if err != nil {
+	if err = cmd.Run(); err != nil {
 		var errExit *exec.ExitError
 		if errors.As(err, &errExit) {
 			if argraiseOnFailure {
