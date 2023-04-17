@@ -407,7 +407,7 @@ func (s *shacState) bufferAllChecks(ctx context.Context, ch chan<- func() error)
 	}
 }
 
-func (s *shacState) tempDir() (string, error) {
+func (s *shacState) newTempDir() (string, error) {
 	var err error
 	s.mu.Lock()
 	i := s.tmpdirIndex

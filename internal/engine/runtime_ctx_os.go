@@ -77,7 +77,7 @@ func ctxOsExec(ctx context.Context, s *shacState, name string, args starlark.Tup
 		return nil, fmt.Errorf("for parameter \"cmd\": got %s, want sequence of str", argcmd.Type())
 	}
 
-	tempDir, err := s.tempDir()
+	tempDir, err := s.newTempDir()
 	if err != nil {
 		return nil, err
 	}
