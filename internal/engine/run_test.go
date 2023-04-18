@@ -1123,7 +1123,7 @@ func TestRun_Filesystem_Sandboxing(t *testing.T) {
 // Utilities
 
 // testStarlarkPrint test a starlark file that calls print().
-func testStarlarkPrint(t *testing.T, root, name string, all bool, want string) {
+func testStarlarkPrint(t testing.TB, root, name string, all bool, want string) {
 	r := reportPrint{reportNoPrint: reportNoPrint{t: t}}
 	o := Options{Report: &r, Root: root, Main: name, AllFiles: all}
 	if err := Run(context.Background(), &o); err != nil {
@@ -1224,7 +1224,7 @@ func runGit(t *testing.T, root string, args ...string) string {
 }
 
 type reportNoPrint struct {
-	t *testing.T
+	t testing.TB
 }
 
 func (r *reportNoPrint) EmitAnnotation(ctx context.Context, check string, level Level, message, root, file string, s Span, replacements []string) error {
