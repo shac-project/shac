@@ -17,7 +17,11 @@ def cb(ctx):
   # Only print the first file.
   # Note: This is not super efficient as for large delta, the whole list would
   # be serialized to only then take the first element of the list.
-  path, meta = ctx.scm.affected_files().items()[0]
+  affected_files = ctx.scm.affected_files().items()
+  if not affected_files:
+    print("no affected files")
+    return
+  path, meta = affected_files[0]
   out += path + "\n"
   # Only print the first line.
   new_lines = meta.new_lines()

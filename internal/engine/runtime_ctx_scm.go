@@ -272,6 +272,10 @@ func (g *gitCheckout) affectedFiles(ctx context.Context) ([]file, error) {
 				g.err = fmt.Errorf("missing trailing NUL character from git diff --name-status -z -C %s", g.upstream.hash)
 				break
 			}
+			// Ignore deleted files.
+			if action == "D" {
+				continue
+			}
 			if !g.isSubmodule(path) {
 				g.modified = append(g.modified, file{action: action, path: path})
 			}

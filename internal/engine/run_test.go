@@ -134,7 +134,7 @@ func TestRun_SCM_Raw(t *testing.T) {
 	})
 	t.Run("affected_new_lines", func(t *testing.T) {
 		t.Parallel()
-		want := "[//scm_affected_files_new_lines.star:27] file1.txt\n" +
+		want := "[//scm_affected_files_new_lines.star:31] file1.txt\n" +
 			"1: First file\n"
 		testStarlarkPrint(t, root, "scm_affected_files_new_lines.star", false, want)
 	})
@@ -207,13 +207,13 @@ func TestRun_SCM_Git_NoUpstream_Staged(t *testing.T) {
 	})
 	t.Run("affected_new_lines", func(t *testing.T) {
 		t.Parallel()
-		want := "[//scm_affected_files_new_lines.star:27] scm_affected_files.star\n" +
+		want := "[//scm_affected_files_new_lines.star:31] scm_affected_files.star\n" +
 			"1: # Copyright 2023 The Shac Authors\n"
 		testStarlarkPrint(t, root, "scm_affected_files_new_lines.star", false, want)
 	})
 	t.Run("affected_new_lines/all", func(t *testing.T) {
 		t.Parallel()
-		want := "[//scm_affected_files_new_lines.star:27] file1.txt\n" +
+		want := "[//scm_affected_files_new_lines.star:31] file1.txt\n" +
 			"1: First file\n"
 		testStarlarkPrint(t, root, "scm_affected_files_new_lines.star", true, want)
 	})
@@ -303,6 +303,37 @@ func TestRun_SCM_Git_Submodule(t *testing.T) {
 	})
 }
 
+func TestRun_SCM_DeletedFile(t *testing.T) {
+	t.Parallel()
+
+	root := makeGit(t)
+	copySCM(t, root)
+
+	writeFile(t, root, "file-to-delete.txt", "This file will be deleted")
+	runGit(t, root, "add", "file-to-delete.txt")
+	runGit(t, root, "commit", "-m", "Add file-to-delete.txt")
+
+	runGit(t, root, "rm", "file-to-delete.txt")
+
+	t.Run("affected", func(t *testing.T) {
+		want := "[//scm_affected_files.star:19] \n\n"
+		testStarlarkPrint(t, root, "scm_affected_files.star", false, want)
+	})
+	t.Run("affected_new_lines", func(t *testing.T) {
+		t.Parallel()
+		want := "[//scm_affected_files_new_lines.star:22] no affected files\n"
+		testStarlarkPrint(t, root, "scm_affected_files_new_lines.star", false, want)
+	})
+	t.Run("all", func(t *testing.T) {
+		t.Parallel()
+		want := "[//scm_all_files.star:19] \n" +
+			"file1.txt: A\n" +
+			"file2.txt: A\n" +
+			"\n"
+		testStarlarkPrint(t, root, "scm_all_files.star", false, want)
+	})
+}
+
 func TestRun_SCM_Git_Binary_File(t *testing.T) {
 	t.Parallel()
 	root := makeGit(t)
@@ -325,13 +356,13 @@ func TestRun_SCM_Git_Binary_File(t *testing.T) {
 		t.Parallel()
 		// Only a binary file is touched, no lines should be considered
 		// affected.
-		want := "[//scm_affected_files_new_lines.star:29] no new lines\n"
+		want := "[//scm_affected_files_new_lines.star:33] no new lines\n"
 		testStarlarkPrint(t, root, "scm_affected_files_new_lines.star", false, want)
 	})
 
 	t.Run("affected_new_lines/all", func(t *testing.T) {
 		t.Parallel()
-		want := "[//scm_affected_files_new_lines.star:29] no new lines\n"
+		want := "[//scm_affected_files_new_lines.star:33] no new lines\n"
 		testStarlarkPrint(t, root, "scm_affected_files_new_lines.star", true, want)
 	})
 }
