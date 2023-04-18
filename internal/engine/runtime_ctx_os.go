@@ -24,7 +24,7 @@ import (
 	"runtime"
 	"strings"
 
-	"go.fuchsia.dev/shac-project/shac/internal/nsjail"
+	"go.fuchsia.dev/shac-project/shac/internal/sandbox"
 	"go.starlark.net/starlark"
 )
 
@@ -50,7 +50,7 @@ func ctxOsExec(ctx context.Context, s *shacState, name string, args starlark.Tup
 		return nil, errors.New("cmdline must not be an empty list")
 	}
 
-	parsedEnv := map[string]string{}
+	env := map[string]string{}
 	for _, item := range argenv.Items() {
 		k, ok := item[0].(starlark.String)
 		if !ok {
@@ -60,7 +60,7 @@ func ctxOsExec(ctx context.Context, s *shacState, name string, args starlark.Tup
 		if !ok {
 			return nil, fmt.Errorf("\"env\" value is not a string: %s", item[1])
 		}
-		parsedEnv[string(k)] = string(v)
+		env[string(k)] = string(v)
 	}
 
 	cwd := s.root
@@ -94,78 +94,64 @@ func ctxOsExec(ctx context.Context, s *shacState, name string, args starlark.Tup
 	// TODO(olivernewman): Catch errors.
 	defer os.RemoveAll(tempDir)
 
-	if s.nsjailPath != "" {
-		config := nsjail.Config{
-			Nsjail:       s.nsjailPath,
-			Cwd:          cwd,
-			AllowNetwork: bool(argallowNetwork),
-			Env: map[string]string{
-				// TODO(olivernewman): Use a hermetic Go installation, don't add
-				// $GOROOT to $PATH.
-				"PATH":    "/usr/bin:/bin:" + filepath.Join(runtime.GOROOT(), "bin"),
-				"TEMP":    "/tmp",
-				"TMPDIR":  "/tmp",
-				"TEMPDIR": "/tmp",
-			},
-			Mounts: []nsjail.Mount{
-				{Path: tempDir, Writeable: true, Dest: "/tmp"},
-				// TODO(olivernewman): Mount the checkout read-only by default.
-				{Path: s.root, Writeable: true},
-				// System binaries.
-				{Path: "/bin"},
-				// OS-provided utilities.
-				{Path: "/dev/null", Writeable: true},
-				{Path: "/dev/urandom"},
-				{Path: "/dev/zero"},
-				// DNS configs.
-				{Path: "/etc/nsswitch.conf"},
-				{Path: "/etc/resolv.conf"},
-				// Required for https.
-				{Path: "/etc/ssl/certs"},
-				// These are required for bash to work.
-				{Path: "/lib"},
-				{Path: "/lib64"},
-				// More system binaries.
-				{Path: "/usr/bin"},
-				// OS header files.
-				{Path: "/usr/include"},
-				// System compilers.
-				{Path: "/usr/lib"},
-			},
-		}
+	config := &sandbox.Config{
+		Cmd:          fullCmd,
+		Cwd:          cwd,
+		AllowNetwork: bool(argallowNetwork),
+		TempDir:      tempDir,
+		Env:          env,
+		Mounts: []sandbox.Mount{
+			// TODO(olivernewman): Mount the checkout read-only by default.
+			{Path: s.root, Writeable: true},
+			// System binaries.
+			{Path: "/bin"},
+			// OS-provided utilities.
+			{Path: "/dev/null", Writeable: true},
+			{Path: "/dev/urandom"},
+			{Path: "/dev/zero"},
+			// DNS configs.
+			{Path: "/etc/nsswitch.conf"},
+			{Path: "/etc/resolv.conf"},
+			// Required for https.
+			{Path: "/etc/ssl/certs"},
+			// These are required for bash to work.
+			{Path: "/lib"},
+			{Path: "/lib64"},
+			// More system binaries.
+			{Path: "/usr/bin"},
+			// OS header files.
+			{Path: "/usr/include"},
+			// System compilers.
+			{Path: "/usr/lib"},
+		},
+	}
+	// TODO(olivernewman): Add an env_prefixes argument to exec() so $PATH can
+	// be controlled without completely overriding it.
+	config.Env["PATH"] = strings.Join([]string{
+		"/usr/bin",
+		"/bin",
+		// TODO(olivernewman): Use a hermetic Go installation, don't add $GOROOT
+		// to $PATH.
+		filepath.Join(runtime.GOROOT(), "bin"),
+	}, ":")
 
-		// Mount $GOROOT unless it's a subdirectory of the checkout dir, in
-		// which case it will already be mounted.
-		// TODO(olivernewman): Use a hermetic go installation for shac's own
-		// checks, so we don't need to special-case $GOROOT.
-		if !strings.HasPrefix(runtime.GOROOT(), s.root+string(os.PathSeparator)) {
-			config.Mounts = append(config.Mounts, nsjail.Mount{Path: runtime.GOROOT()})
-		}
-		for k, v := range parsedEnv {
-			config.Env[k] = v
-		}
-
-		fullCmd = config.Wrap(fullCmd)
+	// Mount $GOROOT unless it's a subdirectory of the checkout dir, in
+	// which case it will already be mounted.
+	// TODO(olivernewman): This is necessary because checks for shac itself
+	// assume Go is pre-installed. Switch to a hermetic Go installation that
+	// installs Go in the checkout directory, and stop explicitly mounting
+	// $GOROOT.
+	if !strings.HasPrefix(runtime.GOROOT(), s.root+string(os.PathSeparator)) {
+		config.Mounts = append(config.Mounts, sandbox.Mount{Path: runtime.GOROOT()})
 	}
 
-	//#nosec G204
-	cmd := exec.CommandContext(ctx, fullCmd[0], fullCmd[1:]...)
+	cmd := s.sandbox.Command(ctx, config)
+
 	// TODO(olivernewman): Also handle commands that may output non-utf-8 bytes.
 	var stdout strings.Builder
 	var stderr strings.Builder
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
-
-	if s.nsjailPath == "" {
-		cmd.Dir = cwd
-		cmd.Env = os.Environ()
-		for k, v := range parsedEnv {
-			cmd.Env = append(cmd.Env, fmt.Sprintf("%s=%s", k, v))
-		}
-		cmd.Env = append(cmd.Env, "TEMP="+tempDir)
-		cmd.Env = append(cmd.Env, "TMPDIR="+tempDir)
-		cmd.Env = append(cmd.Env, "TEMPDIR="+tempDir)
-	}
 
 	var retcode int
 	if err = cmd.Run(); err != nil {

@@ -12,14 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//go:build linux && amd64
+//go:build linux && arm64
 
 // Package nsjail contains a local copy of nsjail.
-package nsjail
+package sandbox
 
 import (
 	_ "embed"
 )
 
-//go:embed nsjail-linux-amd64
-var Exec []byte
+//go:embed nsjail-linux-arm64
+var nsjailExecutableBytes []byte

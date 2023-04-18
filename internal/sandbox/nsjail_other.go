@@ -14,7 +14,7 @@
 
 //go:build !linux || !amd64
 
-package nsjail
+package sandbox
 
 // Exec is empty on unsupported platforms.
-var Exec []byte
+var nsjailExecutableBytes []byte

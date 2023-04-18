@@ -69,7 +69,7 @@ func downloadNsjail(url, path, tempDir string) error {
 	// In case we return an error before the Close() call below.
 	defer resp.Body.Close()
 
-	archivePath := filepath.Join(tempDir, "nsjail.zip")
+	archivePath := filepath.Join(tempDir, "sandbox.zip")
 	archive, err := os.Create(archivePath)
 	if err != nil {
 		return err

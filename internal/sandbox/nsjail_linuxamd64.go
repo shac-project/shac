@@ -12,19 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package nsjail
+//go:build linux && amd64
+
+// Package nsjail contains a local copy of nsjail.
+package sandbox
 
 import (
-	"runtime"
-	"testing"
+	_ "embed"
 )
 
-func TestPlatforms(t *testing.T) {
-	shouldSupport := runtime.GOOS == "linux" && (runtime.GOARCH == "amd64" || runtime.GOARCH == "arm64")
-
-	if shouldSupport && len(Exec) == 0 {
-		t.Errorf("nsjail should be supported for platform %s/%s", runtime.GOOS, runtime.GOARCH)
-	} else if !shouldSupport && len(Exec) != 0 {
-		t.Errorf("nsjail should not be supported for platform %s/%s", runtime.GOOS, runtime.GOARCH)
-	}
-}
+//go:embed nsjail-linux-amd64
+var nsjailExecutableBytes []byte
