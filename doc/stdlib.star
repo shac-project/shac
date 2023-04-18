@@ -252,7 +252,7 @@ def _ctx_re_match(pattern, string):
   pass
 
 
-def _ctx_scm_affected_files(glob = None):
+def _ctx_scm_affected_files(glob = None, include_deleted = False):
   """Returns affected files as determined by the SCM.
 
   If shac detected that the tree is managed by a source control management
@@ -279,10 +279,12 @@ def _ctx_scm_affected_files(glob = None):
 
   Args:
     glob: (optional) TODO: Will later accept a glob.
+    include_deleted: (optional) Whether to include deleted files. By default
+      deleted files are excluded.
 
   Returns:
     A map of {path: struct()} where the struct has a string field action and a
-    function new_line().
+    function new_lines().
   """
   pass
 
@@ -308,7 +310,7 @@ def _ctx_scm_all_files(glob = None):
 
   Returns:
     A map of {path: struct()} where the struct has a string field action and a
-    function new_line().
+    function new_lines().
   """
   pass
 

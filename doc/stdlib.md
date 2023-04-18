@@ -323,11 +323,12 @@ shac.register_check(new_todos)
 ### Arguments
 
 * **glob**: (optional) TODO: Will later accept a glob.
+* **include_deleted**: (optional) Whether to include deleted files. By default deleted files are excluded.
 
 ### Returns
 
 A map of {path: struct()} where the struct has a string field action and a
-function new_line().
+function new_lines().
 
 ## ctx.scm.all_files
 
@@ -354,7 +355,7 @@ shac.register_check(all_todos)
 ### Returns
 
 A map of {path: struct()} where the struct has a string field action and a
-function new_line().
+function new_lines().
 
 ## dir
 

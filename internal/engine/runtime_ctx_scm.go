@@ -57,9 +57,9 @@ type file struct {
 //
 // Returned files must be sorted.
 type scmCheckout interface {
-	affectedFiles(ctx context.Context) ([]file, error)
+	affectedFiles(ctx context.Context, includeDeleted bool) ([]file, error)
 	allFiles(ctx context.Context) ([]file, error)
-	newLines(path string) builtin
+	newLines(f file) builtin
 }
 
 // subdirSCM is a scmCheckout that only reports files from a subdirectory.
@@ -70,8 +70,8 @@ type subdirSCM struct {
 	subdir string
 }
 
-func (s *subdirSCM) affectedFiles(ctx context.Context) ([]file, error) {
-	f, err := s.s.affectedFiles(ctx)
+func (s *subdirSCM) affectedFiles(ctx context.Context, includeDeleted bool) ([]file, error) {
+	f, err := s.s.affectedFiles(ctx, includeDeleted)
 	// TODO(maruel): Cache.
 	var out []file
 	l := len(s.subdir)
@@ -96,8 +96,9 @@ func (s *subdirSCM) allFiles(ctx context.Context) ([]file, error) {
 	return out, err
 }
 
-func (s *subdirSCM) newLines(path string) builtin {
-	return s.s.newLines(s.subdir + path)
+func (s *subdirSCM) newLines(f file) builtin {
+	f.path = s.subdir + f.path
+	return s.s.newLines(f)
 }
 
 // Git support.
@@ -232,7 +233,7 @@ func (g *gitCheckout) run(ctx context.Context, args ...string) string {
 // affectedFiles returns the modified files on this checkout.
 //
 // The entries are lazy loaded and cached.
-func (g *gitCheckout) affectedFiles(ctx context.Context) ([]file, error) {
+func (g *gitCheckout) affectedFiles(ctx context.Context, includeDeleted bool) ([]file, error) {
 	if g.returnAll {
 		return g.allFiles(ctx)
 	}
@@ -272,11 +273,12 @@ func (g *gitCheckout) affectedFiles(ctx context.Context) ([]file, error) {
 				g.err = fmt.Errorf("missing trailing NUL character from git diff --name-status -z -C %s", g.upstream.hash)
 				break
 			}
-			// Ignore deleted files.
-			if action == "D" {
+			if action == "D" && !includeDeleted {
 				continue
 			}
-			if !g.isSubmodule(path) {
+			// TODO(olivernewman): Omit deleted submodules. For now they're
+			// treated the same as deleted regular files.
+			if action == "D" || !g.isSubmodule(path) {
 				g.modified = append(g.modified, file{action: action, path: path})
 			}
 		}
@@ -326,7 +328,7 @@ func (g *gitCheckout) isSubmodule(path string) bool {
 	return fi.IsDir()
 }
 
-func (g *gitCheckout) newLines(path string) builtin {
+func (g *gitCheckout) newLines(f file) builtin {
 	// TODO(maruel): Revisit the design, it is likely not performance efficient
 	// to use a stack context.
 	return func(ctx context.Context, s *shacState, name string, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
@@ -336,16 +338,20 @@ func (g *gitCheckout) newLines(path string) builtin {
 		if g.returnAll {
 			// Include all lines when processing all files independent if the file
 			// was modified or not.
-			v, err := newLinesWhole(g.checkoutRoot, path)
+			v, err := newLinesWhole(g.checkoutRoot, f.path)
 			if err != nil {
 				return nil, err
 			}
 			return v, nil
 		}
-		o := g.run(ctx, "diff", "--no-prefix", "-C", "-U0", g.upstream.hash, "--", path)
+		// Return an empty tuple for a deleted file's changed lines.
+		if f.action == "D" {
+			return make(starlark.Tuple, 0), nil
+		}
+		o := g.run(ctx, "diff", "--no-prefix", "-C", "-U0", g.upstream.hash, "--", f.path)
 		if o == "" {
 			// TODO(maruel): This is not normal. For now fallback to the whole file.
-			v, err := newLinesWhole(g.checkoutRoot, path)
+			v, err := newLinesWhole(g.checkoutRoot, f.path)
 			if err != nil {
 				return nil, err
 			}
@@ -412,7 +418,7 @@ type rawTree struct {
 	all []file
 }
 
-func (r *rawTree) affectedFiles(ctx context.Context) ([]file, error) {
+func (r *rawTree) affectedFiles(ctx context.Context, includeDeleted bool) ([]file, error) {
 	return r.allFiles(ctx)
 }
 
@@ -436,13 +442,13 @@ func (r *rawTree) allFiles(ctx context.Context) ([]file, error) {
 	return r.all, err
 }
 
-func (r *rawTree) newLines(path string) builtin {
+func (r *rawTree) newLines(f file) builtin {
 	// TODO(maruel): Revisit the design, it is likely not performance efficient.
 	return func(ctx context.Context, s *shacState, name string, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 		if err := starlark.UnpackArgs(name, args, kwargs); err != nil {
 			return nil, err
 		}
-		v, err := newLinesWhole(r.root, path)
+		v, err := newLinesWhole(r.root, f.path)
 		if err != nil {
 			return nil, err
 		}
@@ -452,39 +458,23 @@ func (r *rawTree) newLines(path string) builtin {
 
 // Starlark adapter code.
 
-func ctxScmFilesCommon(ctx context.Context, s *shacState, name string, args starlark.Tuple, kwargs []starlark.Tuple, all bool) (starlark.Value, error) {
-	if err := starlark.UnpackArgs(name, args, kwargs); err != nil {
-		return nil, err
-	}
-	var files []file
-	var err error
-	if all {
-		files, err = s.scm.allFiles(ctx)
-	} else {
-		files, err = s.scm.affectedFiles(ctx)
-	}
-	if err != nil {
-		return nil, err
-	}
-	// files is guaranteed to be sorted.
-	out := starlark.NewDict(len(files))
-	for _, f := range files {
-		// Make sure to update //doc/stdlib.star whenever this function is modified.
-		_ = out.SetKey(starlark.String(f.path), toValue("file", starlark.StringDict{
-			"action":    starlark.String(f.action),
-			"new_lines": newBuiltin("new_lines", s.scm.newLines(f.path)),
-		}))
-	}
-	return out, nil
-}
-
 // ctxScmAffectedFiles implements native function ctx.scm.affected_files().
 //
 // It returns a dictionary.
 //
 // Make sure to update //doc/stdlib.star whenever this function is modified.
 func ctxScmAffectedFiles(ctx context.Context, s *shacState, name string, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
-	return ctxScmFilesCommon(ctx, s, name, args, kwargs, false)
+	var argincludeDeleted starlark.Bool
+	if err := starlark.UnpackArgs(name, args, kwargs,
+		"include_deleted?", &argincludeDeleted,
+	); err != nil {
+		return nil, err
+	}
+	files, err := s.scm.affectedFiles(ctx, bool(argincludeDeleted))
+	if err != nil {
+		return nil, err
+	}
+	return ctxScmFilesReturnValue(s, files), nil
 }
 
 // ctxScmAllFiles implements native function ctx.scm.all_files().
@@ -493,7 +483,28 @@ func ctxScmAffectedFiles(ctx context.Context, s *shacState, name string, args st
 //
 // Make sure to update //doc/stdlib.star whenever this function is modified.
 func ctxScmAllFiles(ctx context.Context, s *shacState, name string, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
-	return ctxScmFilesCommon(ctx, s, name, args, kwargs, true)
+	if err := starlark.UnpackArgs(name, args, kwargs); err != nil {
+		return nil, err
+	}
+	files, err := s.scm.allFiles(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return ctxScmFilesReturnValue(s, files), nil
+}
+
+// ctxScmFilesReturnValue converts a list of files into a starlark.Dict to
+// return from the ctx.scm.all_files() and ctx.scm.affected_files() functions.
+func ctxScmFilesReturnValue(s *shacState, files []file) starlark.Value {
+	out := starlark.NewDict(len(files))
+	for _, f := range files {
+		// Make sure to update //doc/stdlib.star whenever this function is modified.
+		_ = out.SetKey(starlark.String(f.path), toValue("file", starlark.StringDict{
+			"action":    starlark.String(f.action),
+			"new_lines": newBuiltin("new_lines", s.scm.newLines(f)),
+		}))
+	}
+	return out
 }
 
 // newLinesWhole returns the whole file as new lines.
