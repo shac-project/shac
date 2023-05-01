@@ -485,6 +485,82 @@ func TestRun_SCM_Git_Recursive(t *testing.T) {
 	}
 }
 
+func TestRun_SCM_Git_Recursive_Shared(t *testing.T) {
+	t.Parallel()
+	// Tree content:
+	//   a/
+	//     shac.star
+	//     a.txt  (not affected)
+	//     b.txt
+	//   common/
+	//     c.txt
+	//     shared.star
+	//     internal/
+	//       internal.star
+	//   d/
+	//     shared2.star
+	root := t.TempDir()
+	initGit(t, root)
+	for _, p := range [...]string{"a", "common", filepath.Join("common", "internal"), "d"} {
+		if err := os.Mkdir(filepath.Join(root, p), 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// a/a.txt is in the initial commit, thus is not affected in commit HEAD.
+	writeFile(t, root, "a/a.txt", "content a")
+	runGit(t, root, "add", "a/a.txt")
+	runGit(t, root, "commit", "-m", "Initial commit")
+
+	// The affected files:
+	writeFile(t, root, "a/b.txt", "content b")
+	writeFile(t, root, "a/shac.star", ""+
+		// Loads a file relative to the root.
+		"load(\"//common/shared.star\", \"cb\")\n"+
+		"shac.register_check(cb)\n")
+	writeFile(t, root, "common/shared.star", ""+
+		// Loads a file relative to the current directory.
+		"load(\"internal/internal.star\", \"cbinner\")\n"+
+		"cb = cbinner")
+	writeFile(t, root, "common/c.txt", "content c")
+	writeFile(t, root, "common/internal/internal.star", ""+
+		// Loads a file relative to the current directory, going higher up.
+		"load(\"../../d/shared2.star\", \"cb\")\n"+
+		"cbinner = cb")
+	writeFile(t, root, "d/shared2.star", ""+
+		// This function sees the files affected from the perspective of the
+		// importer, which is a/shac.star.
+		"def cb(ctx):\n"+
+		"  for p, m in ctx.scm.affected_files().items():\n"+
+		"    if p.endswith(\".txt\"):\n"+
+		"      print(p + \"=\" + m.new_lines()[0][1])\n"+
+		"      ctx.emit.annotation(level=\"notice\", message=\"internal\", filepath=p)\n"+
+		"    else:\n"+
+		"      print(p)\n")
+	runGit(t, root, "add", ".")
+	runGit(t, root, "commit", "-m", "Second commit")
+	r := reportEmitPrint{reportPrint: reportPrint{reportNoPrint: reportNoPrint{t: t}}}
+	o := Options{Report: &r, Root: root, Recurse: true}
+	if err := Run(context.Background(), &o); err == nil {
+		t.Fatal("expect failure")
+	}
+	// a/a.txt is skipped because it was in the first commit.
+	// a/shac.star only see files in a/.
+	want := ""
+	// With parallel execution, the output will not be deterministic. Sort it manually.
+	a := strings.Split(r.b.String(), "\n")
+	sort.Strings(a)
+	got := strings.Join(a, "\n")
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Fatalf("mismatch (-want +got):\n%s", diff)
+	}
+	var annotations []annotation
+	// With parallel execution, the output will not be deterministic. Sort it manually.
+	sort.Slice(r.annotations, func(i, j int) bool { return r.annotations[i].File < r.annotations[j].File })
+	if diff := cmp.Diff(annotations, r.annotations); diff != "" {
+		t.Errorf("mismatch (-want +got):\n%s", diff)
+	}
+}
+
 // TestTestDataFailOrThrow runs all the files under testdata/fail_or_throw/.
 //
 // These test cases call fail() or throw an exception.
@@ -769,6 +845,16 @@ func TestTestDataFailOrThrow(t *testing.T) {
 			"",
 		},
 		{
+			"exec-file.star",
+			"outside the package root",
+			"  //exec-file.star:15:5: in <toplevel>\n",
+		},
+		{
+			"exec-statement.star",
+			"cannot exec print(True): no such module",
+			"  //exec-statement.star:15:5: in <toplevel>\n",
+		},
+		{
 			"fail-check.star",
 			"fail: an  unexpected  failure  None\nfail: unexpected keyword argument \"unknown\"",
 			"  //fail-check.star:16:7: in cb\n",
@@ -777,6 +863,31 @@ func TestTestDataFailOrThrow(t *testing.T) {
 			"fail.star",
 			"fail: an expected failure",
 			"  //fail.star:15:5: in <toplevel>\n",
+		},
+		{
+			"load-from_check.star",
+			"//load-from_check.star:16:3: load statement within a function",
+			"",
+		},
+		{
+			"load-inexistant.star",
+			"cannot load ./inexistant.star: no such module",
+			"  //load-inexistant.star:15:1: in <toplevel>\n",
+		},
+		{
+			"load-no_symbol.star",
+			"//load-no_symbol.star:15:5: load statement must import at least 1 symbol",
+			"",
+		},
+		{
+			"load-pkg_inexistant.star",
+			"cannot load @inexistant: a module path should be either '//<path>', '<path>' or '@<package>//<path>'",
+			"  //load-pkg_inexistant.star:15:1: in <toplevel>\n",
+		},
+		{
+			"load-recurse.star",
+			"cannot load ./load-recurse.star: the module has been exec'ed before and therefore is not loadable",
+			"  //load-recurse.star:15:1: in <toplevel>\n",
 		},
 		{
 			"shac-immutable.star",
@@ -1050,12 +1161,20 @@ func TestTestDataPrint(t *testing.T) {
 			want: "[//dir-shac.star:15] [\"commit_hash\", \"register_check\", \"version\"]\n",
 		},
 		{
+			name: "exec.star",
+			want: "[//true.star:15] True\n",
+		},
+		{
 			name: "print-shac-version.star",
 			want: "[//print-shac-version.star:15] " + v + "\n",
 		},
 		{
 			name: "shac-register_check.star",
 			want: "[//shac-register_check.star:16] running\n",
+		},
+		{
+			name: "true.star",
+			want: "[//true.star:15] True\n",
 		},
 	}
 	want := make([]string, len(data))
