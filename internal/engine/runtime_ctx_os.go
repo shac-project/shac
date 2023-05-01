@@ -164,7 +164,15 @@ func ctxOsExec(ctx context.Context, s *shacState, name string, args starlark.Tup
 	cmd.Stderr = &stderr
 
 	var retcode int
-	if err = cmd.Run(); err != nil {
+	// Serialize start given the issue described at sandbox.Mu.
+	sandbox.Mu.RLock()
+	err = cmd.Start()
+	sandbox.Mu.RUnlock()
+	if err != nil {
+		return nil, err
+	}
+
+	if err = cmd.Wait(); err != nil {
 		var errExit *exec.ExitError
 		if errors.As(err, &errExit) {
 			if argraiseOnFailure {

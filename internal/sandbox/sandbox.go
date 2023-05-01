@@ -22,6 +22,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"sync"
 )
 
 //go:generate go run download_nsjail.go
@@ -67,9 +68,18 @@ type Sandbox interface {
 	Command(context.Context, *Config) *exec.Cmd
 }
 
+// Mu works around fork+exec concurrency issue with open file handle on POSIX.
+// See https://github.com/golang/go/issues/22315 and
+// https://github.com/golang/go/issues/22220 for background.
+//
+// This is only needed when running unit tests.
+var Mu sync.RWMutex
+
 // New constructs a platform-appropriate sandbox.
 func New(tempDir string) (Sandbox, error) {
 	if runtime.GOOS == "linux" && (runtime.GOARCH == "amd64" || runtime.GOARCH == "arm64") {
+		Mu.Lock()
+		defer Mu.Unlock()
 		nsjailPath := filepath.Join(tempDir, "nsjail")
 		// Executable permissions are ok.
 		//#nosec CWE-276
