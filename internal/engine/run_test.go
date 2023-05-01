@@ -448,10 +448,10 @@ func TestRun_SCM_Git_Recursive(t *testing.T) {
 	// a/shac.star only see files in a/.
 	// b/shac.star only see files in b/.
 	want := "\n" +
-		"[//shac.star:5] b: b.txt=content b\n" +
+		"[//a/shac.star:8] a: shac.star\n" +
+		"[//b/shac.star:5] b: b.txt=content b\n" +
+		"[//b/shac.star:8] b: shac.star\n" +
 		"[//shac.star:5] root: b/b.txt=content b\n" +
-		"[//shac.star:8] a: shac.star\n" +
-		"[//shac.star:8] b: shac.star\n" +
 		"[//shac.star:8] root: a/shac.star\n" +
 		"[//shac.star:8] root: b/shac.star\n" +
 		"[//shac.star:8] root: shac.star"

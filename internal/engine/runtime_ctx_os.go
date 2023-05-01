@@ -63,10 +63,10 @@ func ctxOsExec(ctx context.Context, s *shacState, name string, args starlark.Tup
 		env[string(k)] = string(v)
 	}
 
-	cwd := s.root
+	cwd := filepath.Join(s.root, s.subdir)
 	if string(argcwd) != "" {
 		var err error
-		cwd, err = absPath(string(argcwd), s.root)
+		cwd, err = absPath(string(argcwd), cwd)
 		if err != nil {
 			return nil, err
 		}

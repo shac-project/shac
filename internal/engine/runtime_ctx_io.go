@@ -22,6 +22,7 @@ import (
 	"io/fs"
 	"os"
 	"path"
+	"path/filepath"
 	"strings"
 
 	"go.starlark.net/starlark"
@@ -45,7 +46,7 @@ func ctxIoReadFile(ctx context.Context, s *shacState, name string, args starlark
 	if !ok {
 		return nil, fmt.Errorf("for parameter \"size\": %s is an invalid size", argsize)
 	}
-	dst, err := absPath(string(argfilepath), s.root)
+	dst, err := absPath(string(argfilepath), filepath.Join(s.root, s.subdir))
 	if err != nil {
 		return nil, fmt.Errorf("for parameter \"filepath\": %s %w", argfilepath, err)
 	}

@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"runtime"
 	"strconv"
@@ -231,18 +232,18 @@ func runInner(ctx context.Context, root, tmpdir, main string, r Report, allowNet
 		for i := range files {
 			n := files[i].path
 			if filepath.Base(n) == main {
-				d := filepath.Dir(n)
+				d := strings.ReplaceAll(filepath.Dir(n), "\\", "/")
 				if d == "." {
 					continue
 				}
-				nr := filepath.Join(root, d)
 				shacStates = append(shacStates,
 					&shacState{
-						code:         interpreter.FileSystemLoader(nr),
+						code:         interpreter.FileSystemLoader(root),
 						r:            r,
 						allowNetwork: allowNetwork,
 						main:         main,
-						root:         nr,
+						root:         root,
+						subdir:       d,
 						tmpdir:       filepath.Join(tmpdir, strconv.Itoa(i+1)),
 						scm:          &subdirSCM{s: scm, subdir: d + "/"},
 						sandbox:      sb,
@@ -310,8 +311,12 @@ type shacState struct {
 	r            Report
 	allowNetwork bool
 	main         string
-	// root is the root for this shac.star.
-	root   string
+	// root is the root for the root shac.star that was executed. Native path
+	// style.
+	root string
+	// subdir is the directory into which this shac.star is located. Only set
+	// when Options.Recurse is set to true. POSIX path style.
+	subdir string
 	tmpdir string
 	// scm is a filtered view of runState.scm.
 	scm scmCheckout
@@ -377,7 +382,7 @@ func (s *shacState) parse(ctx context.Context) error {
 
 	var err error
 	if err = s.intr.Init(ctx); err == nil {
-		_, err = s.intr.ExecModule(ctx, interpreter.MainPkg, s.main)
+		_, err = s.intr.ExecModule(ctx, interpreter.MainPkg, path.Join(s.subdir, s.main))
 	}
 	if err != nil {
 		if s.failErr != nil {
@@ -396,7 +401,7 @@ func (s *shacState) parse(ctx context.Context) error {
 
 // bufferAllChecks adds all the checks to the channel for execution.
 func (s *shacState) bufferAllChecks(ctx context.Context, ch chan<- func() error) {
-	args := starlark.Tuple{getCtx(s.root)}
+	args := starlark.Tuple{getCtx(path.Join(s.root, s.subdir))}
 	args.Freeze()
 	for i := range s.checks {
 		i := i

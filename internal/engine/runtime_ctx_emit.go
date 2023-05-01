@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 
@@ -109,7 +110,7 @@ func ctxEmitAnnotation(ctx context.Context, s *shacState, name string, args star
 	}
 	root := ""
 	if file != "" {
-		root = s.root
+		root = filepath.Join(s.root, s.subdir)
 		// The file must be tracked by scm.
 		f, err := s.scm.allFiles(ctx)
 		if err != nil {
@@ -145,7 +146,7 @@ func ctxEmitArtifact(ctx context.Context, s *shacState, name string, args starla
 		// TODO(maruel): Use unsafe conversion to save a memory copy.
 		content = []byte(v)
 	case starlark.NoneType:
-		root = s.root
+		root = filepath.Join(s.root, s.subdir)
 		dst, err := absPath(f, root)
 		if err != nil {
 			return fmt.Errorf("for parameter \"filepath\": %s %w", argfilepath, err)
