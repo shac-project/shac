@@ -213,22 +213,10 @@ func runInner(ctx context.Context, root, tmpdir, main string, r Report, allowNet
 		},
 	}
 
-	// Each found shac.star is run in its own interpreter for maximum
-	// parallelism.
-	shacStates := []*shacState{
-		{
-			env:          &env,
-			r:            r,
-			allowNetwork: allowNetwork,
-			main:         main,
-			root:         root,
-			tmpdir:       filepath.Join(tmpdir, "0"),
-			scm:          scm,
-			sandbox:      sb,
-		},
-	}
-
+	var shacStates []*shacState
 	if recurse {
+		// Each found shac.star is run in its own interpreter for maximum
+		// parallelism.
 		// Discover all the main files via the SCM. This enables us to not walk
 		// ignored files.
 		files, err := scm.allFiles(ctx)
@@ -239,8 +227,10 @@ func runInner(ctx context.Context, root, tmpdir, main string, r Report, allowNet
 			n := files[i].path
 			if filepath.Base(n) == main {
 				d := strings.ReplaceAll(filepath.Dir(n), "\\", "/")
+				dd := d + "/"
 				if d == "." {
-					continue
+					d = ""
+					dd = ""
 				}
 				shacStates = append(shacStates,
 					&shacState{
@@ -250,11 +240,24 @@ func runInner(ctx context.Context, root, tmpdir, main string, r Report, allowNet
 						main:         main,
 						root:         root,
 						subdir:       d,
-						tmpdir:       filepath.Join(tmpdir, strconv.Itoa(i+1)),
-						scm:          &subdirSCM{s: scm, subdir: d + "/"},
+						tmpdir:       filepath.Join(tmpdir, strconv.Itoa(i)),
+						scm:          &subdirSCM{s: scm, subdir: dd},
 						sandbox:      sb,
 					})
 			}
+		}
+	} else {
+		shacStates = []*shacState{
+			{
+				env:          &env,
+				r:            r,
+				allowNetwork: allowNetwork,
+				main:         main,
+				root:         root,
+				tmpdir:       filepath.Join(tmpdir, "0"),
+				scm:          scm,
+				sandbox:      sb,
+			},
 		}
 	}
 

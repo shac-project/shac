@@ -540,12 +540,14 @@ func TestRun_SCM_Git_Recursive_Shared(t *testing.T) {
 	runGit(t, root, "commit", "-m", "Second commit")
 	r := reportEmitPrint{reportPrint: reportPrint{reportNoPrint: reportNoPrint{t: t}}}
 	o := Options{Report: &r, Root: root, Recurse: true}
-	if err := Run(context.Background(), &o); err == nil {
-		t.Fatal("expect failure")
+	if err := Run(context.Background(), &o); err != nil {
+		t.Fatal(err)
 	}
 	// a/a.txt is skipped because it was in the first commit.
 	// a/shac.star only see files in a/.
-	want := ""
+	want := "\n" +
+		"[//d/shared2.star:4] b.txt=content b\n" +
+		"[//d/shared2.star:7] shac.star"
 	// With parallel execution, the output will not be deterministic. Sort it manually.
 	a := strings.Split(r.b.String(), "\n")
 	sort.Strings(a)
@@ -553,7 +555,15 @@ func TestRun_SCM_Git_Recursive_Shared(t *testing.T) {
 	if diff := cmp.Diff(want, got); diff != "" {
 		t.Fatalf("mismatch (-want +got):\n%s", diff)
 	}
-	var annotations []annotation
+	annotations := []annotation{
+		{
+			Check:   "cb",
+			Level:   "notice",
+			Message: "internal",
+			Root:    filepath.Join(root, "a"),
+			File:    "b.txt",
+		},
+	}
 	// With parallel execution, the output will not be deterministic. Sort it manually.
 	sort.Slice(r.annotations, func(i, j int) bool { return r.annotations[i].File < r.annotations[j].File })
 	if diff := cmp.Diff(annotations, r.annotations); diff != "" {
