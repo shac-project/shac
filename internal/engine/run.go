@@ -110,7 +110,7 @@ type Report interface {
 	// if an abnormal error occurred.
 	CheckCompleted(ctx context.Context, check string, start time.Time, d time.Duration, r Level, err error)
 	// Print is called when print() starlark function is called.
-	Print(ctx context.Context, file string, line int, message string)
+	Print(ctx context.Context, check, file string, line int, message string)
 }
 
 // Options is the options for Run().
@@ -384,7 +384,7 @@ func (s *shacState) parse(ctx context.Context) error {
 		s.printCalled = true
 		s.mu.Unlock()
 		pos := th.CallFrame(1).Pos
-		s.r.Print(ctx, pos.Filename(), int(pos.Line), msg)
+		s.r.Print(ctx, "", pos.Filename(), int(pos.Line), msg)
 	}
 	p := path.Join(s.subdir, s.main)
 	if _, err := s.env.load(ctx, sourceKey{orig: p, pkg: "__main__", relpath: p}, pi); err != nil {
@@ -407,9 +407,8 @@ func (s *shacState) bufferAllChecks(ctx context.Context, ch chan<- func() error)
 		ch <- func() error {
 			start := time.Now()
 			pi := func(th *starlark.Thread, msg string) {
-				// TODO(maruel): Add context of the current check.
 				pos := th.CallFrame(1).Pos
-				s.r.Print(ctx, pos.Filename(), int(pos.Line), msg)
+				s.r.Print(ctx, s.checks[i].name, pos.Filename(), int(pos.Line), msg)
 			}
 			err := s.checks[i].call(ctx, s.env, args, pi)
 			if err != nil && ctx.Err() != nil {

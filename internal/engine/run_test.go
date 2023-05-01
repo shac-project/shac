@@ -1358,8 +1358,8 @@ func (r *reportNoPrint) EmitArtifact(ctx context.Context, check, root, file stri
 func (r *reportNoPrint) CheckCompleted(ctx context.Context, check string, start time.Time, d time.Duration, l Level, err error) {
 }
 
-func (r *reportNoPrint) Print(ctx context.Context, file string, line int, message string) {
-	r.t.Errorf("unexpected print: %s(%d): %s", file, line, message)
+func (r *reportNoPrint) Print(ctx context.Context, check, file string, line int, message string) {
+	r.t.Errorf("unexpected print: %s %s(%d): %s", check, file, line, message)
 }
 
 type reportPrint struct {
@@ -1368,7 +1368,7 @@ type reportPrint struct {
 	b  bytes.Buffer
 }
 
-func (r *reportPrint) Print(ctx context.Context, file string, line int, message string) {
+func (r *reportPrint) Print(ctx context.Context, check, file string, line int, message string) {
 	r.mu.Lock()
 	fmt.Fprintf(&r.b, "[%s:%d] %s\n", file, line, message)
 	r.mu.Unlock()

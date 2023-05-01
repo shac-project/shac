@@ -111,8 +111,12 @@ func (b *basic) CheckCompleted(ctx context.Context, check string, start time.Tim
 	}
 }
 
-func (b *basic) Print(ctx context.Context, file string, line int, message string) {
-	fmt.Fprintf(b.out, "[%s:%d] %s\n", file, line, message)
+func (b *basic) Print(ctx context.Context, check, file string, line int, message string) {
+	if check != "" {
+		fmt.Fprintf(b.out, "- %s [%s:%d] %s\n", check, file, line, message)
+	} else {
+		fmt.Fprintf(b.out, "[%s:%d] %s\n", file, line, message)
+	}
 }
 
 // github is the Report implementation when running inside a GitHub Actions
@@ -164,12 +168,16 @@ func (g *github) EmitArtifact(ctx context.Context, check, root, file string, con
 func (g *github) CheckCompleted(ctx context.Context, check string, start time.Time, d time.Duration, l engine.Level, err error) {
 }
 
-func (g *github) Print(ctx context.Context, file string, line int, message string) {
+func (g *github) Print(ctx context.Context, check, file string, line int, message string) {
 	// Use debug here instead of notice since the file/line reference comes from
 	// starlark, which will likely not be in the delta or even in your source
 	// tree for load()'ed packages. This means GitHub may not be able to
 	// reference it anyway.
-	fmt.Fprintf(g.out, "::debug::[%s:%d] %s\n", file, line, message)
+	if check != "" {
+		fmt.Fprintf(g.out, "::debug::%s [%s:%d] %s\n", check, file, line, message)
+	} else {
+		fmt.Fprintf(g.out, "::debug::[%s:%d] %s\n", file, line, message)
+	}
 }
 
 type interactive struct {
@@ -258,8 +266,12 @@ func (i *interactive) CheckCompleted(ctx context.Context, check string, start ti
 	}
 }
 
-func (i *interactive) Print(ctx context.Context, file string, line int, message string) {
-	fmt.Fprintf(i.out, "%s[%s%s:%d%s] %s%s%s\n", reset, fgHiBlue, file, line, reset, bold, message, reset)
+func (i *interactive) Print(ctx context.Context, check, file string, line int, message string) {
+	if check != "" {
+		fmt.Fprintf(i.out, "%s- %s%s %s[%s%s:%d%s] %s%s%s\n", reset, fgYellow, check, reset, fgHiBlue, file, line, reset, bold, message, reset)
+	} else {
+		fmt.Fprintf(i.out, "%s[%s%s:%d%s] %s%s%s\n", reset, fgHiBlue, file, line, reset, bold, message, reset)
+	}
 }
 
 var levelColor = map[engine.Level]ansiCode{

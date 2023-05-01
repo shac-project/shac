@@ -57,7 +57,8 @@ func TestBasic(t *testing.T) {
 	start := time.Now()
 	r.CheckCompleted(ctx, "mycheck", start, time.Millisecond, engine.Notice, nil)
 	r.CheckCompleted(ctx, "badcheck", start, time.Millisecond, engine.Notice, errors.New("bad"))
-	r.Print(ctx, "src.star", 12, "debugmsg")
+	r.Print(ctx, "", "src.star", 12, "debugmsg")
+	r.Print(ctx, "mycheck", "src.star", 12, "debugmsg")
 	if err := r.Close(); err != nil {
 		t.Fatal(err)
 	}
@@ -66,7 +67,8 @@ func TestBasic(t *testing.T) {
 		"[mycheck/notice] testdata/file.txt(10): message3\n" +
 		"- mycheck (success in 1ms)\n" +
 		"- badcheck (error in 1ms): bad\n" +
-		"[src.star:12] debugmsg\n"
+		"[src.star:12] debugmsg\n" +
+		"- mycheck [src.star:12] debugmsg\n"
 	if diff := cmp.Diff(want, buf.String()); diff != "" {
 		t.Fatalf("mismatch (-want +got):\n%s", diff)
 	}
@@ -100,7 +102,8 @@ func TestGitHub(t *testing.T) {
 	start := time.Now()
 	r.CheckCompleted(ctx, "mycheck", start, time.Millisecond, engine.Notice, nil)
 	r.CheckCompleted(ctx, "badcheck", start, time.Millisecond, engine.Notice, errors.New("bad"))
-	r.Print(ctx, "src.star", 12, "debugmsg")
+	r.Print(ctx, "", "src.star", 12, "debugmsg")
+	r.Print(ctx, "mycheck", "src.star", 12, "debugmsg")
 	if err := r.Close(); err != nil {
 		t.Fatal(err)
 	}
@@ -110,7 +113,8 @@ func TestGitHub(t *testing.T) {
 		"::notice ::file=testdata/file.txt,line=10,col=1,title=mycheck::message4\n" +
 		"::notice ::file=testdata/file.txt,line=10,endLine=12,title=mycheck::message5\n" +
 		"::notice ::file=testdata/file.txt,line=10,col=1,endLine=12,endCol=2,title=mycheck::message6\n" +
-		"::debug::[src.star:12] debugmsg\n"
+		"::debug::[src.star:12] debugmsg\n" +
+		"::debug::mycheck [src.star:12] debugmsg\n"
 	if diff := cmp.Diff(want, buf.String()); diff != "" {
 		t.Fatalf("mismatch (-want +got):\n%s", diff)
 	}
@@ -276,13 +280,15 @@ func TestInteractive(t *testing.T) {
 	start := time.Now()
 	r.CheckCompleted(ctx, "mycheck", start, time.Millisecond, engine.Notice, nil)
 	r.CheckCompleted(ctx, "badcheck", start, time.Millisecond, engine.Notice, errors.New("bad"))
-	r.Print(ctx, "src.star", 12, "debugmsg")
+	r.Print(ctx, "", "src.star", 12, "debugmsg")
+	r.Print(ctx, "mycheck", "src.star", 12, "debugmsg")
 	if err := r.Close(); err != nil {
 		t.Fatal(err)
 	}
 	want := "<R>- <G>mycheck<R> (success in 1ms)\n" +
 		"<R>- <Re>badcheck<R> (error in 1ms): bad\n" +
-		"<R>[src.star:12<R>] <B>debugmsg<R>\n"
+		"<R>[src.star:12<R>] <B>debugmsg<R>\n" +
+		"<R>- <Y>mycheck <R>[src.star:12<R>] <B>debugmsg<R>\n"
 
 	if diff := cmp.Diff(want, buf.String()); diff != "" {
 		t.Fatalf("mismatch (-want +got):\n%s", diff)
