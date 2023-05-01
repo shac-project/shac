@@ -147,7 +147,7 @@ jobs:
       run: |
         if find . -path '*.sh' -prune -o \
             -path ./.git -prune -o \
-            -path './internal/nsjail/nsjail-linux-*' -prune -o \
+            -path './internal/sandbox/nsjail-linux-*' -prune -o \
             -type f -executable -print | grep -e . ; then
           echo 'Do not commit executables beside shell scripts'
           false

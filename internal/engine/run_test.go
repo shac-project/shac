@@ -1077,7 +1077,7 @@ func TestTestDataPrint(t *testing.T) {
 }
 
 func TestRun_Filesystem_Sandboxing(t *testing.T) {
-	if runtime.GOOS == "linux" && (runtime.GOARCH == "amd64" || runtime.GOARCH == "arm64") {
+	if runtime.GOOS != "linux" || (runtime.GOARCH != "amd64" && runtime.GOARCH != "arm64") {
 		t.Skip("sandboxing is only supported on linux-{arm64,amd64}")
 	}
 	t.Parallel()

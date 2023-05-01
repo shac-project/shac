@@ -100,7 +100,17 @@ func ctxOsExec(ctx context.Context, s *shacState, name string, args starlark.Tup
 		AllowNetwork: bool(argallowNetwork),
 		TempDir:      tempDir,
 		Env:          env,
-		Mounts: []sandbox.Mount{
+	}
+	if runtime.GOOS == "windows" {
+		// config.Mounts is ignored for the moment on Windows.
+		// TODO(olivernewman): Add an env_prefixes argument to exec() so $PATH can
+		// be controlled without completely overriding it.
+		config.Env["PATH"] = strings.Join([]string{
+			filepath.Join(runtime.GOROOT(), "bin"),
+		}, string(os.PathListSeparator))
+
+	} else {
+		config.Mounts = []sandbox.Mount{
 			// TODO(olivernewman): Mount the checkout read-only by default.
 			{Path: s.root, Writeable: true},
 			// System binaries.
@@ -123,17 +133,17 @@ func ctxOsExec(ctx context.Context, s *shacState, name string, args starlark.Tup
 			{Path: "/usr/include"},
 			// System compilers.
 			{Path: "/usr/lib"},
-		},
+		}
+		// TODO(olivernewman): Add an env_prefixes argument to exec() so $PATH can
+		// be controlled without completely overriding it.
+		config.Env["PATH"] = strings.Join([]string{
+			"/usr/bin",
+			"/bin",
+			// TODO(olivernewman): Use a hermetic Go installation, don't add $GOROOT
+			// to $PATH.
+			filepath.Join(runtime.GOROOT(), "bin"),
+		}, string(os.PathListSeparator))
 	}
-	// TODO(olivernewman): Add an env_prefixes argument to exec() so $PATH can
-	// be controlled without completely overriding it.
-	config.Env["PATH"] = strings.Join([]string{
-		"/usr/bin",
-		"/bin",
-		// TODO(olivernewman): Use a hermetic Go installation, don't add $GOROOT
-		// to $PATH.
-		filepath.Join(runtime.GOROOT(), "bin"),
-	}, ":")
 
 	// Mount $GOROOT unless it's a subdirectory of the checkout dir, in
 	// which case it will already be mounted.
