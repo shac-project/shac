@@ -22,7 +22,6 @@ import (
 	"strings"
 
 	"go.chromium.org/luci/starlark/builtins"
-	"go.chromium.org/luci/starlark/interpreter"
 	"go.starlark.net/lib/json"
 	"go.starlark.net/starlark"
 	"go.starlark.net/starlarkstruct"
@@ -92,7 +91,7 @@ func fail(th *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs
 		Message: msg,
 		Stack:   th.CallStack(),
 	}
-	ctx := interpreter.Context(th)
+	ctx := getContext(th)
 	if c := ctxCheck(ctx); c != nil {
 		// Running inside a check, annotate it.
 		c.failErr = failErr
@@ -170,7 +169,7 @@ type builtin func(ctx context.Context, s *shacState, name string, args starlark.
 // the text of any returned errors as a usability improvement.
 func newBuiltin(name string, impl builtin) *starlark.Builtin {
 	wrapper := func(th *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
-		ctx := interpreter.Context(th)
+		ctx := getContext(th)
 		s := ctxShacState(ctx)
 		val, err := impl(ctx, s, name, args, kwargs)
 		// starlark.UnpackArgs already adds the function name prefix to errors

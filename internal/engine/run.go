@@ -31,7 +31,6 @@ import (
 	"sync"
 	"time"
 
-	"go.chromium.org/luci/starlark/interpreter"
 	"go.fuchsia.dev/shac-project/shac/internal/sandbox"
 	"go.starlark.net/resolve"
 	"go.starlark.net/starlark"
@@ -206,12 +205,19 @@ func runInner(ctx context.Context, root, tmpdir, main string, r Report, allowNet
 	if err != nil {
 		return err
 	}
+	env := starlarkEnv{
+		globals: getPredeclared(),
+		sources: map[string]*loadedSource{},
+		packages: map[string]fs.FS{
+			"__main__": os.DirFS(root),
+		},
+	}
 
 	// Each found shac.star is run in its own interpreter for maximum
 	// parallelism.
 	shacStates := []*shacState{
 		{
-			code:         interpreter.FileSystemLoader(root),
+			env:          &env,
 			r:            r,
 			allowNetwork: allowNetwork,
 			main:         main,
@@ -238,7 +244,7 @@ func runInner(ctx context.Context, root, tmpdir, main string, r Report, allowNet
 				}
 				shacStates = append(shacStates,
 					&shacState{
-						code:         interpreter.FileSystemLoader(root),
+						env:          &env,
 						r:            r,
 						allowNetwork: allowNetwork,
 						main:         main,
@@ -306,8 +312,7 @@ func runInner(ctx context.Context, root, tmpdir, main string, r Report, allowNet
 
 // shacState represents a parsing state of one shac.star.
 type shacState struct {
-	code         interpreter.Loader
-	intr         *interpreter.Interpreter
+	env          *starlarkEnv
 	r            Report
 	allowNetwork bool
 	main         string
@@ -369,26 +374,17 @@ func (s *shacState) parseAndBuffer(ctx context.Context, ch chan<- func() error) 
 
 // parse parses a single shac.star file.
 func (s *shacState) parse(ctx context.Context) error {
-	s.intr = &interpreter.Interpreter{
-		Predeclared: getPredeclared(),
-		Packages:    map[string]interpreter.Loader{interpreter.MainPkg: s.code},
-		Logger: func(file string, line int, message string) {
-			s.mu.Lock()
-			s.printCalled = true
-			s.mu.Unlock()
-			s.r.Print(ctx, file, line, message)
-		},
+	pi := func(th *starlark.Thread, msg string) {
+		// Detect if print() was called while loading. Calling either print() or
+		// shac.register_check() makes a shac.star valid.
+		s.mu.Lock()
+		s.printCalled = true
+		s.mu.Unlock()
+		pos := th.CallFrame(1).Pos
+		s.r.Print(ctx, pos.Filename(), int(pos.Line), msg)
 	}
-
-	var err error
-	if err = s.intr.Init(ctx); err == nil {
-		_, err = s.intr.ExecModule(ctx, interpreter.MainPkg, path.Join(s.subdir, s.main))
-	}
-	if err != nil {
-		if s.failErr != nil {
-			// We got a fail() call, use this instead.
-			return s.failErr
-		}
+	p := path.Join(s.subdir, s.main)
+	if _, err := s.env.load(ctx, sourceKey{orig: p, pkg: "__main__", relpath: p}, pi); err != nil {
 		var evalErr *starlark.EvalError
 		if errors.As(err, &evalErr) {
 			return &evalError{evalErr}
@@ -407,7 +403,12 @@ func (s *shacState) bufferAllChecks(ctx context.Context, ch chan<- func() error)
 		i := i
 		ch <- func() error {
 			start := time.Now()
-			err := s.checks[i].call(ctx, s.intr, args)
+			pi := func(th *starlark.Thread, msg string) {
+				// TODO(maruel): Add context of the current check.
+				pos := th.CallFrame(1).Pos
+				s.r.Print(ctx, pos.Filename(), int(pos.Line), msg)
+			}
+			err := s.checks[i].call(ctx, s.env, args, pi)
 			if err != nil && ctx.Err() != nil {
 				// Don't report the check completion if the context was
 				// canceled. The error was probably caused by the context being
@@ -463,10 +464,9 @@ func ctxCheck(ctx context.Context) *check {
 // call calls the check callback and returns an error if an abnormal error happened.
 //
 // A "normal" error will still have this function return nil.
-func (c *check) call(ctx context.Context, intr *interpreter.Interpreter, args starlark.Tuple) error {
+func (c *check) call(ctx context.Context, env *starlarkEnv, args starlark.Tuple, pi printImpl) error {
 	ctx = context.WithValue(ctx, &checkCtxKey, c)
-	th := intr.Thread(ctx)
-	th.Name = c.name
+	th := env.thread(ctx, c.name, pi)
 	if r, err := starlark.Call(th, c.cb, args, nil); err != nil {
 		if c.failErr != nil {
 			// fail() was called, return this error since this is an abnormal failure.

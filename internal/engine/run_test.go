@@ -45,7 +45,7 @@ func TestRun_Fail(t *testing.T) {
 			Options{
 				Config: "/dev/null",
 			},
-			"no such module",
+			"file not found",
 		},
 		{
 			Options{
@@ -846,13 +846,13 @@ func TestTestDataFailOrThrow(t *testing.T) {
 		},
 		{
 			"exec-file.star",
-			"outside the package root",
-			"  //exec-file.star:15:5: in <toplevel>\n",
+			"fail: undefined: exec",
+			"  //exec-file.star:15:1: in <toplevel>\n",
 		},
 		{
 			"exec-statement.star",
-			"cannot exec print(True): no such module",
-			"  //exec-statement.star:15:5: in <toplevel>\n",
+			"fail: undefined: exec",
+			"  //exec-statement.star:15:1: in <toplevel>\n",
 		},
 		{
 			"fail-check.star",
@@ -866,12 +866,15 @@ func TestTestDataFailOrThrow(t *testing.T) {
 		},
 		{
 			"load-from_check.star",
-			"//load-from_check.star:16:3: load statement within a function",
-			"",
+			"fail: load statement within a function",
+			// It's a bit sad that the function name is not printed out. This is
+			// because this error happens at syntax parsing phase, not at execution
+			// phase.
+			"  //load-from_check.star:16:3: in <toplevel>\n",
 		},
 		{
 			"load-inexistant.star",
-			"cannot load ./inexistant.star: no such module",
+			"cannot load ./inexistant.star: file not found",
 			"  //load-inexistant.star:15:1: in <toplevel>\n",
 		},
 		{
@@ -881,12 +884,12 @@ func TestTestDataFailOrThrow(t *testing.T) {
 		},
 		{
 			"load-pkg_inexistant.star",
-			"cannot load @inexistant: a module path should be either '//<path>', '<path>' or '@<package>//<path>'",
+			"cannot load @inexistant: package not found",
 			"  //load-pkg_inexistant.star:15:1: in <toplevel>\n",
 		},
 		{
 			"load-recurse.star",
-			"cannot load ./load-recurse.star: the module has been exec'ed before and therefore is not loadable",
+			"cannot load ./load-recurse.star: //load-recurse.star was loaded in a cycle dependency graph",
 			"  //load-recurse.star:15:1: in <toplevel>\n",
 		},
 		{
@@ -941,8 +944,8 @@ func TestTestDataFailOrThrow(t *testing.T) {
 		},
 		{
 			"undefined_symbol.star",
-			"//undefined_symbol.star:15:1: undefined: undefined_symbol",
-			"",
+			"fail: undefined: undefined_symbol",
+			"  //undefined_symbol.star:15:1: in <toplevel>\n",
 		},
 	}
 	want := make([]string, len(data))
@@ -1159,10 +1162,6 @@ func TestTestDataPrint(t *testing.T) {
 		{
 			name: "dir-shac.star",
 			want: "[//dir-shac.star:15] [\"commit_hash\", \"register_check\", \"version\"]\n",
-		},
-		{
-			name: "exec.star",
-			want: "[//true.star:15] True\n",
 		},
 		{
 			name: "print-shac-version.star",
