@@ -18,8 +18,8 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"os"
-	"strconv"
 	"testing"
 	"time"
 
@@ -42,12 +42,15 @@ func TestBasic(t *testing.T) {
 	buf := bytes.Buffer{}
 	r := basic{out: &buf}
 	ctx := context.Background()
+	// No context.
 	if err := r.EmitAnnotation(ctx, "mycheck", engine.Notice, "message1", "", "", engine.Span{}, nil); err != nil {
 		t.Fatal(err)
 	}
+	// Only a file.
 	if err := r.EmitAnnotation(ctx, "mycheck", engine.Notice, "message2", "", "testdata/file.txt", engine.Span{}, nil); err != nil {
 		t.Fatal(err)
 	}
+	// File and line number. More than this is ignored.
 	if err := r.EmitAnnotation(ctx, "mycheck", engine.Notice, "message3", "", "testdata/file.txt", engine.Span{Start: engine.Cursor{Line: 10}}, nil); err != nil {
 		t.Fatal(err)
 	}
@@ -78,21 +81,27 @@ func TestGitHub(t *testing.T) {
 	buf := bytes.Buffer{}
 	r := github{out: &buf}
 	ctx := context.Background()
+	// No context.
 	if err := r.EmitAnnotation(ctx, "mycheck", engine.Notice, "message1", "", "", engine.Span{}, nil); err != nil {
 		t.Fatal(err)
 	}
+	// Only a file.
 	if err := r.EmitAnnotation(ctx, "mycheck", engine.Notice, "message2", "", "testdata/file.txt", engine.Span{}, nil); err != nil {
 		t.Fatal(err)
 	}
+	// File and line number.
 	if err := r.EmitAnnotation(ctx, "mycheck", engine.Notice, "message3", "", "testdata/file.txt", engine.Span{Start: engine.Cursor{Line: 10}}, nil); err != nil {
 		t.Fatal(err)
 	}
+	// File, line number and column.
 	if err := r.EmitAnnotation(ctx, "mycheck", engine.Notice, "message4", "", "testdata/file.txt", engine.Span{Start: engine.Cursor{Line: 10, Col: 1}}, nil); err != nil {
 		t.Fatal(err)
 	}
+	// File, two line numbers.
 	if err := r.EmitAnnotation(ctx, "mycheck", engine.Notice, "message5", "", "testdata/file.txt", engine.Span{Start: engine.Cursor{Line: 10}, End: engine.Cursor{Line: 12}}, nil); err != nil {
 		t.Fatal(err)
 	}
+	// file, start and end span on separate lines.
 	if err := r.EmitAnnotation(ctx, "mycheck", engine.Notice, "message6", "", "testdata/file.txt", engine.Span{Start: engine.Cursor{Line: 10, Col: 1}, End: engine.Cursor{Line: 12, Col: 2}}, nil); err != nil {
 		t.Fatal(err)
 	}
@@ -123,36 +132,42 @@ func TestGitHub(t *testing.T) {
 func TestInteractive_Annotation(t *testing.T) {
 	t.Parallel()
 	data := []struct {
+		name     string
 		l        engine.Level
 		filepath string
 		span     engine.Span
 		want     string
 	}{
 		{
+			"no context/notice",
 			engine.Notice,
 			"",
 			engine.Span{},
 			"<R>[<Hc>mycheck<R>/<G>notice<R>] message1\n",
 		},
 		{
+			"no context/warning",
 			engine.Warning,
 			"",
 			engine.Span{},
 			"<R>[<Hc>mycheck<R>/<Y>warning<R>] message1\n",
 		},
 		{
+			"no context/error",
 			engine.Error,
 			"",
 			engine.Span{},
 			"<R>[<Hc>mycheck<R>/<Re>error<R>] message1\n",
 		},
 		{
+			"file only",
 			engine.Notice,
 			"file.txt",
 			engine.Span{},
 			"<R>[<Hc>mycheck<R>/<G>notice<R>] file.txt: message1\n",
 		},
 		{
+			"start line first",
 			engine.Notice,
 			"file.txt",
 			engine.Span{Start: engine.Cursor{Line: 1}},
@@ -163,6 +178,7 @@ func TestInteractive_Annotation(t *testing.T) {
 				"\n",
 		},
 		{
+			"start line middle",
 			engine.Notice,
 			"file.txt",
 			engine.Span{Start: engine.Cursor{Line: 3}},
@@ -174,6 +190,7 @@ func TestInteractive_Annotation(t *testing.T) {
 				"\n",
 		},
 		{
+			"start line last",
 			engine.Notice,
 			"file.txt",
 			engine.Span{Start: engine.Cursor{Line: 9}},
@@ -185,6 +202,14 @@ func TestInteractive_Annotation(t *testing.T) {
 				"\n",
 		},
 		{
+			"start line past end",
+			engine.Notice,
+			"file.txt",
+			engine.Span{Start: engine.Cursor{Line: 10}},
+			"<R>[<Hc>mycheck<R>/<G>notice<R>] file.txt(10): message1\n",
+		},
+		{
+			"end line same",
 			engine.Notice,
 			"file.txt",
 			engine.Span{Start: engine.Cursor{Line: 3}, End: engine.Cursor{Line: 3}},
@@ -196,6 +221,7 @@ func TestInteractive_Annotation(t *testing.T) {
 				"\n",
 		},
 		{
+			"end line next",
 			engine.Notice,
 			"file.txt",
 			engine.Span{Start: engine.Cursor{Line: 3}, End: engine.Cursor{Line: 4}},
@@ -208,6 +234,7 @@ func TestInteractive_Annotation(t *testing.T) {
 				"\n",
 		},
 		{
+			"end line 3",
 			engine.Notice,
 			"file.txt",
 			engine.Span{Start: engine.Cursor{Line: 3}, End: engine.Cursor{Line: 5}},
@@ -221,7 +248,7 @@ func TestInteractive_Annotation(t *testing.T) {
 				"\n",
 		},
 		{
-			// Span with columns.
+			"span 2 lines",
 			engine.Notice,
 			"file.txt",
 			engine.Span{Start: engine.Cursor{Line: 1, Col: 2}, End: engine.Cursor{Line: 2, Col: 2}},
@@ -233,7 +260,32 @@ func TestInteractive_Annotation(t *testing.T) {
 				"\n",
 		},
 		{
-			// Intra-line.
+			"span end col overflow",
+			engine.Notice,
+			"file.txt",
+			engine.Span{Start: engine.Cursor{Line: 4, Col: 1}, End: engine.Cursor{Line: 5, Col: 10}},
+			"<R>[<Hc>mycheck<R>/<G>notice<R>] file.txt(4): message1\n" +
+				"\n" +
+				"  Has\n" +
+				"  <G>A<R>\n" +
+				"  <G>Little<R>\n" +
+				"  Bit\n" +
+				"\n",
+		},
+		{
+			"span intra-line 1 char",
+			engine.Notice,
+			"file.txt",
+			engine.Span{Start: engine.Cursor{Line: 5, Col: 2}, End: engine.Cursor{Line: 5, Col: 2}},
+			"<R>[<Hc>mycheck<R>/<G>notice<R>] file.txt(5): message1\n" +
+				"\n" +
+				"  A\n" +
+				"  L<G>i<R>ttle\n" +
+				"  Bit\n" +
+				"\n",
+		},
+		{
+			"span intra-line 2 chars",
 			engine.Notice,
 			"file.txt",
 			engine.Span{Start: engine.Cursor{Line: 5, Col: 2}, End: engine.Cursor{Line: 5, Col: 3}},
@@ -244,10 +296,34 @@ func TestInteractive_Annotation(t *testing.T) {
 				"  Bit\n" +
 				"\n",
 		},
+		{
+			"span intra-line EOL",
+			engine.Notice,
+			"file.txt",
+			engine.Span{Start: engine.Cursor{Line: 5, Col: 1}, End: engine.Cursor{Line: 5, Col: 6}},
+			"<R>[<Hc>mycheck<R>/<G>notice<R>] file.txt(5): message1\n" +
+				"\n" +
+				"  A\n" +
+				"  <G>Little<R>\n" +
+				"  Bit\n" +
+				"\n",
+		},
+		{
+			"span intra-line EOL overflow",
+			engine.Notice,
+			"file.txt",
+			engine.Span{Start: engine.Cursor{Line: 5, Col: 1}, End: engine.Cursor{Line: 5, Col: 10}},
+			"<R>[<Hc>mycheck<R>/<G>notice<R>] file.txt(5): message1\n" +
+				"\n" +
+				"  A\n" +
+				"  <G>Little<R>\n" +
+				"  Bit\n" +
+				"\n",
+		},
 	}
 	for i, l := range data {
 		l := l
-		t.Run(strconv.Itoa(i), func(t *testing.T) {
+		t.Run(fmt.Sprintf("%d-%s", i, l.name), func(t *testing.T) {
 			t.Parallel()
 			buf := bytes.Buffer{}
 			// Strip the ANSI codes for now, otherwise it makes the test fairly messy.

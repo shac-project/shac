@@ -205,17 +205,27 @@ func (i *interactive) EmitAnnotation(ctx context.Context, check string, level en
 			if end == 0 {
 				end = s.Start.Line
 			}
+			if s.Start.Line >= len(lines) {
+				// Consider raising an alert so the check can be fixed.
+				return nil
+			}
 			fmt.Fprintf(i.out, "\n")
-			for l := s.Start.Line - 2; l <= end; l++ {
-				if l < 0 || l >= len(lines) {
+			for l := s.Start.Line - 2; l <= end && l < len(lines); l++ {
+				if l < 0 {
 					continue
 				}
 				if l == s.Start.Line-1 {
 					// First highlighted line.
 					if s.Start.Col > 0 {
 						if s.End.Line == s.Start.Line && s.End.Col > 0 {
+							// Silently ignore when the ending offset is misaligned. It's easy to get wrong.
+							ec := s.End.Col
+							if ec > len(lines[l]) {
+								// Consider raising an alert so the check can be fixed.
+								ec = len(lines[l])
+							}
 							// Intra-line highlight.
-							fmt.Fprintf(i.out, "  %s%s%s%s%s\n", lines[l][:s.Start.Col-1], c, lines[l][s.Start.Col-1:s.End.Col], reset, lines[l][s.End.Col:])
+							fmt.Fprintf(i.out, "  %s%s%s%s%s\n", lines[l][:s.Start.Col-1], c, lines[l][s.Start.Col-1:ec], reset, lines[l][ec:])
 						} else {
 							fmt.Fprintf(i.out, "  %s%s%s%s\n", lines[l][:s.Start.Col-1], c, lines[l][s.Start.Col-1:], reset)
 						}
@@ -228,7 +238,13 @@ func (i *interactive) EmitAnnotation(ctx context.Context, check string, level en
 				} else if l >= s.Start.Line && l == end-1 {
 					// Last highlighted line.
 					if s.End.Col > 0 {
-						fmt.Fprintf(i.out, "  %s%s%s%s\n", c, lines[l][:s.End.Col], reset, lines[l][s.End.Col:])
+						// Silently ignore when the ending offset is misaligned. It's easy to get wrong.
+						ec := s.End.Col
+						if ec > len(lines[l]) {
+							// Consider raising an alert so the check can be fixed.
+							ec = len(lines[l])
+						}
+						fmt.Fprintf(i.out, "  %s%s%s%s\n", c, lines[l][:ec], reset, lines[l][ec:])
 					} else {
 						fmt.Fprintf(i.out, "  %s%s%s\n", c, lines[l], reset)
 					}

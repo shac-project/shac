@@ -146,7 +146,7 @@ def staticcheck(ctx, version = "v0.4.3"):
       line=f["location"]["line"],
       col=f["location"]["column"],
       end_line=f["end"]["line"],
-      end_col=f["end"]["column"],
+      end_col=f["end"]["column"]-1,
     )
 
 
