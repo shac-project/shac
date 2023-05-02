@@ -123,17 +123,16 @@ type Options struct {
 	Report Report
 	// Root directory. Defaults to the current working directory.
 	Root string
-	// Main source file to run. Defaults to shac.star.
-	Main string
-	// Configuration file. Defaults to shac.textproto.
-	Config string
 	// AllFiles tells to consider all files as affected.
 	AllFiles bool
 	// Recurse tells the engine to run all Main files found in subdirectories.
 	Recurse bool
 
-	// Require keyed arguments.
-	_ struct{}
+	// main source file to run. Defaults to shac.star. Only used in unit tests.
+	main string
+	// config is the configuration file. Defaults to shac.textproto. Only used in
+	// unit tests.
+	config string
 }
 
 // Run loads a main shac.star file from a root directory and runs it.
@@ -146,14 +145,14 @@ func Run(ctx context.Context, o *Options) error {
 	if err != nil {
 		return err
 	}
-	main := o.Main
+	main := o.main
 	if main == "" {
 		main = "shac.star"
 	}
 	if filepath.IsAbs(main) {
 		return errors.New("main file must not be an absolute path")
 	}
-	config := o.Config
+	config := o.config
 	if config == "" {
 		config = "shac.textproto"
 	}

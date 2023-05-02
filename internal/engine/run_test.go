@@ -43,13 +43,13 @@ func TestRun_Fail(t *testing.T) {
 	}{
 		{
 			Options{
-				Config: "/dev/null",
+				config: "/dev/null",
 			},
 			"file not found",
 		},
 		{
 			Options{
-				Config: ".",
+				config: ".",
 			},
 			func() string {
 				if runtime.GOOS == "windows" {
@@ -60,7 +60,7 @@ func TestRun_Fail(t *testing.T) {
 		},
 		{
 			Options{
-				Main: func() string {
+				main: func() string {
 					if runtime.GOOS == "windows" {
 						return "c:\\invalid"
 					}
@@ -71,7 +71,7 @@ func TestRun_Fail(t *testing.T) {
 		},
 		{
 			Options{
-				Config: "testdata/config/syntax.textproto",
+				config: "testdata/config/syntax.textproto",
 			},
 			// The encoding is not deterministic.
 			"...: unknown field: bad",
@@ -355,7 +355,7 @@ func TestRun_SCM_Git_Broken(t *testing.T) {
 	}
 	// Git reports paths separated with "/" even on Windows.
 	dotGit = strings.ReplaceAll(dotGit, string(os.PathSeparator), "/")
-	o := Options{Report: &reportNoPrint{t: t}, Root: root, Main: "scm_affected_files.star"}
+	o := Options{Report: &reportNoPrint{t: t}, Root: root, main: "scm_affected_files.star"}
 	if err = Run(context.Background(), &o); err == nil {
 		t.Fatal("expected error")
 	}
@@ -951,7 +951,7 @@ func TestTestDataFailOrThrow(t *testing.T) {
 		i := i
 		t.Run(data[i].name, func(t *testing.T) {
 			t.Parallel()
-			o := Options{Report: &reportNoPrint{t: t}, Root: root, Main: data[i].name}
+			o := Options{Report: &reportNoPrint{t: t}, Root: root, main: data[i].name}
 			err := Run(context.Background(), &o)
 			if err == nil {
 				t.Fatal("expecting an error")
@@ -1075,7 +1075,7 @@ func TestTestDataEmit(t *testing.T) {
 		i := i
 		t.Run(data[i].name, func(t *testing.T) {
 			r := reportEmitNoPrint{reportNoPrint: reportNoPrint{t: t}}
-			o := Options{Report: &r, Root: root, Main: data[i].name, Config: "../config/valid.textproto"}
+			o := Options{Report: &r, Root: root, main: data[i].name, config: "../config/valid.textproto"}
 			err := Run(context.Background(), &o)
 			if data[i].err != "" {
 				if err == nil {
@@ -1225,7 +1225,7 @@ func TestRun_Filesystem_Sandboxing(t *testing.T) {
 // testStarlarkPrint test a starlark file that calls print().
 func testStarlarkPrint(t testing.TB, root, name string, all bool, want string) {
 	r := reportPrint{reportNoPrint: reportNoPrint{t: t}}
-	o := Options{Report: &r, Root: root, Main: name, AllFiles: all}
+	o := Options{Report: &r, Root: root, AllFiles: all, main: name}
 	if err := Run(context.Background(), &o); err != nil {
 		t.Helper()
 		t.Fatal(err)
