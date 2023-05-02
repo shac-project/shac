@@ -71,24 +71,6 @@ func TestRun_Fail(t *testing.T) {
 		},
 		{
 			Options{
-				Config: "testdata/config/min_shac_version-high.textproto",
-			},
-			"unsupported min_shac_version \"1000\", running 0.0.1",
-		},
-		{
-			Options{
-				Config: "testdata/config/min_shac_version-long.textproto",
-			},
-			"invalid min_shac_version",
-		},
-		{
-			Options{
-				Config: "testdata/config/min_shac_version-str.textproto",
-			},
-			"invalid min_shac_version",
-		},
-		{
-			Options{
 				Config: "testdata/config/syntax.textproto",
 			},
 			// The encoding is not deterministic.

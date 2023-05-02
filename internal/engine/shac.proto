@@ -25,4 +25,53 @@ message Document {
   string min_shac_version = 1;
   // When set to true, it is allowed to have checks that access the network.
   bool allow_network = 2;
+  // Full list of all loaded package dependencies.
+  Requirements requirements = 3;
+  // Digests of all direct and indirect dependencies to confirm the code was not
+  // modified.
+  Sum sum = 4;
+  // When set, refers to a local copy to use.
+  string vendor_path = 5;
+}
+
+// Requirements lists all the external dependencies, both direct and transitive
+// (indirect).
+message Requirements {
+  // direct are packages referenced by the starlark code via a load() statement.
+  repeated Dependency direct = 1;
+  // indirect are packages referenced by direct dependencies or transitively.
+  repeated Dependency indirect = 2;
+}
+
+// Dependency is a starlark package containing a pkg.star file that will be
+// loaded and become available through a load("@...") statement.
+message Dependency {
+  // url is the URL to the resource without the schema, e.g.
+  // "github.com/shac/generic-checks".
+  string url = 1;
+  // alias is an optional shorthand alias. This is how this is referenced to in
+  // load() statements.
+  string alias = 2;
+  // version is the pinned version to use the dependency.
+  string version = 3;
+}
+
+// Sum is the digest of known dependencies.
+message Sum {
+  repeated Known known = 1;
+}
+
+// Known is the multiple known digests of a single dependency.
+message Known {
+  string url = 1;
+  repeated VersionDigest seen = 2;
+}
+
+// VersionDigest is a version:digest pair.
+message VersionDigest {
+  // version is one of the version referred to directly or transitively.
+  string version = 1;
+  // digest is the hash of the content of the dependency. It uses the same
+  // hashing algorithm than go.sum. See https://golang.org/x/mod/sumdb/dirhash.
+  string digest = 2;
 }

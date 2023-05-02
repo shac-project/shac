@@ -157,33 +157,19 @@ func Run(ctx context.Context, o *Options) error {
 	if config == "" {
 		config = "shac.textproto"
 	}
-	allowNetwork := false
 	p := filepath.Join(root, config)
 	var b []byte
+	doc := Document{}
 	if b, err = os.ReadFile(p); err == nil {
-		doc := Document{}
 		if err = prototext.Unmarshal(b, &doc); err != nil {
 			return err
 		}
-		if doc.MinShacVersion != "" {
-			v := parseVersion(doc.MinShacVersion)
-			if v == nil || len(v) > len(version) {
-				return errors.New("invalid min_shac_version")
-			}
-			for i := range v {
-				if v[i] > version[i] {
-					return fmt.Errorf("unsupported min_shac_version %q, running %d.%d.%d", doc.MinShacVersion, version[0], version[1], version[2])
-				}
-				if v[i] < version[i] {
-					break
-				}
-			}
-		}
-		allowNetwork = doc.AllowNetwork
 	} else if !errors.Is(err, fs.ErrNotExist) {
 		return err
 	}
-
+	if err = doc.Validate(); err != nil {
+		return err
+	}
 	scm, err := getSCM(ctx, root, o.AllFiles)
 	if err != nil {
 		return err
@@ -193,7 +179,7 @@ func Run(ctx context.Context, o *Options) error {
 	if err != nil {
 		return nil
 	}
-	err = runInner(ctx, root, tmpdir, main, o.Report, allowNetwork, o.Recurse, scm)
+	err = runInner(ctx, root, tmpdir, main, o.Report, doc.AllowNetwork, o.Recurse, scm)
 	if err2 := os.RemoveAll(tmpdir); err == nil {
 		err = err2
 	}
