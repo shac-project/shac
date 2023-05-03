@@ -17,9 +17,12 @@
 package engine
 
 import (
+	"context"
 	_ "embed"
 	"errors"
 	"fmt"
+	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -27,6 +30,7 @@ import (
 	"go.chromium.org/luci/starlark/docgen"
 	"go.chromium.org/luci/starlark/docgen/ast"
 	"go.fuchsia.dev/shac-project/shac/doc"
+	"google.golang.org/protobuf/encoding/prototext"
 )
 
 //go:embed docgen.mdt
@@ -59,13 +63,21 @@ func Doc(src string) (string, error) {
 		}
 		content = string(b)
 	}
-	return genDoc(src, content, isStdlib)
+	tmpdir, err := os.MkdirTemp("", "shac")
+	if err != nil {
+		return "", err
+	}
+	d, err := genDoc(tmpdir, src, content, isStdlib)
+	if err2 := os.RemoveAll(tmpdir); err == nil {
+		err = err2
+	}
+	return d, err
 }
 
-func genDoc(src, content string, isStdlib bool) (string, error) {
+func genDoc(tmpdir, src, content string, isStdlib bool) (string, error) {
 	// It's unfortunate that we parse the source file twice. We need to fix the
 	// upstream API.
-	m, err := ast.ParseModule(src, content)
+	m, err := ast.ParseModule(src, content, func(s string) (string, error) { return s, nil })
 	if err != nil {
 		return "", err
 	}
@@ -77,23 +89,36 @@ func genDoc(src, content string, isStdlib bool) (string, error) {
 			syms = append(syms, node)
 		}
 	}
-	d := m.Doc()
+	// Load packages to get the exported symbols.
+	pkgMgr := PackageManager{Root: tmpdir}
+	var packages map[string]fs.FS
 	root := filepath.Dir(src)
+	if !isStdlib {
+		var b []byte
+		if b, err = os.ReadFile(filepath.Join(root, "shac.textproto")); err == nil {
+			doc := Document{}
+			if err = prototext.Unmarshal(b, &doc); err != nil {
+				return "", err
+			}
+			// TODO(maruel): Only fetch the direct ones!
+			if packages, err = pkgMgr.RetrievePackages(context.Background(), root, &doc); err != nil {
+				return "", err
+			}
+		} else if !errors.Is(err, fs.ErrNotExist) {
+			return "", err
+		}
+	}
+	d := m.Doc()
+	parent := sourceKey{pkg: "__main__", relpath: src}
 	g := docgen.Generator{
+		Normalize: func(p, s string) (string, error) {
+			return normalize(parent, p, s)
+		},
 		Starlark: func(m string) (string, error) {
 			if m == src {
 				return content, nil
 			}
-			if strings.HasPrefix(m, "@") {
-				return "", fmt.Errorf("todo: implement @module; unknown module %q", m)
-			}
-			// TODO(maruel): Correctly manage "//" prefix.
-			m = strings.TrimPrefix(m, "//")
-			b, err2 := os.ReadFile(filepath.Join(root, m))
-			if err2 != nil {
-				return "", fmt.Errorf("failed to load module %q: %w", m, err2)
-			}
-			return string(b), nil
+			return getStarlark(packages, m)
 		},
 	}
 
@@ -137,5 +162,35 @@ func genDoc(src, content string, isStdlib bool) (string, error) {
 		gen += fmt.Sprintf("\n{{ template \"gen-any\" $sym%d}}\n", i)
 	}
 	b, err := g.Render(docgenTpl + gen)
+	return string(b), err
+}
+
+func normalize(parent sourceKey, p, s string) (string, error) {
+	skp, err := parseSourceKey(parent, p)
+	if err != nil {
+		return "", err
+	}
+	sks, err := parseSourceKey(skp, s)
+	return sks.String(), err
+}
+
+func getStarlark(packages map[string]fs.FS, m string) (string, error) {
+	pkg := "__main__"
+	relpath := ""
+	if strings.HasPrefix(m, "@") {
+		parts := strings.SplitN(m[1:], "//", 2)
+		pkg = parts[0]
+		relpath = parts[1]
+	} else if strings.HasPrefix(m, "//") {
+		relpath = m[2:]
+	}
+	d, err := packages[pkg].Open(relpath)
+	if err != nil {
+		return "", err
+	}
+	b, err := io.ReadAll(d)
+	if err2 := d.Close(); err == nil {
+		err = err2
+	}
 	return string(b), err
 }

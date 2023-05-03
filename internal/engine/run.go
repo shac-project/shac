@@ -178,24 +178,27 @@ func Run(ctx context.Context, o *Options) error {
 	if err != nil {
 		return nil
 	}
-	err = runInner(ctx, root, tmpdir, main, o.Report, doc.AllowNetwork, o.Recurse, scm)
+	pkgMgr := PackageManager{Root: tmpdir}
+	packages, err := pkgMgr.RetrievePackages(ctx, root, &doc)
+	if err != nil {
+		return err
+	}
+	err = runInner(ctx, root, tmpdir, main, o.Report, doc.AllowNetwork, o.Recurse, scm, packages)
 	if err2 := os.RemoveAll(tmpdir); err == nil {
 		err = err2
 	}
 	return err
 }
 
-func runInner(ctx context.Context, root, tmpdir, main string, r Report, allowNetwork, recurse bool, scm scmCheckout) error {
+func runInner(ctx context.Context, root, tmpdir, main string, r Report, allowNetwork, recurse bool, scm scmCheckout, packages map[string]fs.FS) error {
 	sb, err := sandbox.New(tmpdir)
 	if err != nil {
 		return err
 	}
 	env := starlarkEnv{
-		globals: getPredeclared(),
-		sources: map[string]*loadedSource{},
-		packages: map[string]fs.FS{
-			"__main__": os.DirFS(root),
-		},
+		globals:  getPredeclared(),
+		sources:  map[string]*loadedSource{},
+		packages: packages,
 	}
 
 	var shacStates []*shacState

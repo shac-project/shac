@@ -544,19 +544,63 @@ https://github.com/google/starlark-go/blob/HEAD/doc/spec.md#freezing-a-value.
 
 ### Example
 
+There are 5 forms for the module to load:
+
+1. Loads a file in the same directory as the calling code. In this case,
+".." is allowed as long as it stays within the root directory of the current
+project:
+
 ```python
-load("go.star", "gosec")
+load("../common/go.star", "gosec")
 
-def _gosec(ctx):
-  # Use a specific gosec version, instead of upstream's default version.
-  gosec(ctx, version="v2.9.6")
+register_check(gosec)
+```
 
-register_check(_gosec)
+2. Loads a file relative to the root directory:
+
+```python
+load("//common/go.star", "gosec")
+
+register_check(gosec)
+```
+
+3. Loading an external package via a package alias and default pkg.star.
+This uses the aliases defined in shac.textproto and loads pkg.star in this
+dependency:
+
+```python
+# Implicitly loads pkg.star
+load("@static-checks", "go")
+
+register_check(go.gosec)
+```
+
+4. Loading an external package via a package alias and a specific file. This
+uses the aliases defined in shac.textproto and loads the specified file in
+this dependency:
+
+```python
+load("@static-checks//go.star", "go")
+
+register_check(go.gosec)
+```
+
+5. and 6. Loading a specific file in external package, using a fully
+qualified URI instead of an alias. The delimitation is still "//" between
+the resource and the path within the package:
+
+```python
+# Implicitly loads pkg.star
+load("@go.fuchsia.dev/shac-project/static-checks", "gosec")
+# or
+load("@go.fuchsia.dev/shac-project/static-checks//go.star", "gosec")
+
+register_check(gosec)
 ```
 
 ### Arguments
 
-* **module**: Path to a local module to load. In the future, a remote path will be allowed.
+* **module**: Path to a module to load. Three forms are accepted. The default is a relative path relative to the current module path. Second, it can be relative to the root of the project by using the "//" prefix. Third it can be an external package by using the "@" prefix. External references can either be fully qualified or an alias. Either way, it has to be specified in shac.textproto. An optional part, delimited by "//" can be appended, which specifies a file within the package. If omitted, the file pkg.star is loaded. When loading an external dependency and a path is specified, the path cannot contain ".." or "internal". Unlike bazel, the ":<target>" form is not allowed.
 * **\*symbols**: Symbols to load from the module.
 * **\*\*kwsymbols**: Symbols to load from the module that will be accessible under a new name.
 
