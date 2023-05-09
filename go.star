@@ -136,6 +136,12 @@ def staticcheck(ctx, version = "v0.4.3"):
   # https://staticcheck.io/docs/running-staticcheck/cli/formatters/#json
   for line in res.stdout.splitlines():
     f = json.decode(line)
+
+    end_kwargs = {}
+    if f["end"]["line"]:
+      end_kwargs["end_line"] = f["end"]["line"]
+      end_kwargs["end_col"] = f["end"]["column"] - 1
+
     ctx.emit.annotation(
       # Either "error" or "warning".
       level=f["severity"],
@@ -145,8 +151,7 @@ def staticcheck(ctx, version = "v0.4.3"):
       filepath=f["location"]["file"][len(ctx.scm.root)+1:],
       line=f["location"]["line"],
       col=f["location"]["column"],
-      end_line=f["end"]["line"],
-      end_col=f["end"]["column"]-1,
+      **end_kwargs
     )
 
 
