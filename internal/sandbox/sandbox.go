@@ -22,6 +22,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"sync"
 )
 
@@ -87,6 +88,8 @@ func New(tempDir string) (Sandbox, error) {
 			return nil, err
 		}
 		return nsjailSandbox{nsjailPath: nsjailPath}, nil
+	} else if runtime.GOOS == "darwin" {
+		return macSandbox{}, nil
 	}
 	// TODO(olivernewman): Provide stricter sandboxing for macOS and Windows.
 	return genericSandbox{}, nil
@@ -141,6 +144,42 @@ func (s nsjailSandbox) Command(ctx context.Context, config *Config) *exec.Cmd {
 	args = append(args, config.Cmd...)
 	//#nosec G204
 	return exec.CommandContext(ctx, s.nsjailPath, args...)
+}
+
+// macSandbox provides a sandbox specific to macOS using the preinstalled
+// sandbox-exec tool.
+//
+// It only supports network access restrictions.
+//
+// TODO(olivernewman): Add tests.
+type macSandbox struct{}
+
+func (s macSandbox) Command(ctx context.Context, config *Config) *exec.Cmd {
+	profile := []string{
+		"(version 1)",
+		"(allow default)",
+	}
+
+	if !config.AllowNetwork {
+		profile = append(profile, "(deny network*)")
+	}
+
+	args := append([]string{"-p", strings.Join(profile, "\n")}, config.Cmd...)
+	cmd := exec.CommandContext(ctx, "/usr/bin/sandbox-exec", args...)
+	cmd.Dir = config.Cwd
+
+	for k, v := range config.Env {
+		cmd.Env = append(cmd.Env, fmt.Sprintf("%s=%s", k, v))
+	}
+	for _, k := range tempDirEnvVars {
+		cmd.Env = append(cmd.Env, fmt.Sprintf("%s=%s", k, config.TempDir))
+	}
+
+	// config.Mounts intentionally ignored.
+	// TODO(olivernewman): Also restrict filesystem access, note that it may not
+	// be possible to mount a file at a different path.
+
+	return cmd
 }
 
 // genericSandbox provides a limited sandbox that works on any OS.
