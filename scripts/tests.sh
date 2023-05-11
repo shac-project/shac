@@ -15,8 +15,8 @@
 
 set -eu -o pipefail
 
-REPO_ROOT="$(realpath "$(dirname "$(dirname "${BASH_SOURCE[0]}")")")"
-cd "$REPO_ROOT"
+cd "$(dirname "$(dirname "${BASH_SOURCE[0]}")")"
+REPO_ROOT="$(pwd)"
 
 CIPD_ROOT="$REPO_ROOT/.tools"
 if [ ! -d "$CIPD_ROOT" ]; then
