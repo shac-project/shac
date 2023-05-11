@@ -1119,6 +1119,13 @@ func TestTestDataPrint(t *testing.T) {
 			want: "[//ctx-io-read_file.star:17] {\"key\": \"value\"}\n",
 		},
 		{
+			name: "ctx-os-exec-abspath.star",
+			want: "[//ctx-os-exec-abspath.star:16] Hello, world\n\n",
+			// TODO(olivernewman): Make this test support Windows by running a
+			// batch file instead of a shell script.
+			skipWindows: true,
+		},
+		{
 			name: "ctx-os-exec-env.star",
 			want: "[//ctx-os-exec-env.star:20] FOO=foo-value\nBAR=bar-value\n",
 			// TODO(olivernewman): Make this test support Windows by running a
