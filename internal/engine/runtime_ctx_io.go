@@ -50,7 +50,7 @@ func ctxIoReadFile(ctx context.Context, s *shacState, name string, args starlark
 	if err != nil {
 		return nil, fmt.Errorf("for parameter \"filepath\": %s %w", argfilepath, err)
 	}
-	b, err := readFile(dst, size)
+	b, err := readFileImpl(dst, size)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
 			// Hide the underlying error for determinism.
@@ -65,11 +65,11 @@ func ctxIoReadFile(ctx context.Context, s *shacState, name string, args starlark
 
 // Support functions.
 
-// readFile is similar to os.ReadFile() albeit it limits the amount of data
+// readFileImpl is similar to os.ReadFile() albeit it limits the amount of data
 // returned to max bytes when specified.
 //
 // On 32 bits, max defaults to 128Mib. On 64 bits, max defaults to 4Gib.
-func readFile(name string, max int64) ([]byte, error) {
+func readFileImpl(name string, max int64) ([]byte, error) {
 	f, err := os.Open(name)
 	if err != nil {
 		return nil, err

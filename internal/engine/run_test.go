@@ -21,6 +21,8 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -30,6 +32,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"text/template"
 	"time"
 
 	"github.com/google/go-cmp/cmp"
@@ -977,6 +980,67 @@ func TestTestDataFailOrThrow(t *testing.T) {
 	}
 }
 
+func TestRunNetworkSandbox(t *testing.T) {
+	if runtime.GOOS != "darwin" &&
+		!(runtime.GOOS == "linux" && (runtime.GOARCH == "amd64" || runtime.GOARCH == "arm64")) {
+		t.Skipf("Network sandboxing not supported on platform %s-%s", runtime.GOOS, runtime.GOARCH)
+	}
+	t.Parallel()
+
+	responseBody := "Hello from the server!"
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		io.WriteString(w, responseBody)
+	})
+
+	tmpl, err := template.New("shac.star").Parse(
+		readFile(t, filepath.Join("testdata", "ctx-os-exec-network_sandbox.template.star")))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	data := []struct {
+		name         string
+		allowNetwork bool
+		want         string
+	}{
+		{
+			"network blocked",
+			false,
+			"[//shac.star:22] Exit code: 1\n" +
+				"[//shac.star:23] Network unavailable\n\n",
+		},
+		{
+			"network allowed",
+			true,
+			"[//shac.star:23] " + responseBody + "\n",
+		},
+	}
+	for i := range data {
+		i := i
+		t.Run(data[i].name, func(t *testing.T) {
+			server := httptest.NewServer(handler)
+			defer server.Close()
+
+			var w strings.Builder
+			tmpl.Execute(&w, struct {
+				ServerURL    string
+				AllowNetwork bool
+			}{
+				ServerURL:    server.URL,
+				AllowNetwork: data[i].allowNetwork,
+			})
+
+			root := t.TempDir()
+			writeFile(t, root, "shac.star", w.String())
+			writeFile(t, root, "http_get.sh", readFile(t, filepath.Join("testdata", "http_get.sh")))
+			if err := os.Chmod(filepath.Join(root, "http_get.sh"), 0o700); err != nil {
+				t.Fatal(err)
+			}
+			testStarlarkPrint(t, root, "shac.star", false, data[i].want)
+		})
+	}
+}
+
 // TestTestDataEmit runs all the files under testdata/emit/.
 func TestTestDataEmit(t *testing.T) {
 	t.Parallel()
@@ -1309,6 +1373,14 @@ func writeFileBytes(t *testing.T, root, path string, content []byte) {
 	if err := os.WriteFile(filepath.Join(root, path), content, 0o600); err != nil {
 		t.Fatal(err)
 	}
+}
+
+func readFile(t *testing.T, path string) string {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(b)
 }
 
 func runGit(t *testing.T, root string, args ...string) string {
