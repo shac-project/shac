@@ -77,14 +77,21 @@ func ctxOsExec(ctx context.Context, s *shacState, name string, args starlark.Tup
 		return nil, fmt.Errorf("for parameter \"cmd\": got %s, want sequence of str", argcmd.Type())
 	}
 
-	// nsjail doesn't do $PATH-based resolution of the command it's given, so it
-	// must either be an absolute or relative path. Do this resolution
-	// unconditionally for consistency across platforms even though it's not
-	// necessary when not using nsjail.
-	var err error
-	fullCmd[0], err = exec.LookPath(fullCmd[0])
-	if err != nil && !errors.Is(err, exec.ErrDot) {
-		return nil, err
+	exeParts := strings.Split(fullCmd[0], string(os.PathSeparator))
+	if exeParts[0] == "." {
+		// exec.Command doesn't evaluate ".", so convert to an absolute path.
+		exeParts[0] = s.root
+		fullCmd[0] = strings.Join(exeParts, string(os.PathSeparator))
+	} else {
+		// nsjail doesn't do $PATH-based resolution of the command it's given, so it
+		// must either be an absolute or relative path. Do this resolution
+		// unconditionally for consistency across platforms even though it's not
+		// necessary when not using nsjail.
+		var err error
+		fullCmd[0], err = exec.LookPath(fullCmd[0])
+		if err != nil && !errors.Is(err, exec.ErrDot) {
+			return nil, err
+		}
 	}
 
 	tempDir, err := s.newTempDir()
@@ -108,7 +115,6 @@ func ctxOsExec(ctx context.Context, s *shacState, name string, args starlark.Tup
 		config.Env["PATH"] = strings.Join([]string{
 			filepath.Join(runtime.GOROOT(), "bin"),
 		}, string(os.PathListSeparator))
-
 	} else {
 		config.Mounts = []sandbox.Mount{
 			// TODO(olivernewman): Mount the checkout read-only by default.

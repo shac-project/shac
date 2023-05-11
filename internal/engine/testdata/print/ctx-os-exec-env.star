@@ -14,7 +14,7 @@
 
 def cb(ctx):
   res = ctx.os.exec(
-    [ctx.scm.root + "/env.sh"],
+    ["./env.sh"],
     env = {"FOO": "foo-value", "BAR": "bar-value"},
   )
   print(res.stdout.strip())
