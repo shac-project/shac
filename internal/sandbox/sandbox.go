@@ -91,7 +91,7 @@ func New(tempDir string) (Sandbox, error) {
 	} else if runtime.GOOS == "darwin" {
 		return macSandbox{}, nil
 	}
-	// TODO(olivernewman): Provide stricter sandboxing for macOS and Windows.
+	// TODO(olivernewman): Provide stricter sandboxing for Windows.
 	return genericSandbox{}, nil
 }
 
@@ -150,8 +150,6 @@ func (s nsjailSandbox) Command(ctx context.Context, config *Config) *exec.Cmd {
 // sandbox-exec tool.
 //
 // It only supports network access restrictions.
-//
-// TODO(olivernewman): Add tests.
 type macSandbox struct{}
 
 func (s macSandbox) Command(ctx context.Context, config *Config) *exec.Cmd {
