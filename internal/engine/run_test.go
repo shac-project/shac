@@ -1386,10 +1386,13 @@ func readFile(t *testing.T, path string) string {
 func runGit(t *testing.T, root string, args ...string) string {
 	cmd := exec.Command("git", args...)
 	cmd.Dir = root
-	// First is for git version before 2.32, the next two are to skip the user
-	// and system config on more recent version.
 	cmd.Env = append(os.Environ(),
+		// Make git versions before 2.32 skip home configuration.
 		"GIT_CONFIG_NOGLOBAL=true",
+		"HOME=",
+		"GIT_CONFIG_NOSYSTEM=true",
+		"XDG_CONFIG_HOME=",
+		// The right way for more recent git versions to skip home configuration.
 		"GIT_CONFIG_GLOBAL=",
 		"GIT_CONFIG_SYSTEM=",
 		"GIT_AUTHOR_DATE=2000-01-01T00:00:00",
@@ -1397,6 +1400,7 @@ func runGit(t *testing.T, root string, args ...string) string {
 		"LANG=C")
 	out, err := cmd.CombinedOutput()
 	if err != nil {
+		t.Helper()
 		t.Fatalf("failed to run git %s\n%s\n%s", strings.Join(args, " "), err, out)
 	}
 	return strings.TrimSpace(string(out))
