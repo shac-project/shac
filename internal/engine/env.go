@@ -55,12 +55,12 @@ func parseSourceKey(parent sourceKey, s string) (sourceKey, error) {
 		parts := strings.SplitN(s[1:], "//", 2)
 		sk.pkg = parts[0]
 		if len(parts) == 1 {
-			// The root of a package is pkg.star, to not conflict with self-tests that
+			// The root of a package is api.star, to not conflict with self-tests that
 			// would live in shac.star.
 			if strings.HasSuffix(sk.pkg, "/") {
 				return sk, fmt.Errorf("illegal external reference trailing \"/\": %s", s)
 			}
-			sk.relpath = "pkg.star"
+			sk.relpath = "api.star"
 		} else {
 			// A file within the package is referenced.
 			if len(parts[1]) == 0 {

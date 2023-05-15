@@ -49,7 +49,7 @@ func TestParseSourceKey(t *testing.T) {
 		{
 			parent: sourceKey{pkg: "__main__", relpath: "//foo/bar.star"},
 			in:     "@fqdn",
-			want:   sourceKey{orig: "@fqdn", pkg: "fqdn", relpath: "pkg.star"},
+			want:   sourceKey{orig: "@fqdn", pkg: "fqdn", relpath: "api.star"},
 		},
 		{
 			parent: sourceKey{pkg: "__main__", relpath: "//foo/bar.star"},

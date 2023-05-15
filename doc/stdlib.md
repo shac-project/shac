@@ -564,12 +564,12 @@ load("//common/go.star", "gosec")
 register_check(gosec)
 ```
 
-3. Loading an external package via a package alias and default pkg.star.
-This uses the aliases defined in shac.textproto and loads pkg.star in this
+3. Loading an external package via a package alias and default api.star.
+This uses the aliases defined in shac.textproto and loads api.star in this
 dependency:
 
 ```python
-# Implicitly loads pkg.star
+# Implicitly loads api.star
 load("@static-checks", "go")
 
 register_check(go.gosec)
@@ -590,7 +590,7 @@ qualified URI instead of an alias. The delimitation is still "//" between
 the resource and the path within the package:
 
 ```python
-# Implicitly loads pkg.star
+# Implicitly loads api.star
 load("@go.fuchsia.dev/shac-project/static-checks", "gosec")
 # or
 load("@go.fuchsia.dev/shac-project/static-checks//go.star", "gosec")
@@ -600,7 +600,7 @@ register_check(gosec)
 
 ### Arguments
 
-* **module**: Path to a module to load. Three forms are accepted. The default is a relative path relative to the current module path. Second, it can be relative to the root of the project by using the "//" prefix. Third it can be an external package by using the "@" prefix. External references can either be fully qualified or an alias. Either way, it has to be specified in shac.textproto. An optional part, delimited by "//" can be appended, which specifies a file within the package. If omitted, the file pkg.star is loaded. When loading an external dependency and a path is specified, the path cannot contain ".." or "internal". Unlike bazel, the ":<target>" form is not allowed.
+* **module**: Path to a module to load. Three forms are accepted. The default is a relative path relative to the current module path. Second, it can be relative to the root of the project by using the "//" prefix. Third it can be an external package by using the "@" prefix. External references can either be fully qualified or an alias. Either way, it has to be specified in shac.textproto. An optional part, delimited by "//" can be appended, which specifies a file within the package. If omitted, the file api.star is loaded. When loading an external dependency and a path is specified, the path cannot contain ".." or "internal". Unlike bazel, the ":<target>" form is not allowed.
 * **\*symbols**: Symbols to load from the module.
 * **\*\*kwsymbols**: Symbols to load from the module that will be accessible under a new name.
 

@@ -180,7 +180,7 @@ func (x *Requirements) GetIndirect() []*Dependency {
 	return nil
 }
 
-// Dependency is a starlark package containing a pkg.star file that will be
+// Dependency is a starlark package containing a api.star file that will be
 // loaded and become available through a load("@...") statement.
 type Dependency struct {
 	state         protoimpl.MessageState
