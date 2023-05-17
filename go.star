@@ -222,6 +222,9 @@ def _go_env(ctx, key):
   # same GOPATH results in race conditions.
   gopath = "%s/.tools/gopath/%s" % (ctx.scm.root, key)
   return {
+    # Disable cgo as it's not necessary and not all development platforms have
+    # the necessary headers.
+    "CGO_ENABLED": "0",
     "GOPATH": gopath,
     "GOBIN": "%s/bin" % gopath,
     # Cache within the directory to avoid writing to $HOME/.cache.

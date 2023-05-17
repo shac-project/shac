@@ -15,6 +15,10 @@
 
 set -eu -o pipefail
 
+# Disable cgo as it's not necessary and not all development platforms have the
+# necessary headers.
+export CGO_ENABLED=0
+
 cd "$(dirname "$(dirname "${BASH_SOURCE[0]}")")"
 REPO_ROOT="$(pwd)"
 
