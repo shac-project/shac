@@ -100,9 +100,6 @@ func ctxEmitAnnotation(ctx context.Context, s *shacState, name string, args star
 		if replacements = sequenceToStrings(argreplacements); replacements == nil {
 			return fmt.Errorf("for parameter \"replacements\": got %s, want sequence of str", argreplacements.Type())
 		}
-		if span.End.Line == 0 {
-			return errors.New("for parameter \"replacements\": \"end_line\" must be specified")
-		}
 	}
 	c := ctxCheck(ctx)
 	if c.highestLevel == "" || level == Error || (level == Warning && c.highestLevel != Error) {

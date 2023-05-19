@@ -640,11 +640,6 @@ func TestTestDataFailOrThrow(t *testing.T) {
 			"  //ctx-emit-annotation-message.star:16:22: in cb\n",
 		},
 		{
-			"ctx-emit-annotation-replacements-end_line.star",
-			"ctx.emit.annotation: for parameter \"replacements\": \"end_line\" must be specified",
-			"  //ctx-emit-annotation-replacements-end_line.star:16:22: in cb\n",
-		},
-		{
 			"ctx-emit-annotation-replacements-list.star",
 			"ctx.emit.annotation: for parameter \"replacements\": got list, want sequence of str",
 			"  //ctx-emit-annotation-replacements-list.star:16:22: in cb\n",
@@ -1105,6 +1100,12 @@ func TestTestDataEmit(t *testing.T) {
 					Message:      "weird",
 					Span:         Span{Start: Cursor{Line: 1}, End: Cursor{Line: 10}},
 					Replacements: []string{"a", "dict"},
+				},
+				{
+					Check:        "cb",
+					Level:        "warning",
+					Message:      "no span, full file",
+					Replacements: []string{"this text is a replacement\nfor the entire file\n"},
 				},
 			},
 			nil,

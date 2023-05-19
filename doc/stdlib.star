@@ -98,7 +98,9 @@ def _ctx_emit_annotation(level, message, filepath = None, line = None, col = Non
     end_col: (optional) Column where the annotation should end if it represents a
       span. 1 based.
     replacements: (optional) A sequence of str, representing possible
-      replacement suggestions. The sequence can be a list or a tuple.
+      replacement suggestions. The sequence can be a list or a tuple. The
+      replacements apply to the entire file if no span is specified for the
+      annotation.
   """
   pass
 

@@ -13,26 +13,33 @@
 # limitations under the License.
 
 
-def _gofmt(ctx):
-  """Runs gofmt -s on a Go code base.
+def _gofmt(ctx, simplify = True):
+  """Runs gofmt on a Go code base.
 
   Args:
     ctx: A ctx instance.
+    simplify: Whether to set the -s flag on gofmt.
   """
-  for f in ctx.scm.affected_files():
-    if not f.endswith(".go"):
-      continue
-    diff = ctx.os.exec([
-      "gofmt",
-      "-s",
-      "-d",
-      f,
-    ]).stdout
-    if diff:
-      ctx.emit.annotation(level="error", filepath=f, message="`gofmt -s` diff:\n%s" % diff)
+  go_files = [f for f in ctx.scm.affected_files() if f.endswith(".go")]
+  if not go_files:
+    return
+
+  base_cmd = ["gofmt"]
+  if simplify:
+    base_cmd.append("-s")
+
+  unformatted = ctx.os.exec(base_cmd + ["-l"] + go_files).stdout.splitlines()
+  for f in unformatted:
+    new_contents = ctx.os.exec(base_cmd + [f]).stdout
+    ctx.emit.annotation(
+      level="error",
+      message="needs formatting",
+      filepath=f,
+      replacements=[new_contents],
+    )
 
 
-gofmt = shac.check(_gofmt, name="gofmt")
+gofmt = shac.check(lambda ctx: _gofmt(ctx), name="gofmt")
 
 
 def _gosec(ctx, version = "v2.15.0", level = "error"):

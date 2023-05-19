@@ -38,5 +38,9 @@ def cb(ctx):
       line=1,
       end_line=10,
       replacements={"a": True, "dict": 42})
+  ctx.emit.annotation(
+      level="warning",
+      message="no span, full file",
+      replacements=["this text is a replacement\nfor the entire file\n"])
 
 shac.register_check(cb)

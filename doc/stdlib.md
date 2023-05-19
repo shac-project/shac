@@ -106,7 +106,7 @@ shac.register_check(cb)
 * **col**: (optional) Column where the annotation should start. 1 based.
 * **end_line**: (optional) Line where the annotation should end if it represents a span. 1 based.
 * **end_col**: (optional) Column where the annotation should end if it represents a span. 1 based.
-* **replacements**: (optional) A sequence of str, representing possible replacement suggestions. The sequence can be a list or a tuple.
+* **replacements**: (optional) A sequence of str, representing possible replacement suggestions. The sequence can be a list or a tuple. The replacements apply to the entire file if no span is specified for the annotation.
 
 ## ctx.emit.artifact
 
