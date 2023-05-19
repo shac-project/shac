@@ -893,13 +893,18 @@ func TestTestDataFailOrThrow(t *testing.T) {
 			"  //shac-immutable.star:16:5: in <toplevel>\n",
 		},
 		{
+			"shac-register_check-bad_type.star",
+			"shac.register_check: \"check\" must be a function or shac.check object, got string",
+			"  //shac-register_check-bad_type.star:15:20: in <toplevel>\n",
+		},
+		{
 			"shac-register_check-builtin.star",
-			"shac.register_check: callback must be a function accepting one \"ctx\" argument",
+			"shac.register_check: \"impl\" must not be a built-in function",
 			"  //shac-register_check-builtin.star:15:20: in <toplevel>\n",
 		},
 		{
 			"shac-register_check-callback.star",
-			"shac.register_check: callback must be a function accepting one \"ctx\" argument",
+			"shac.register_check: \"impl\" must be a function accepting one \"ctx\" argument",
 			"  //shac-register_check-callback.star:18:20: in <toplevel>\n",
 		},
 		{
@@ -909,12 +914,12 @@ func TestTestDataFailOrThrow(t *testing.T) {
 		},
 		{
 			"shac-register_check-lambda.star",
-			"shac.register_check: \"name\" must be set when callback is a lambda",
+			"shac.register_check: \"name\" must be set when \"impl\" is a lambda",
 			"  //shac-register_check-lambda.star:18:20: in <toplevel>\n",
 		},
 		{
 			"shac-register_check-no_arg.star",
-			"shac.register_check: missing argument for callback",
+			"shac.register_check: missing argument for check",
 			"  //shac-register_check-no_arg.star:15:20: in <toplevel>\n",
 		},
 		{
@@ -1224,11 +1229,22 @@ func TestTestDataPrint(t *testing.T) {
 		},
 		{
 			name: "dir-shac.star",
-			want: "[//dir-shac.star:15] [\"commit_hash\", \"register_check\", \"version\"]\n",
+			want: "[//dir-shac.star:15] [\"check\", \"commit_hash\", \"register_check\", \"version\"]\n",
 		},
 		{
 			name: "print-shac-version.star",
 			want: "[//print-shac-version.star:15] " + v + "\n",
+		},
+		{
+			name: "shac-check.star",
+			want: "[//shac-check.star:19] str(check): <check hello_world>\n" +
+				"[//shac-check.star:20] type(check): shac.check\n" +
+				"[//shac-check.star:21] bool(check): True\n" +
+				"[//shac-check.star:26] hashed: set([<check hello_world>])\n",
+		},
+		{
+			name: "shac-register_check-object.star",
+			want: "[//shac-register_check-object.star:16] running from a check object\n",
 		},
 		{
 			name: "shac-register_check.star",

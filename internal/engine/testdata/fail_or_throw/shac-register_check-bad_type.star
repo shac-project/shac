@@ -12,11 +12,4 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-def cb(ctx):
-  pass
-
-def cb2(ctx):
-  pass
-
-shac.register_check(cb)
-shac.register_check(shac.check(cb2, name="cb"))
+shac.register_check("not a check")

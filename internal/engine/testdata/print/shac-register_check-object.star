@@ -13,10 +13,8 @@
 # limitations under the License.
 
 def cb(ctx):
-  pass
+  print("running from a check object")
 
-def cb2(ctx):
-  pass
+check = shac.check(impl=cb, name="print")
 
-shac.register_check(cb)
-shac.register_check(shac.check(cb2, name="cb"))
+shac.register_check(check)

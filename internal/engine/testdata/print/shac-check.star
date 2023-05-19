@@ -12,11 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-def cb(ctx):
-  pass
+def _hello_world(ctx):
+    print("hello, world!")
 
-def cb2(ctx):
-  pass
+check = shac.check(_hello_world)
+print("str(check): %s" % str(check))
+print("type(check): %s" % type(check))
+print("bool(check): %s" % bool(check))
 
-shac.register_check(cb)
-shac.register_check(shac.check(cb2, name="cb"))
+# The check object should be hashable. The `hash()` function doesn't work on
+# arbitrary objects, only strings or bytes, so we can only assert hashability
+# indirectly by trying to insert the check object into a set.
+print("hashed: %s" % set([check]))

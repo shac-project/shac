@@ -13,7 +13,7 @@
 # limitations under the License.
 
 
-def gofmt(ctx):
+def _gofmt(ctx):
   """Runs gofmt -s on a Go code base.
 
   Args:
@@ -32,7 +32,10 @@ def gofmt(ctx):
       ctx.emit.annotation(level="error", filepath=f, message="`gofmt -s` diff:\n%s" % diff)
 
 
-def gosec(ctx, version = "v2.15.0", level = "error"):
+gofmt = shac.check(_gofmt, name="gofmt")
+
+
+def _gosec(ctx, version = "v2.15.0", level = "error"):
   """Runs gosec on a Go code base.
 
   See https://github.com/securego/gosec for more details.
@@ -60,7 +63,10 @@ def gosec(ctx, version = "v2.15.0", level = "error"):
           filepath=i["file"][o:], line=int(line), col=int(i["column"]))
 
 
-def ineffassign(ctx, version = "v0.0.0-20230107090616-13ace0543b28"):
+gosec = shac.check(lambda ctx: _gosec(ctx), name="gosec")
+
+
+def _ineffassign(ctx, version = "v0.0.0-20230107090616-13ace0543b28"):
   """Runs ineffassign on a Go code base.
 
   See https://github.com/gordonklaus/ineffassign for more details.
@@ -101,7 +107,10 @@ def ineffassign(ctx, version = "v0.0.0-20230107090616-13ace0543b28"):
     )
 
 
-def staticcheck(ctx, version = "v0.4.3"):
+ineffassign = shac.check(lambda ctx: _ineffassign(ctx), name="ineffassign")
+
+
+def _staticcheck(ctx, version = "v0.4.3"):
   """Runs staticcheck on a Go code base.
 
   See https://github.com/dominikh/go-tools for more details.
@@ -155,7 +164,10 @@ def staticcheck(ctx, version = "v0.4.3"):
     )
 
 
-def shadow(ctx, version = "v0.7.0"):
+staticcheck = shac.check(lambda ctx: _staticcheck(ctx), name="staticcheck")
+
+
+def _shadow(ctx, version = "v0.7.0"):
   """Runs go vet -vettool=shadow on a Go code base.
 
   Args:
@@ -202,6 +214,9 @@ def shadow(ctx, version = "v0.7.0"):
       col=int(match.groups[3]),
       message=finding["message"],
     )
+
+
+shadow = shac.check(lambda ctx: _shadow(ctx), name="shadow")
 
 
 def _go_install(ctx, pkg, version):

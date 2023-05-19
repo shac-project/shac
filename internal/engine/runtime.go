@@ -42,6 +42,7 @@ var (
 func getPredeclared() starlark.StringDict {
 	return starlark.StringDict{
 		"shac": toValue("shac", starlark.StringDict{
+			"check":          newBuiltin("shac.check", shacCheck),
 			"register_check": newBuiltinNone("shac.register_check", shacRegisterCheck),
 			"commit_hash":    starlark.String(getCommitHash()),
 			"version": starlark.Tuple{
@@ -107,36 +108,36 @@ func fail(th *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs
 //
 // Make sure to update //doc/stdlib.star whenever this function is modified.
 func shacRegisterCheck(ctx context.Context, s *shacState, name string, args starlark.Tuple, kwargs []starlark.Tuple) error {
-	var argcallback starlark.Callable
-	var argname starlark.String
+	var argcheck starlark.Value
 	if err := starlark.UnpackArgs(name, args, kwargs,
-		"callback", &argcallback,
-		"name?", &argname); err != nil {
+		"check", &argcheck); err != nil {
 		return err
 	}
 	// Inspect callback to verify that it accepts one argument and that it is not a builtin.
-	cb, ok := argcallback.(*starlark.Function)
-	if !ok || cb.NumParams() != 1 {
-		return errors.New("callback must be a function accepting one \"ctx\" argument")
-	}
-	cname := string(argname)
-	if cname == "" {
-		if cb.Name() == "lambda" {
-			return errors.New("\"name\" must be set when callback is a lambda")
+	var c *check
+	switch x := argcheck.(type) {
+	case starlark.Callable:
+		var err error
+		c, err = newCheck(x, "")
+		if err != nil {
+			return err
 		}
-		cname = strings.TrimPrefix(cb.Name(), "_")
+	case *check:
+		c = x
+	default:
+		return fmt.Errorf("\"check\" must be a function or shac.check object, got %s", x.Type())
 	}
 	// We may want to optimize this if we register hundreds of checks.
 	for i := range s.checks {
-		if s.checks[i].name == cname {
-			return fmt.Errorf("can't register two checks with the same name %q", cname)
+		if s.checks[i].name == c.name {
+			return fmt.Errorf("can't register two checks with the same name %q", c.name)
 		}
 	}
 	if s.doneLoading {
 		return errors.New("can't register checks after done loading")
 	}
 	// Register the new callback.
-	s.checks = append(s.checks, check{cb: cb, name: cname})
+	s.checks = append(s.checks, registeredCheck{check: c})
 	return nil
 }
 

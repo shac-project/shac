@@ -325,7 +325,7 @@ type shacState struct {
 	//
 	// Checks are executed sequentially after all Starlark code is loaded and not
 	// mutated. They run checks and emit results (results and comments).
-	checks []check
+	checks []registeredCheck
 
 	// Set when fail() is called. This happens only during the first phase, thus
 	// no mutex is needed.
@@ -433,31 +433,31 @@ func (s *shacState) newTempDir() (string, error) {
 	return p, nil
 }
 
-// check represents one check added via shac.register_check().
-type check struct {
-	cb           starlark.Callable
-	name         string
+// registeredCheck represents one check that has been registered by
+// shac.register_check().
+type registeredCheck struct {
+	*check
 	failErr      *failure // set when fail() is called from within the check, an abnormal failure.
 	highestLevel Level    // highest level emitted by EmitAnnotation.
 }
 
 var checkCtxKey = "shac.check"
 
-// ctxCheck pulls out *check from the context.
+// ctxCheck pulls out *registeredCheck from the context.
 //
 // Returns nil when not run inside a check.
-func ctxCheck(ctx context.Context) *check {
-	c, _ := ctx.Value(&checkCtxKey).(*check)
+func ctxCheck(ctx context.Context) *registeredCheck {
+	c, _ := ctx.Value(&checkCtxKey).(*registeredCheck)
 	return c
 }
 
 // call calls the check callback and returns an error if an abnormal error happened.
 //
 // A "normal" error will still have this function return nil.
-func (c *check) call(ctx context.Context, env *starlarkEnv, args starlark.Tuple, pi printImpl) error {
+func (c *registeredCheck) call(ctx context.Context, env *starlarkEnv, args starlark.Tuple, pi printImpl) error {
 	ctx = context.WithValue(ctx, &checkCtxKey, c)
 	th := env.thread(ctx, c.name, pi)
-	if r, err := starlark.Call(th, c.cb, args, nil); err != nil {
+	if r, err := starlark.Call(th, c.impl, args, nil); err != nil {
 		if c.failErr != nil {
 			// fail() was called, return this error since this is an abnormal failure.
 			return c.failErr
