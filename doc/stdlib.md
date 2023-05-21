@@ -334,7 +334,7 @@ function new_lines().
 
 Returns all files found in the current workspace.
 
-It considers all files "added".
+All files are considered "added" or "deleted".
 
 ### Example
 
@@ -351,6 +351,7 @@ shac.register_check(all_todos)
 ### Arguments
 
 * **glob**: (optional) TODO: Will later accept a glob.
+* **include_deleted**: (optional) Whether to include deleted files. By default deleted files are excluded.
 
 ### Returns
 

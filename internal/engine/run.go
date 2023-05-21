@@ -207,7 +207,7 @@ func runInner(ctx context.Context, root, tmpdir, main string, r Report, allowNet
 		// parallelism.
 		// Discover all the main files via the SCM. This enables us to not walk
 		// ignored files.
-		files, err := scm.allFiles(ctx)
+		files, err := scm.allFiles(ctx, false)
 		if err != nil {
 			return err
 		}

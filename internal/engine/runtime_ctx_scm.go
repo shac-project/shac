@@ -58,7 +58,7 @@ type file struct {
 // Returned files must be sorted.
 type scmCheckout interface {
 	affectedFiles(ctx context.Context, includeDeleted bool) ([]file, error)
-	allFiles(ctx context.Context) ([]file, error)
+	allFiles(ctx context.Context, includeDeleted bool) ([]file, error)
 	newLines(f file) builtin
 }
 
@@ -83,8 +83,8 @@ func (s *subdirSCM) affectedFiles(ctx context.Context, includeDeleted bool) ([]f
 	return out, err
 }
 
-func (s *subdirSCM) allFiles(ctx context.Context) ([]file, error) {
-	f, err := s.s.allFiles(ctx)
+func (s *subdirSCM) allFiles(ctx context.Context, includeDeleted bool) ([]file, error) {
+	f, err := s.s.allFiles(ctx, includeDeleted)
 	// TODO(maruel): Cache.
 	var out []file
 	l := len(s.subdir)
@@ -235,7 +235,7 @@ func (g *gitCheckout) run(ctx context.Context, args ...string) string {
 // The entries are lazy loaded and cached.
 func (g *gitCheckout) affectedFiles(ctx context.Context, includeDeleted bool) ([]file, error) {
 	if g.returnAll {
-		return g.allFiles(ctx)
+		return g.allFiles(ctx, includeDeleted)
 	}
 	g.mu.Lock()
 	defer g.mu.Unlock()
@@ -293,7 +293,7 @@ func (g *gitCheckout) affectedFiles(ctx context.Context, includeDeleted bool) ([
 // allFiles returns all the files in this checkout.
 //
 // The entries are lazy loaded and cached.
-func (g *gitCheckout) allFiles(ctx context.Context) ([]file, error) {
+func (g *gitCheckout) allFiles(ctx context.Context, includeDeleted bool) ([]file, error) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	if g.all == nil {
@@ -303,7 +303,16 @@ func (g *gitCheckout) allFiles(ctx context.Context) ([]file, error) {
 			items := strings.Split(o[:len(o)-1], "\x00")
 			g.all = make([]file, 0, len(items))
 			for _, path := range items {
-				if !g.isSubmodule(path) {
+				fi, err := os.Stat(filepath.Join(g.checkoutRoot, path))
+				if errors.Is(err, fs.ErrNotExist) {
+					if includeDeleted {
+						g.all = append(g.all, file{action: "D", path: path})
+					}
+					continue
+				} else if err != nil {
+					return nil, err
+				}
+				if !fi.IsDir() { // Not a submodule.
 					// TODO(maruel): Still include action from affectedFiles()?
 					g.all = append(g.all, file{action: "A", path: path})
 				}
@@ -319,7 +328,9 @@ func (g *gitCheckout) allFiles(ctx context.Context) ([]file, error) {
 func (g *gitCheckout) isSubmodule(path string) bool {
 	fi, err := os.Stat(filepath.Join(g.checkoutRoot, path))
 	if err != nil {
-		g.err = err
+		if !errors.Is(err, fs.ErrNotExist) {
+			g.err = err
+		}
 		return false
 	}
 	// TODO(olivernewman): Actually check the git object mode to determine if
@@ -419,11 +430,14 @@ type rawTree struct {
 }
 
 func (r *rawTree) affectedFiles(ctx context.Context, includeDeleted bool) ([]file, error) {
-	return r.allFiles(ctx)
+	return r.allFiles(ctx, includeDeleted)
 }
 
 // allFiles returns all files in this directory tree.
-func (r *rawTree) allFiles(ctx context.Context) ([]file, error) {
+//
+// The includeDeleted argument is ignored as only files that exist on disk are
+// included.
+func (r *rawTree) allFiles(ctx context.Context, includeDeleted bool) ([]file, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	var err error
@@ -483,10 +497,13 @@ func ctxScmAffectedFiles(ctx context.Context, s *shacState, name string, args st
 //
 // Make sure to update //doc/stdlib.star whenever this function is modified.
 func ctxScmAllFiles(ctx context.Context, s *shacState, name string, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
-	if err := starlark.UnpackArgs(name, args, kwargs); err != nil {
+	var argincludeDeleted starlark.Bool
+	if err := starlark.UnpackArgs(name, args, kwargs,
+		"include_deleted?", &argincludeDeleted,
+	); err != nil {
 		return nil, err
 	}
-	files, err := s.scm.allFiles(ctx)
+	files, err := s.scm.allFiles(ctx, bool(argincludeDeleted))
 	if err != nil {
 		return nil, err
 	}

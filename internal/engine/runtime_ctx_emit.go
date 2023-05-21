@@ -109,7 +109,7 @@ func ctxEmitAnnotation(ctx context.Context, s *shacState, name string, args star
 	if file != "" {
 		root = filepath.Join(s.root, s.subdir)
 		// The file must be tracked by scm.
-		f, err := s.scm.allFiles(ctx)
+		f, err := s.scm.allFiles(ctx, false)
 		if err != nil {
 			return err
 		}

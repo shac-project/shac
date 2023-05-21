@@ -114,6 +114,7 @@ func TestRun_SCM_Raw(t *testing.T) {
 			"scm_affected_files_include_deleted.star: \n" +
 			"scm_affected_files_new_lines.star: \n" +
 			"scm_all_files.star: \n" +
+			"scm_all_files_include_deleted.star: \n" +
 			"\n"
 		testStarlarkPrint(t, root, "scm_affected_files.star", false, want)
 	})
@@ -131,6 +132,7 @@ func TestRun_SCM_Raw(t *testing.T) {
 			"scm_affected_files_include_deleted.star: \n" +
 			"scm_affected_files_new_lines.star: \n" +
 			"scm_all_files.star: \n" +
+			"scm_all_files_include_deleted.star: \n" +
 			"\n"
 		testStarlarkPrint(t, root, "scm_all_files.star", false, want)
 	})
@@ -140,7 +142,8 @@ const scmStarlarkAddedFiles = "" +
 	"scm_affected_files.star: A\n" +
 	"scm_affected_files_include_deleted.star: A\n" +
 	"scm_affected_files_new_lines.star: A\n" +
-	"scm_all_files.star: A\n"
+	"scm_all_files.star: A\n" +
+	"scm_all_files_include_deleted.star: A\n"
 
 func TestRun_SCM_Git_NoUpstream_Pristine(t *testing.T) {
 	// No upstream branch set, pristine checkout.
@@ -287,7 +290,9 @@ func TestRun_SCM_DeletedFile(t *testing.T) {
 	runGit(t, root, "add", "file-to-delete.txt")
 	runGit(t, root, "commit", "-m", "Add file-to-delete.txt")
 
-	runGit(t, root, "rm", "file-to-delete.txt")
+	if err := os.Remove(filepath.Join(root, "file-to-delete.txt")); err != nil {
+		t.Fatal(err)
+	}
 
 	t.Run("affected", func(t *testing.T) {
 		want := "[//scm_affected_files.star:19] \n\n"
@@ -306,6 +311,15 @@ func TestRun_SCM_DeletedFile(t *testing.T) {
 			"file2.txt: A\n" +
 			"\n"
 		testStarlarkPrint(t, root, "scm_all_files.star", false, want)
+	})
+	t.Run("all_include_deleted", func(t *testing.T) {
+		t.Parallel()
+		want := "[//scm_all_files_include_deleted.star:19] \n" +
+			"file-to-delete.txt: D\n" +
+			"file1.txt: A\n" +
+			"file2.txt: A\n" +
+			"\n"
+		testStarlarkPrint(t, root, "scm_all_files_include_deleted.star", false, want)
 	})
 }
 
@@ -821,7 +835,7 @@ func TestTestDataFailOrThrow(t *testing.T) {
 		},
 		{
 			"ctx-scm-all_files-arg.star",
-			"ctx.scm.all_files: got 1 arguments, want at most 0",
+			"ctx.scm.all_files: for parameter include_deleted: got string, want bool",
 			"  //ctx-scm-all_files-arg.star:16:20: in cb\n",
 		},
 		{
