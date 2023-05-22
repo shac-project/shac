@@ -18,20 +18,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"runtime/debug"
 	"strings"
 
 	"go.chromium.org/luci/starlark/builtins"
 	"go.starlark.net/lib/json"
 	"go.starlark.net/starlark"
 	"go.starlark.net/starlarkstruct"
-)
-
-var (
-	// version is the current tool version.
-	//
-	// TODO(maruel): Add proper version, preferably from git tag.
-	version = [...]int{0, 0, 1}
 )
 
 // getPredeclared returns the predeclared starlark symbols in the runtime.
@@ -41,14 +33,7 @@ var (
 // See https://pkg.go.dev/go.starlark.net/starlark#Universe for the default list.
 func getPredeclared() starlark.StringDict {
 	return starlark.StringDict{
-		"shac": toValue("shac", starlark.StringDict{
-			"check":          newBuiltin("shac.check", shacCheck),
-			"register_check": newBuiltinNone("shac.register_check", shacRegisterCheck),
-			"commit_hash":    starlark.String(getCommitHash()),
-			"version": starlark.Tuple{
-				starlark.MakeInt(version[0]), starlark.MakeInt(version[1]), starlark.MakeInt(version[2]),
-			},
-		}),
+		"shac": toValue("shac", getShac()),
 
 		// Add https://bazel.build/rules/lib/json so it feels more natural to bazel
 		// users.
@@ -102,59 +87,6 @@ func fail(th *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs
 		s.failErr = failErr
 	}
 	return nil, errors.New(fn.Name() + ": " + msg)
-}
-
-// shacRegisterCheck implements native function shac.register_check().
-//
-// Make sure to update //doc/stdlib.star whenever this function is modified.
-func shacRegisterCheck(ctx context.Context, s *shacState, name string, args starlark.Tuple, kwargs []starlark.Tuple) error {
-	var argcheck starlark.Value
-	if err := starlark.UnpackArgs(name, args, kwargs,
-		"check", &argcheck); err != nil {
-		return err
-	}
-	// Inspect callback to verify that it accepts one argument and that it is not a builtin.
-	var c *check
-	switch x := argcheck.(type) {
-	case starlark.Callable:
-		var err error
-		c, err = newCheck(x, "")
-		if err != nil {
-			return err
-		}
-	case *check:
-		c = x
-	default:
-		return fmt.Errorf("\"check\" must be a function or shac.check object, got %s", x.Type())
-	}
-	// We may want to optimize this if we register hundreds of checks.
-	for i := range s.checks {
-		if s.checks[i].name == c.name {
-			return fmt.Errorf("can't register two checks with the same name %q", c.name)
-		}
-	}
-	if s.doneLoading {
-		return errors.New("can't register checks after done loading")
-	}
-	// Register the new callback.
-	s.checks = append(s.checks, registeredCheck{check: c})
-	return nil
-}
-
-// getCommitHash return the git commit hash that was used to build this
-// executable.
-//
-// Since shac is currently tracked in a git repository and git currently uses
-// SHA-1, it is a 40 characters hex encoded string.
-func getCommitHash() string {
-	if info, ok := debug.ReadBuildInfo(); ok {
-		for _, s := range info.Settings {
-			if s.Key == "vcs.revision" {
-				return s.Value
-			}
-		}
-	}
-	return ""
 }
 
 // toValue converts a StringDict to a Value.
