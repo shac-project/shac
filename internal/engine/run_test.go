@@ -653,6 +653,11 @@ func TestTestDataFailOrThrow(t *testing.T) {
 			"  //ctx-emit-annotation-message.star:16:22: in cb\n",
 		},
 		{
+			"ctx-emit-annotation-replacements-limit.star",
+			"ctx.emit.annotation: for parameter \"replacements\": excessive number (101) of replacements",
+			"  //ctx-emit-annotation-replacements-limit.star:17:22: in cb\n",
+		},
+		{
 			"ctx-emit-annotation-replacements-list.star",
 			"ctx.emit.annotation: for parameter \"replacements\": got list, want sequence of str",
 			"  //ctx-emit-annotation-replacements-list.star:16:22: in cb\n",
