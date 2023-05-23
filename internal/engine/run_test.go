@@ -1190,9 +1190,8 @@ func TestTestDataPrint(t *testing.T) {
 	p, got := enumDir(t, "print")
 	v := fmt.Sprintf("(%d, %d, %d)", version[0], version[1], version[2])
 	data := []struct {
-		name        string
-		want        string
-		skipWindows bool
+		name string
+		want string
 	}{
 		{
 			name: "ctx-io-read_file-size.star",
@@ -1204,26 +1203,29 @@ func TestTestDataPrint(t *testing.T) {
 		},
 		{
 			name: "ctx-os-exec-abspath.star",
-			want: "[//ctx-os-exec-abspath.star:16] Hello, world\n\n",
-			// TODO(olivernewman): Make this test support Windows by running a
-			// batch file instead of a shell script.
-			skipWindows: true,
+			want: func() string {
+				// TODO(maruel): Decide if we want to do CRLF translation automatically.
+				if runtime.GOOS == "windows" {
+					return "[//ctx-os-exec-abspath.star:17] Hello, world\r\n\n"
+				}
+				return "[//ctx-os-exec-abspath.star:17] Hello, world\n\n"
+			}(),
 		},
 		{
 			name: "ctx-os-exec-env.star",
-			want: "[//ctx-os-exec-env.star:20] FOO=foo-value\nBAR=bar-value\n",
-			// TODO(olivernewman): Make this test support Windows by running a
-			// batch file instead of a shell script.
-			skipWindows: true,
+			want: func() string {
+				// TODO(maruel): Decide if we want to do CRLF translation automatically.
+				if runtime.GOOS == "windows" {
+					return "[//ctx-os-exec-env.star:24] FOO=foo-value\r\nBAR=bar-value\n"
+				}
+				return "[//ctx-os-exec-env.star:24] FOO=foo-value\nBAR=bar-value\n"
+			}(),
 		},
 		{
 			name: "ctx-os-exec-success.star",
-			want: "[//ctx-os-exec-success.star:17] retcode: 0\n" +
-				"[//ctx-os-exec-success.star:18] stdout: hello from stdout\n" +
-				"[//ctx-os-exec-success.star:19] stderr: hello from stderr\n",
-			// TODO(olivernewman): Make this test support Windows by running a
-			// batch file instead of a shell script.
-			skipWindows: true,
+			want: "[//ctx-os-exec-success.star:21] retcode: 0\n" +
+				"[//ctx-os-exec-success.star:22] stdout: hello from stdout\n" +
+				"[//ctx-os-exec-success.star:23] stderr: hello from stderr\n",
 		},
 		{
 			name: "ctx-re-allmatches.star",
@@ -1280,9 +1282,6 @@ func TestTestDataPrint(t *testing.T) {
 	for i := range data {
 		i := i
 		t.Run(data[i].name, func(t *testing.T) {
-			if runtime.GOOS == "windows" && data[i].skipWindows {
-				t.Skip("not supported on windows")
-			}
 			testStarlarkPrint(t, p, data[i].name, false, data[i].want)
 		})
 	}

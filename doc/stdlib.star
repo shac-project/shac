@@ -335,10 +335,14 @@ ctx = struct(
   io = struct(
     read_file = _ctx_io_read_file,
   ),
-  # ctx.io is the object that exposes the API to interact with the operating
+  # ctx.os is the object that exposes the API to interact with the operating
   # system.
   os = struct(
     exec = _ctx_os_exec,
+    # ctx.os.name contains the OS as described by GOOS. Frequent values are
+    # "windows", "linux" and "darwin". The full exact list can be retrieved with
+    # the command "go tool dist list | cut -f 1 -d / | uniq"
+    name = "",
   ),
   # ctx.re is the object that exposes the API to run regular expressions on
   # starlark strings.

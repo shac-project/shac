@@ -13,7 +13,11 @@
 # limitations under the License.
 
 def cb(ctx):
-  res = ctx.os.exec(["./stdio.sh"])
+  if ctx.os.name == "windows":
+    cmd = ["cmd.exe", "/c", "stdio.bat"]
+  else:
+    cmd = ["./stdio.sh"]
+  res = ctx.os.exec(cmd)
   print("retcode: %d" % res.retcode)
   print("stdout: %s" % res.stdout.strip())
   print("stderr: %s" % res.stderr.strip())

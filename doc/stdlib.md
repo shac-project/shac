@@ -162,12 +162,19 @@ Content of the file as bytes.
 
 ## ctx.os
 
-ctx.io is the object that exposes the API to interact with the operating
+ctx.os is the object that exposes the API to interact with the operating
 system.
 
 Fields:
 
 - exec
+- name
+
+## ctx.os.name
+
+ctx.os.name contains the OS as described by GOOS. Frequent values are
+"windows", "linux" and "darwin". The full exact list can be retrieved with
+the command "go tool dist list | cut -f 1 -d / | uniq"
 
 ## ctx.os.exec
 

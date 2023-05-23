@@ -13,8 +13,12 @@
 # limitations under the License.
 
 def cb(ctx):
+  if ctx.os.name == "windows":
+    cmd = ["cmd.exe", "/c", "env.bat"]
+  else:
+    cmd = ["./env.sh"]
   res = ctx.os.exec(
-    ["./env.sh"],
+    cmd,
     env = {"FOO": "foo-value", "BAR": "bar-value"},
   )
   print(res.stdout.strip())
