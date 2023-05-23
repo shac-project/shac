@@ -12,7 +12,8 @@ https://github.com/asciinema/agg.
 1. `asciinema rec demo.cast`
   2. (in subshell) `shac check`
   3. (in subshell) Ctrl-D
-4. `agg --theme asciinema --rows 25 --cols 70 --last-frame-duration 10 demo.cast images/demo.gif`
+4. Manually delete the last three lines of `demo.cast` corresponding to the Ctrl-D.
+5. `agg --rows 25 --cols 88 --last-frame-duration 10 --font-size 48 demo.cast images/demo.gif`
 -->
 ![usage demonstration](images/demo.gif)
 
