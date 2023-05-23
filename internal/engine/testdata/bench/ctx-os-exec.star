@@ -13,7 +13,7 @@
 # limitations under the License.
 
 def cb(ctx):
-  if shac.env.os == "windows":
+  if ctx.os.name == "windows":
     cmd = ["cmd.exe", "/c", "stdio.bat"]
   else:
     cmd = ["./stdio.sh"]
