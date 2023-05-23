@@ -103,6 +103,8 @@ type Report interface {
 	// a file on disk. The file may disappear after this function is called. If
 	// root is not specified, content is the artifact. Either way, file is the
 	// display name of the artifact.
+	//
+	// content must not be modified.
 	EmitArtifact(ctx context.Context, check, root, file string, content []byte) error
 	// CheckCompleted is called when a check is completed.
 	//

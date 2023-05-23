@@ -23,6 +23,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"unsafe"
 
 	"go.starlark.net/starlark"
 )
@@ -137,11 +138,9 @@ func ctxEmitArtifact(ctx context.Context, s *shacState, name string, args starla
 	root := ""
 	switch v := argcontent.(type) {
 	case starlark.Bytes:
-		// TODO(maruel): Use unsafe conversion to save a memory copy.
-		content = []byte(v)
+		content = unsafeByteSlice(string(v))
 	case starlark.String:
-		// TODO(maruel): Use unsafe conversion to save a memory copy.
-		content = []byte(v)
+		content = unsafeByteSlice(string(v))
 	case starlark.NoneType:
 		root = filepath.Join(s.root, s.subdir)
 		dst, err := absPath(f, root)
@@ -192,4 +191,8 @@ func intToInt(i starlark.Int) int {
 		return -1
 	}
 	return int(i64)
+}
+
+func unsafeByteSlice(s string) []byte {
+	return unsafe.Slice(unsafe.StringData(s), len(s))
 }

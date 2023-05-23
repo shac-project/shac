@@ -28,6 +28,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"unsafe"
 
 	"go.starlark.net/starlark"
 )
@@ -72,28 +73,38 @@ type subdirSCM struct {
 
 func (s *subdirSCM) affectedFiles(ctx context.Context, includeDeleted bool) ([]file, error) {
 	f, err := s.s.affectedFiles(ctx, includeDeleted)
+	f = s.filterFiles(f)
 	// TODO(maruel): Cache.
-	var out []file
-	l := len(s.subdir)
-	for i := range f {
-		if strings.HasPrefix(f[i].path, s.subdir) {
-			out = append(out, file{path: f[i].path[l:], action: f[i].action})
-		}
-	}
-	return out, err
+	return f, err
 }
 
 func (s *subdirSCM) allFiles(ctx context.Context, includeDeleted bool) ([]file, error) {
 	f, err := s.s.allFiles(ctx, includeDeleted)
+	f = s.filterFiles(f)
 	// TODO(maruel): Cache.
-	var out []file
+	return f, err
+}
+
+// filterFiles returns the list of files that are applicable for this subdir.
+func (s *subdirSCM) filterFiles(f []file) []file {
+	c := 0
+	for i := range f {
+		if strings.HasPrefix(f[i].path, s.subdir) {
+			c++
+		}
+	}
+	if c == len(f) {
+		// Save a copy.
+		return f
+	}
+	out := make([]file, 0, c)
 	l := len(s.subdir)
 	for i := range f {
 		if strings.HasPrefix(f[i].path, s.subdir) {
 			out = append(out, file{path: f[i].path[l:], action: f[i].action})
 		}
 	}
-	return out, err
+	return out
 }
 
 func (s *subdirSCM) newLines(f file) builtin {
@@ -160,9 +171,10 @@ type gitCheckout struct {
 
 	// Late initialized information.
 	mu       sync.Mutex
-	modified []file // modified files in this checkout.
-	all      []file // all files in the repo.
-	err      error  // save error.
+	modified []file       // modified files in this checkout.
+	all      []file       // all files in the repo.
+	err      error        // save error.
+	b        bytes.Buffer // used by run().
 }
 
 func (g *gitCheckout) init(ctx context.Context, root string) error {
@@ -219,7 +231,13 @@ func (g *gitCheckout) run(ctx context.Context, args ...string) string {
 		g.env = append(os.Environ(), "GIT_CONFIG_NOGLOBAL=true", "GIT_CONFIG_GLOBAL=", "GIT_CONFIG_SYSTEM=", "LANG=C")
 	}
 	cmd.Env = g.env
-	out, err := cmd.CombinedOutput()
+	cmd.Stdout = &g.b
+	cmd.Stderr = &g.b
+	err := cmd.Run()
+	// Always make a copy of the output, since it could be persisted. Only reuse
+	// the temporary buffer.
+	out := g.b.String()
+	g.b.Reset()
 	if err != nil {
 		if errExit := (&exec.ExitError{}); errors.As(err, &errExit) {
 			g.err = fmt.Errorf("error running git %s: %w\n%s", strings.Join(args, " "), err, out)
@@ -227,7 +245,7 @@ func (g *gitCheckout) run(ctx context.Context, args ...string) string {
 			g.err = err
 		}
 	}
-	return strings.TrimSpace(string(out))
+	return strings.TrimSpace(out)
 }
 
 // affectedFiles returns the modified files on this checkout.
@@ -359,7 +377,10 @@ func (g *gitCheckout) newLines(f file) builtin {
 		if f.action == "D" {
 			return make(starlark.Tuple, 0), nil
 		}
+		// TODO(maruel): It should be okay to run these concurrently.
+		g.mu.Lock()
 		o := g.run(ctx, "diff", "--no-prefix", "-C", "-U0", g.upstream.hash, "--", f.path)
+		g.mu.Unlock()
 		if o == "" {
 			// TODO(maruel): This is not normal. For now fallback to the whole file.
 			v, err := newLinesWhole(g.checkoutRoot, f.path)
@@ -534,14 +555,22 @@ func newLinesWhole(root, path string) (starlark.Value, error) {
 	}
 	// If the file contains a null byte we'll assume it's binary and not try to
 	// parse its lines.
-	if bytes.Contains(b, []byte{0}) {
+	if bytes.IndexByte(b, 0) != -1 {
 		return make(starlark.Tuple, 0), nil
 	}
-	// TODO(maruel): unsafeString()
-	items := strings.Split(string(b), "\n")
-	t := make(starlark.Tuple, len(items))
-	for i := range items {
-		t[i] = starlark.Tuple{starlark.MakeInt(i + 1), starlark.String(items[i])}
+	t := make(starlark.Tuple, bytes.Count(b, []byte{'\n'})+1)
+	for i := range t {
+		if n := bytes.IndexByte(b, '\n'); n != -1 {
+			t[i] = starlark.Tuple{starlark.MakeInt(i + 1), starlark.String(unsafeString(b[:n]))}
+			b = b[n+1:]
+		} else {
+			// Last item.
+			t[i] = starlark.Tuple{starlark.MakeInt(i + 1), starlark.String(unsafeString(b))}
+		}
 	}
 	return t, nil
+}
+
+func unsafeString(b []byte) string {
+	return unsafe.String(unsafe.SliceData(b), len(b))
 }
