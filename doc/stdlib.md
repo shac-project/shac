@@ -154,7 +154,7 @@ shac.register_check(cb)
 ### Arguments
 
 * **filepath**: Path of the file to read. The file must be within the workspace. The path must be relative and in POSIX format, using / separator.
-* **size**: (optional) Limits the maximum number of bytes to return. The whole file is buffered in memory. Defaults to 128Mib on 32 bits runtime, 4Gib on 64 bits runtime.
+* **size**: (optional) Limits the maximum number of bytes to return. The file is silently truncated to this value. The whole file is buffered in memory. Defaults to 128Mib on 32 bits runtime, 4Gib on 64 bits runtime.
 
 ### Returns
 
@@ -708,8 +708,8 @@ shac.register_check(cb, fail_often)
 
 Creates and return a structure instance.
 
-This a non-standard function that enables creating an "object" that has
-immutable properties. It is intentionally not as powerful as a python class
+Create an "object" that has immutable properties. It is similar to a
+dictionary is usage. It is intentionally not as powerful as a python class
 instance.
 
 ### Example
@@ -729,4 +729,4 @@ obj.do()
 
 ### Arguments
 
-* **\*\*kwargs**: structure's fields.
+* **\*\*kwargs**: structure's fields. The argument name becomes the property name, and the argument value becomes the property value.
