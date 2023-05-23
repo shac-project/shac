@@ -15,7 +15,6 @@
 package engine
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -330,7 +329,7 @@ func TestRun_SCM_Git_Binary_File(t *testing.T) {
 	copySCM(t, root)
 
 	// Git considers a file to be binary if it contains a null byte.
-	writeFileBytes(t, root, "a.bin", []byte{0, 1, 2, 3})
+	writeFileBytes(t, root, "a.bin", []byte{0, 1, 2, 3}, 0o600)
 	runGit(t, root, "add", "a.bin")
 
 	t.Run("affected", func(t *testing.T) {
@@ -1356,7 +1355,7 @@ func enumDir(t *testing.T, name string) (string, []string) {
 	return p, out
 }
 
-func makeGit(t *testing.T) string {
+func makeGit(t testing.TB) string {
 	// scm.go requires two commits. Not really worth fixing yet, it's only
 	// annoying in unit tests.
 	root := t.TempDir()
@@ -1375,32 +1374,40 @@ func makeGit(t *testing.T) string {
 	return root
 }
 
-func initGit(t *testing.T, dir string) {
+func initGit(t testing.TB, dir string) {
 	runGit(t, dir, "init")
 	runGit(t, dir, "config", "user.email", "test@example.com")
 	runGit(t, dir, "config", "user.name", "engine test")
 }
 
-func copySCM(t *testing.T, dst string) {
+func copySCM(t testing.TB, dst string) {
 	m, err := filepath.Glob(filepath.Join("testdata", "scm_*.star"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, src := range m {
-		d, err := os.ReadFile(src)
-		if err != nil {
-			t.Fatal(err)
-		}
-		writeFile(t, dst, filepath.Base(src), string(d))
+		copyFile(t, dst, src)
 	}
 }
 
-func writeFile(t *testing.T, root, path, content string) {
-	writeFileBytes(t, root, path, []byte(content))
+func copyFile(t testing.TB, dst, src string) {
+	d, err := os.ReadFile(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s, err := os.Stat(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeFileBytes(t, dst, filepath.Base(src), d, s.Mode()&0o700)
 }
 
-func writeFileBytes(t *testing.T, root, path string, content []byte) {
-	if err := os.WriteFile(filepath.Join(root, path), content, 0o600); err != nil {
+func writeFile(t testing.TB, root, path, content string) {
+	writeFileBytes(t, root, path, []byte(content), 0o600)
+}
+
+func writeFileBytes(t testing.TB, root, path string, content []byte, perm os.FileMode) {
+	if err := os.WriteFile(filepath.Join(root, path), content, perm); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -1413,7 +1420,7 @@ func readFile(t *testing.T, path string) string {
 	return string(b)
 }
 
-func runGit(t *testing.T, root string, args ...string) string {
+func runGit(t testing.TB, root string, args ...string) string {
 	cmd := exec.Command("git", args...)
 	cmd.Dir = root
 	cmd.Env = append(os.Environ(),
@@ -1460,7 +1467,7 @@ func (r *reportNoPrint) Print(ctx context.Context, check, file string, line int,
 type reportPrint struct {
 	reportNoPrint
 	mu sync.Mutex
-	b  bytes.Buffer
+	b  strings.Builder
 }
 
 func (r *reportPrint) Print(ctx context.Context, check, file string, line int, message string) {

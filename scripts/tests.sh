@@ -19,7 +19,8 @@ set -eu -o pipefail
 # necessary headers.
 export CGO_ENABLED=0
 
-cd "$(dirname "$(dirname "${BASH_SOURCE[0]}")")"
+cd "$(dirname "${BASH_SOURCE[0]}")"
+cd ..
 REPO_ROOT="$(pwd)"
 
 CIPD_ROOT="$REPO_ROOT/.tools"
@@ -34,10 +35,16 @@ if ! command -v "go" > /dev/null; then
   cipd init -force "$GOROOT"
   cipd install -log-level error -root "$GOROOT" 'infra/3pp/tools/go/${platform}'
   export PATH="$GOROOT/bin:$PATH"
+  echo ""
 fi
 
-echo "- Testing"
+echo "- Testing with coverage"
 go test -cover ./...
 
-echo "- Running"
+echo ""
+echo "- Benchmarks"
+go test -bench=. -run=^$ -cpu 1 ./...
+
+echo ""
+echo "- Running 'shac check'"
 go run . check -v
