@@ -117,7 +117,7 @@ func ctxEmitAnnotation(ctx context.Context, s *shacState, name string, args star
 		if err != nil {
 			return err
 		}
-		if _, found := sort.Find(len(f), func(i int) int { return strings.Compare(file, f[i].path) }); !found {
+		if _, found := sort.Find(len(f), func(i int) int { return strings.Compare(file, f[i].relpath()) }); !found {
 			return fmt.Errorf("for parameter \"filepath\": %s is not tracked", argfilepath)
 		}
 	}

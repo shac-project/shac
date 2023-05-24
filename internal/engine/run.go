@@ -216,8 +216,8 @@ func runInner(ctx context.Context, root, tmpdir, main string, r Report, allowNet
 		if err != nil {
 			return err
 		}
-		for i := range files {
-			n := files[i].path
+		for i, f := range files {
+			n := f.rootedpath()
 			if filepath.Base(n) == main {
 				d := strings.ReplaceAll(filepath.Dir(n), "\\", "/")
 				dd := d + "/"
