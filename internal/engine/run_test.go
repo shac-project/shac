@@ -27,7 +27,6 @@ import (
 	"path/filepath"
 	"runtime"
 	"sort"
-	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -40,16 +39,12 @@ import (
 func TestRun_Fail(t *testing.T) {
 	t.Parallel()
 	data := []struct {
-		o   Options
-		err string
+		name string
+		o    Options
+		err  string
 	}{
 		{
-			Options{
-				config: "/dev/null",
-			},
-			"file not found",
-		},
-		{
+			"config path is a directory",
 			Options{
 				config: ".",
 			},
@@ -61,6 +56,7 @@ func TestRun_Fail(t *testing.T) {
 			}(),
 		},
 		{
+			"absolute main path",
 			Options{
 				main: func() string {
 					if runtime.GOOS == "windows" {
@@ -72,16 +68,34 @@ func TestRun_Fail(t *testing.T) {
 			"main file must not be an absolute path",
 		},
 		{
+			"malformed config file",
 			Options{
 				config: "testdata/config/syntax.textproto",
 			},
 			// The encoding is not deterministic.
 			"...: unknown field: bad",
 		},
+		{
+			"no shac.star file",
+			Options{
+				Root: t.TempDir(),
+			},
+			// TODO(olivernewman): This error should be more specific, like "no
+			// shac.star file found".
+			"file not found",
+		},
+		{
+			"no shac.star files (recursive)",
+			Options{
+				Root:    t.TempDir(),
+				Recurse: true,
+			},
+			"no shac.star files found",
+		},
 	}
 	for i := range data {
 		i := i
-		t.Run(strconv.Itoa(i), func(t *testing.T) {
+		t.Run(data[i].name, func(t *testing.T) {
 			t.Parallel()
 			o := data[i].o
 			o.Report = &reportNoPrint{t: t}
