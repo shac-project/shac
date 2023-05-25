@@ -248,10 +248,9 @@ type gitCheckout struct {
 
 	// Mutable. Late initialized information.
 	mu       sync.Mutex
-	modified []file       // modified files in this checkout.
-	all      []file       // all files in the repo.
-	err      error        // save error.
-	b        bytes.Buffer // used by run().
+	modified []file // modified files in this checkout.
+	all      []file // all files in the repo.
+	err      error  // save error.
 }
 
 func (g *gitCheckout) init(ctx context.Context, root string) error {
@@ -315,13 +314,14 @@ func (g *gitCheckout) run(ctx context.Context, args ...string) string {
 		)
 	}
 	cmd.Env = g.env
-	cmd.Stdout = &g.b
-	cmd.Stderr = &g.b
+	b := buffers.get()
+	cmd.Stdout = b
+	cmd.Stderr = b
 	err := cmd.Run()
 	// Always make a copy of the output, since it could be persisted. Only reuse
 	// the temporary buffer.
-	out := g.b.String()
-	g.b.Reset()
+	out := b.String()
+	buffers.push(b)
 	if err != nil {
 		if errExit := (&exec.ExitError{}); errors.As(err, &errExit) {
 			g.err = fmt.Errorf("error running git %s: %w\n%s", strings.Join(args, " "), err, out)
@@ -457,10 +457,7 @@ func (g *gitCheckout) newLines(ctx context.Context, f file) (starlark.Value, err
 	if f.action() == "D" {
 		return make(starlark.Tuple, 0), nil
 	}
-	// TODO(maruel): It should be okay to run these concurrently.
-	g.mu.Lock()
 	o := g.run(ctx, "diff", "--no-prefix", "-C", "-U0", "--no-ext-diff", "--irreversible-delete", g.upstream.hash, "--", f.rootedpath())
-	g.mu.Unlock()
 	if o == "" {
 		// TODO(maruel): This is not normal. For now fallback to the whole file.
 		v, err := newLinesWhole(g.checkoutRoot, f.rootedpath())

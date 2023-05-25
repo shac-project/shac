@@ -163,11 +163,15 @@ func ctxOsExec(ctx context.Context, s *shacState, name string, args starlark.Tup
 
 	cmd := s.sandbox.Command(ctx, config)
 
+	stdout := buffers.get()
+	stderr := buffers.get()
+	defer func() {
+		buffers.push(stdout)
+		buffers.push(stderr)
+	}()
 	// TODO(olivernewman): Also handle commands that may output non-utf-8 bytes.
-	var stdout strings.Builder
-	var stderr strings.Builder
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
+	cmd.Stdout = stdout
+	cmd.Stderr = stderr
 
 	var retcode int
 	// Serialize start given the issue described at sandbox.Mu.
