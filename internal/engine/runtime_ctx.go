@@ -32,6 +32,7 @@ func getCtx(root string) starlark.Value {
 		}),
 		"io": toValue("ctx.io", starlark.StringDict{
 			"read_file": newBuiltin("ctx.io.read_file", ctxIoReadFile),
+			"tempdir":   newBuiltin("ctx.io.tempdir", ctxIoTempdir),
 		}),
 		"os": toValue("ctx.os", starlark.StringDict{
 			"exec": newBuiltin("ctx.os.exec", ctxOsExec),

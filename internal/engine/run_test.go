@@ -1212,16 +1212,22 @@ func TestTestDataPrint(t *testing.T) {
 		want string
 	}{
 		{
-			name: "ctx-io-read_file-size.star",
-			want: "[//ctx-io-read_file-size.star:16] {\n  \"key\":\n",
+			"ctx-io-read_file-size.star",
+			"[//ctx-io-read_file-size.star:16] {\n  \"key\":\n",
 		},
 		{
-			name: "ctx-io-read_file.star",
-			want: "[//ctx-io-read_file.star:17] {\"key\": \"value\"}\n",
+			"ctx-io-read_file.star",
+			"[//ctx-io-read_file.star:17] {\"key\": \"value\"}\n",
 		},
 		{
-			name: "ctx-os-exec-abspath.star",
-			want: func() string {
+			"ctx-io-tempdir.star",
+			"[//ctx-io-tempdir.star:16] /0/0\n" +
+				"[//ctx-io-tempdir.star:17] /0/1\n" +
+				"[//ctx-io-tempdir.star:18] /0/2\n",
+		},
+		{
+			"ctx-os-exec-abspath.star",
+			func() string {
 				// TODO(maruel): Decide if we want to do CRLF translation automatically.
 				if runtime.GOOS == "windows" {
 					return "[//ctx-os-exec-abspath.star:17] Hello, world\r\n\n"
@@ -1230,8 +1236,8 @@ func TestTestDataPrint(t *testing.T) {
 			}(),
 		},
 		{
-			name: "ctx-os-exec-env.star",
-			want: func() string {
+			"ctx-os-exec-env.star",
+			func() string {
 				// TODO(maruel): Decide if we want to do CRLF translation automatically.
 				if runtime.GOOS == "windows" {
 					return "[//ctx-os-exec-env.star:24] FOO=foo-value\r\nBAR=bar-value\n"
@@ -1240,54 +1246,54 @@ func TestTestDataPrint(t *testing.T) {
 			}(),
 		},
 		{
-			name: "ctx-os-exec-success.star",
-			want: "[//ctx-os-exec-success.star:21] retcode: 0\n" +
+			"ctx-os-exec-success.star",
+			"[//ctx-os-exec-success.star:21] retcode: 0\n" +
 				"[//ctx-os-exec-success.star:22] stdout: hello from stdout\n" +
 				"[//ctx-os-exec-success.star:23] stderr: hello from stderr\n",
 		},
 		{
-			name: "ctx-re-allmatches.star",
-			want: "[//ctx-re-allmatches.star:17] ()\n" +
+			"ctx-re-allmatches.star",
+			"[//ctx-re-allmatches.star:17] ()\n" +
 				"[//ctx-re-allmatches.star:19] (match(groups = (\"TODO(foo)\",), offset = 4), match(groups = (\"TODO(bar)\",), offset = 14))\n" +
 				"[//ctx-re-allmatches.star:21] (match(groups = (\"anc\", \"n\", \"c\"), offset = 0),)\n",
 		},
 		{
-			name: "ctx-re-match.star",
-			want: "[//ctx-re-match.star:17] None\n" +
+			"ctx-re-match.star",
+			"[//ctx-re-match.star:17] None\n" +
 				"[//ctx-re-match.star:19] match(groups = (\"TODO(foo)\",), offset = 4)\n" +
 				"[//ctx-re-match.star:21] match(groups = (\"anc\", \"n\", \"c\"), offset = 0)\n" +
 				"[//ctx-re-match.star:23] match(groups = (\"a\", None), offset = 0)\n",
 		},
 		{
-			name: "dir-ctx.star",
-			want: "[//dir-ctx.star:16] [\"emit\", \"io\", \"os\", \"re\", \"scm\"]\n",
+			"dir-ctx.star",
+			"[//dir-ctx.star:16] [\"emit\", \"io\", \"os\", \"re\", \"scm\"]\n",
 		},
 		{
-			name: "dir-shac.star",
-			want: "[//dir-shac.star:15] [\"check\", \"commit_hash\", \"register_check\", \"version\"]\n",
+			"dir-shac.star",
+			"[//dir-shac.star:15] [\"check\", \"commit_hash\", \"register_check\", \"version\"]\n",
 		},
 		{
-			name: "print-shac-version.star",
-			want: "[//print-shac-version.star:15] " + v + "\n",
+			"print-shac-version.star",
+			"[//print-shac-version.star:15] " + v + "\n",
 		},
 		{
-			name: "shac-check.star",
-			want: "[//shac-check.star:19] str(check): <check hello_world>\n" +
+			"shac-check.star",
+			"[//shac-check.star:19] str(check): <check hello_world>\n" +
 				"[//shac-check.star:20] type(check): shac.check\n" +
 				"[//shac-check.star:21] bool(check): True\n" +
 				"[//shac-check.star:26] hashed: set([<check hello_world>])\n",
 		},
 		{
-			name: "shac-register_check-object.star",
-			want: "[//shac-register_check-object.star:16] running from a check object\n",
+			"shac-register_check-object.star",
+			"[//shac-register_check-object.star:16] running from a check object\n",
 		},
 		{
-			name: "shac-register_check.star",
-			want: "[//shac-register_check.star:16] running\n",
+			"shac-register_check.star",
+			"[//shac-register_check.star:16] running\n",
 		},
 		{
-			name: "true.star",
-			want: "[//true.star:15] True\n",
+			"true.star",
+			"[//true.star:15] True\n",
 		},
 	}
 	want := make([]string, len(data))

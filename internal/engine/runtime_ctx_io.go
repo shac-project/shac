@@ -63,6 +63,17 @@ func ctxIoReadFile(ctx context.Context, s *shacState, name string, args starlark
 	return starlark.Bytes(b), nil
 }
 
+// ctxIoTempdir implements native function ctx.io.tempdir().
+//
+// Make sure to update //doc/stdlib.star whenever this function is modified.
+func ctxIoTempdir(ctx context.Context, s *shacState, name string, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+	if err := starlark.UnpackArgs(name, args, kwargs); err != nil {
+		return nil, err
+	}
+	t, err := s.newTempDir()
+	return starlark.String(t), err
+}
+
 // Support functions.
 
 // readFileImpl is similar to os.ReadFile() albeit it limits the amount of data

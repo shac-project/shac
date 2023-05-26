@@ -434,6 +434,9 @@ func (s *shacState) newTempDir() (string, error) {
 	if err != nil {
 		return "", err
 	}
+	if i >= 1000000 {
+		return "", errors.New("too many temporary directories requested")
+	}
 	p := filepath.Join(s.tmpdir, strconv.Itoa(i))
 	if err = os.Mkdir(p, 0o700); err != nil {
 		return "", err

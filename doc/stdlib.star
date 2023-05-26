@@ -153,6 +153,11 @@ def _ctx_io_read_file(filepath, size = None):
   pass
 
 
+def _ctx_io_tempdir():
+  """Returns a new temporary directory."""
+  pass
+
+
 def _ctx_os_exec(cmd, cwd = None, env = None, allow_network = False, raise_on_failure = True):
   """Runs a command as a subprocess.
 
@@ -329,6 +334,7 @@ ctx = struct(
   # ctx.io is the object that exposes the API to interact with the file system.
   io = struct(
     read_file = _ctx_io_read_file,
+    tempdir = _ctx_io_tempdir,
   ),
   # ctx.os is the object that exposes the API to interact with the operating
   # system.

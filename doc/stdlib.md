@@ -133,6 +133,7 @@ ctx.io is the object that exposes the API to interact with the file system.
 Fields:
 
 - read_file
+- tempdir
 
 ## ctx.io.read_file
 
@@ -159,6 +160,11 @@ shac.register_check(cb)
 ### Returns
 
 Content of the file as bytes.
+
+## ctx.io.tempdir
+
+Returns a new temporary directory.
+
 
 ## ctx.os
 
