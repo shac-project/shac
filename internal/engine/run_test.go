@@ -762,6 +762,11 @@ func TestTestDataFailOrThrow(t *testing.T) {
 			"  //ctx-io-read_file-windows.star:16:19: in cb\n",
 		},
 		{
+			"ctx-os-exec-10Mib-exceed.star",
+			"ctx.os.exec: process returned too much stderr",
+			"  //ctx-os-exec-10Mib-exceed.star:16:20: in cb\n",
+		},
+		{
 			"ctx-os-exec-bad_arg.star",
 			"ctx.os.exec: unexpected keyword argument \"unknown\"",
 			"  //ctx-os-exec-bad_arg.star:16:14: in cb\n",
@@ -1221,9 +1226,20 @@ func TestTestDataPrint(t *testing.T) {
 		},
 		{
 			"ctx-io-tempdir.star",
-			"[//ctx-io-tempdir.star:16] /0/0\n" +
-				"[//ctx-io-tempdir.star:17] /0/1\n" +
-				"[//ctx-io-tempdir.star:18] /0/2\n",
+			func() string {
+				if runtime.GOOS == "windows" {
+					return "[//ctx-io-tempdir.star:16] \\0\\0\n" +
+						"[//ctx-io-tempdir.star:17] \\0\\1\n" +
+						"[//ctx-io-tempdir.star:18] \\0\\2\n"
+				}
+				return "[//ctx-io-tempdir.star:16] /0/0\n" +
+					"[//ctx-io-tempdir.star:17] /0/1\n" +
+					"[//ctx-io-tempdir.star:18] /0/2\n"
+			}(),
+		},
+		{
+			"ctx-os-exec-10Mib.star",
+			"[//ctx-os-exec-10Mib.star:17] 0\n",
 		},
 		{
 			"ctx-os-exec-abspath.star",

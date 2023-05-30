@@ -139,6 +139,10 @@ func ctxOsExec(ctx context.Context, s *shacState, name string, args starlark.Tup
 			{Path: "/usr/include"},
 			// System compilers.
 			{Path: "/usr/lib"},
+			// Make the parent directory of tempDir available, since it is the root
+			// of all ctx.os.tempdir() calls, which can be used as scratch pads for
+			// this executable.
+			{Path: filepath.Dir(tempDir), Writeable: true},
 		}
 		// TODO(olivernewman): Add an env_prefixes argument to exec() so $PATH can
 		// be controlled without completely overriding it.
@@ -173,36 +177,52 @@ func ctxOsExec(ctx context.Context, s *shacState, name string, args starlark.Tup
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr
 
-	var retcode int
-	// Serialize start given the issue described at sandbox.Mu.
-	sandbox.Mu.RLock()
-	err = cmd.Start()
-	sandbox.Mu.RUnlock()
+	retcode, err := execCmd(cmd)
+	// Limits output to 10Mib. If it needs more, a file should probably be used.
+	// If there is a use case, it's fine to increase.
+	const cap = 10 * 1024 * 1024
+	if stdout.Len() > cap {
+		return nil, errors.New("process returned too much stdout")
+	}
+	if stderr.Len() > cap {
+		return nil, errors.New("process returned too much stderr")
+	}
 	if err != nil {
 		return nil, err
 	}
-
-	if err = cmd.Wait(); err != nil {
-		var errExit *exec.ExitError
-		if errors.As(err, &errExit) {
-			if argraiseOnFailure {
-				var msgBuilder strings.Builder
-				msgBuilder.WriteString(fmt.Sprintf("command failed with exit code %d: %s", errExit.ExitCode(), argcmd))
-				if stderr.Len() > 0 {
-					msgBuilder.WriteString("\n")
-					msgBuilder.WriteString(stderr.String())
-				}
-				return nil, fmt.Errorf(msgBuilder.String())
-			}
-			retcode = errExit.ExitCode()
-		} else {
-			return nil, err
+	if retcode != 0 && argraiseOnFailure {
+		var msgBuilder strings.Builder
+		msgBuilder.WriteString(fmt.Sprintf("command failed with exit code %d: %s", retcode, argcmd))
+		if stderr.Len() > 0 {
+			msgBuilder.WriteString("\n")
+			msgBuilder.WriteString(stderr.String())
 		}
+		return nil, fmt.Errorf(msgBuilder.String())
 	}
-
 	return toValue("completed_subprocess", starlark.StringDict{
 		"retcode": starlark.MakeInt(retcode),
 		"stdout":  starlark.String(stdout.String()),
 		"stderr":  starlark.String(stderr.String()),
 	}), nil
+}
+
+func execCmd(cmd *exec.Cmd) (int, error) {
+	// Serialize start given the issue described at sandbox.Mu.
+	sandbox.Mu.RLock()
+	err := cmd.Start()
+	sandbox.Mu.RUnlock()
+	if err != nil {
+		// The executable didn't start.
+		return 0, err
+	}
+	if err = cmd.Wait(); err == nil {
+		// Happy path.
+		return 0, nil
+	}
+	var errExit *exec.ExitError
+	if !errors.As(err, &errExit) {
+		// Something else than an normal non-zero exit.
+		return 0, err
+	}
+	return errExit.ExitCode(), nil
 }
