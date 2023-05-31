@@ -50,11 +50,40 @@ func ctxOsExec(ctx context.Context, s *shacState, name string, args starlark.Tup
 		return nil, errors.New("cmdline must not be an empty list")
 	}
 
-	env := map[string]string{}
+	tempDir, err := s.newTempDir()
+	if err != nil {
+		return nil, err
+	}
+	// TODO(olivernewman): Catch errors.
+	defer os.RemoveAll(tempDir)
+
+	env := map[string]string{
+		"PATH":    os.Getenv("PATH"),
+		"TEMP":    tempDir,
+		"TMPDIR":  tempDir,
+		"TEMPDIR": tempDir,
+	}
+	if runtime.GOROOT() != "" {
+		// TODO(olivernewman): This is necessary because checks for shac itself
+		// assume Go is pre-installed. Switch to a hermetic Go installation that
+		// installs Go in the checkout directory, and stop explicitly mounting
+		// $GOROOT and adding it to $PATH.
+		env["PATH"] = strings.Join([]string{
+			filepath.Join(runtime.GOROOT(), "bin"),
+			env["PATH"],
+		}, string(os.PathListSeparator))
+	}
 	for _, item := range argenv.Items() {
 		k, ok := item[0].(starlark.String)
 		if !ok {
 			return nil, fmt.Errorf("\"env\" key is not a string: %s", item[0])
+		}
+		// TODO(olivernewman): This is unnecessarily strict - commands should
+		// not set $PATH in `env`, but we should allow prepending to $PATH with
+		// `env_prefixes`, and add an option to not inherit the value of $PATH
+		// if better hermeticity is desired.
+		if k == "PATH" {
+			return nil, fmt.Errorf("$PATH cannot be overridden")
 		}
 		v, ok := item[1].(starlark.String)
 		if !ok {
@@ -65,7 +94,6 @@ func ctxOsExec(ctx context.Context, s *shacState, name string, args starlark.Tup
 
 	cwd := filepath.Join(s.root, s.subdir)
 	if s := string(argcwd); s != "" {
-		var err error
 		cwd, err = absPath(s, cwd)
 		if err != nil {
 			return nil, err
@@ -87,40 +115,23 @@ func ctxOsExec(ctx context.Context, s *shacState, name string, args starlark.Tup
 		// must either be an absolute or relative path. Do this resolution
 		// unconditionally for consistency across platforms even though it's not
 		// necessary when not using nsjail.
-		var err error
 		fullCmd[0], err = exec.LookPath(fullCmd[0])
 		if err != nil && !errors.Is(err, exec.ErrDot) {
 			return nil, err
 		}
 	}
 
-	tempDir, err := s.newTempDir()
-	if err != nil {
-		return nil, err
-	}
-	// TODO(olivernewman): Catch errors.
-	defer os.RemoveAll(tempDir)
-
 	config := &sandbox.Config{
 		Cmd:          fullCmd,
 		Cwd:          cwd,
 		AllowNetwork: bool(argallowNetwork),
-		TempDir:      tempDir,
 		Env:          env,
 	}
-	if runtime.GOOS == "windows" {
-		// config.Mounts is ignored for the moment on Windows.
-		// TODO(olivernewman): Add an env_prefixes argument to exec() so $PATH can
-		// be controlled without completely overriding it.
-		config.Env["PATH"] = strings.Join([]string{
-			filepath.Join(runtime.GOROOT(), "bin"),
-		}, string(os.PathListSeparator))
-	} else {
+	// config.Mounts is ignored for the moment on Windows.
+	if runtime.GOOS != "windows" {
 		config.Mounts = []sandbox.Mount{
 			// TODO(olivernewman): Mount the checkout read-only by default.
 			{Path: s.root, Writeable: true},
-			// System binaries.
-			{Path: "/bin"},
 			// OS-provided utilities.
 			{Path: "/dev/null", Writeable: true},
 			{Path: "/dev/urandom"},
@@ -133,8 +144,6 @@ func ctxOsExec(ctx context.Context, s *shacState, name string, args starlark.Tup
 			// These are required for bash to work.
 			{Path: "/lib"},
 			{Path: "/lib64"},
-			// More system binaries.
-			{Path: "/usr/bin"},
 			// OS header files.
 			{Path: "/usr/include"},
 			// System compilers.
@@ -144,25 +153,24 @@ func ctxOsExec(ctx context.Context, s *shacState, name string, args starlark.Tup
 			// this executable.
 			{Path: filepath.Dir(tempDir), Writeable: true},
 		}
-		// TODO(olivernewman): Add an env_prefixes argument to exec() so $PATH can
-		// be controlled without completely overriding it.
-		config.Env["PATH"] = strings.Join([]string{
-			"/usr/bin",
-			"/bin",
-			// TODO(olivernewman): Use a hermetic Go installation, don't add $GOROOT
-			// to $PATH.
-			filepath.Join(runtime.GOROOT(), "bin"),
-		}, string(os.PathListSeparator))
-	}
 
-	// Mount $GOROOT unless it's a subdirectory of the checkout dir, in
-	// which case it will already be mounted.
-	// TODO(olivernewman): This is necessary because checks for shac itself
-	// assume Go is pre-installed. Switch to a hermetic Go installation that
-	// installs Go in the checkout directory, and stop explicitly mounting
-	// $GOROOT.
-	if !strings.HasPrefix(runtime.GOROOT(), s.root+string(os.PathSeparator)) {
-		config.Mounts = append(config.Mounts, sandbox.Mount{Path: runtime.GOROOT()})
+		// TODO(olivernewman): This is necessary because checks for shac itself
+		// assume Go is pre-installed. Switch to a hermetic Go installation that
+		// installs Go in the checkout directory, and stop explicitly mounting
+		// $GOROOT and adding it to $PATH.
+		if runtime.GOROOT() != "" {
+			config.Mounts = append(config.Mounts, sandbox.Mount{Path: runtime.GOROOT()})
+		}
+
+		// Mount all directories listed in $PATH.
+		for _, p := range strings.Split(env["PATH"], string(os.PathListSeparator)) {
+			// $PATH may contain invalid elements. Filter them out.
+			var fi os.FileInfo
+			if fi, err = os.Stat(p); err != nil || !fi.IsDir() {
+				continue
+			}
+			config.Mounts = append(config.Mounts, sandbox.Mount{Path: p})
+		}
 	}
 
 	cmd := s.sandbox.Command(ctx, config)
@@ -180,11 +188,11 @@ func ctxOsExec(ctx context.Context, s *shacState, name string, args starlark.Tup
 	retcode, err := execCmd(cmd)
 	// Limits output to 10Mib. If it needs more, a file should probably be used.
 	// If there is a use case, it's fine to increase.
-	const cap = 10 * 1024 * 1024
-	if stdout.Len() > cap {
+	const limit = 10 * 1024 * 1024
+	if stdout.Len() > limit {
 		return nil, errors.New("process returned too much stdout")
 	}
-	if stderr.Len() > cap {
+	if stderr.Len() > limit {
 		return nil, errors.New("process returned too much stderr")
 	}
 	if err != nil {

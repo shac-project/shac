@@ -22,20 +22,12 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strings"
 	"sync"
 )
 
 //go:generate go run download_nsjail.go
-
-// tempDirEnvVars is the environment variables that every sandboxing solution
-// should set to point to the temporary directory specified by the sandbox
-// config.
-var tempDirEnvVars = [...]string{
-	"TEMP",
-	"TMPDIR",
-	"TEMPDIR",
-}
 
 // Mount represents a directory or file from the filesystem to mount inside the
 // nsjail so that processes inside the nsjail can access it.
@@ -56,10 +48,8 @@ type Config struct {
 	Cmd          []string
 	Cwd          string
 	AllowNetwork bool
-	// Directory that sandboxed subprocesses can use as $TEMPDIR.
-	TempDir string
-	Env     map[string]string
-	Mounts  []Mount
+	Env          map[string]string
+	Mounts       []Mount
 
 	// Require keyed arguments.
 	_ struct{}
@@ -104,7 +94,6 @@ type nsjailSandbox struct {
 }
 
 func (s nsjailSandbox) Command(ctx context.Context, config *Config) *exec.Cmd {
-	tempDirMount := "/tmp"
 	args := []string{
 		"--quiet",
 		"--forward_signals",
@@ -119,17 +108,16 @@ func (s nsjailSandbox) Command(ctx context.Context, config *Config) *exec.Cmd {
 		args = append(args, "--disable_clone_newnet")
 	}
 	env := config.Env
-	for _, k := range tempDirEnvVars {
-		env[k] = tempDirMount
-	}
 	for k, v := range env {
 		args = append(args, "--env", fmt.Sprintf("%s=%s", k, v))
 	}
-	mounts := []Mount{
-		{Path: config.TempDir, Writeable: true, Dest: tempDirMount},
-	}
-	mounts = append(mounts, config.Mounts...)
-	for _, mnt := range mounts {
+	// nsjail is strict about ordering of --bindmount flags. If /a and /a/b are
+	// both to be mounted (/a might be read-only while /a/b is writeable), then
+	// /a must precede /a/b in the arguments.
+	sort.Slice(config.Mounts, func(i, j int) bool {
+		return config.Mounts[i].Path < config.Mounts[j].Path
+	})
+	for _, mnt := range config.Mounts {
 		flag := "--bindmount_ro"
 		if mnt.Writeable {
 			flag = "--bindmount"
@@ -169,9 +157,6 @@ func (s macSandbox) Command(ctx context.Context, config *Config) *exec.Cmd {
 	for k, v := range config.Env {
 		cmd.Env = append(cmd.Env, fmt.Sprintf("%s=%s", k, v))
 	}
-	for _, k := range tempDirEnvVars {
-		cmd.Env = append(cmd.Env, fmt.Sprintf("%s=%s", k, config.TempDir))
-	}
 
 	// config.Mounts intentionally ignored.
 	// TODO(olivernewman): Also restrict filesystem access, note that it may not
@@ -191,9 +176,6 @@ func (s genericSandbox) Command(ctx context.Context, config *Config) *exec.Cmd {
 
 	for k, v := range config.Env {
 		cmd.Env = append(cmd.Env, fmt.Sprintf("%s=%s", k, v))
-	}
-	for _, k := range tempDirEnvVars {
-		cmd.Env = append(cmd.Env, fmt.Sprintf("%s=%s", k, config.TempDir))
 	}
 
 	// config.Mounts and config.AllowNetwork intentionally ignored.
