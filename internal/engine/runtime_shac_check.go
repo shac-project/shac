@@ -42,8 +42,19 @@ func newCheck(impl starlark.Callable, name string) (*check, error) {
 		return nil, errors.New("\"impl\" must not be a built-in function")
 	}
 	fun, ok := impl.(*starlark.Function)
-	if !ok || fun.NumParams() != 1 {
+	if !ok || fun.NumParams() == 0 {
 		return nil, errors.New("\"impl\" must be a function accepting one \"ctx\" argument")
+	}
+	if ctxParam, _ := fun.Param(0); ctxParam != "ctx" {
+		return nil, errors.New("\"impl\"'s first parameter must be named \"ctx\"")
+	}
+	if fun.ParamDefault(0) != nil {
+		return nil, errors.New("\"impl\" must not have a default value for the \"ctx\" parameter")
+	}
+	for i := 1; i < fun.NumParams(); i++ {
+		if fun.ParamDefault(i) == nil {
+			return nil, errors.New("\"impl\" can only have one required argument")
+		}
 	}
 	if name == "" {
 		if fun.Name() == "lambda" {

@@ -39,7 +39,7 @@ def _gofmt(ctx, simplify = True):
     )
 
 
-gofmt = shac.check(lambda ctx: _gofmt(ctx), name="gofmt")
+gofmt = shac.check(_gofmt)
 
 
 def _gosec(ctx, version = "v2.15.0", level = "error"):
@@ -70,7 +70,7 @@ def _gosec(ctx, version = "v2.15.0", level = "error"):
           filepath=i["file"][o:], line=int(line), col=int(i["column"]))
 
 
-gosec = shac.check(lambda ctx: _gosec(ctx), name="gosec")
+gosec = shac.check(_gosec)
 
 
 def _ineffassign(ctx, version = "v0.0.0-20230107090616-13ace0543b28"):
@@ -114,7 +114,7 @@ def _ineffassign(ctx, version = "v0.0.0-20230107090616-13ace0543b28"):
     )
 
 
-ineffassign = shac.check(lambda ctx: _ineffassign(ctx), name="ineffassign")
+ineffassign = shac.check(_ineffassign)
 
 
 def _staticcheck(ctx, version = "v0.4.3"):
@@ -171,7 +171,7 @@ def _staticcheck(ctx, version = "v0.4.3"):
     )
 
 
-staticcheck = shac.check(lambda ctx: _staticcheck(ctx), name="staticcheck")
+staticcheck = shac.check(_staticcheck)
 
 
 def _shadow(ctx, version = "v0.7.0"):
@@ -223,7 +223,7 @@ def _shadow(ctx, version = "v0.7.0"):
     )
 
 
-shadow = shac.check(lambda ctx: _shadow(ctx), name="shadow")
+shadow = shac.check(_shadow)
 
 
 def _go_install(ctx, pkg, version):

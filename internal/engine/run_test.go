@@ -925,6 +925,11 @@ func TestTestDataFailOrThrow(t *testing.T) {
 			"  //shac-immutable.star:16:5: in <toplevel>\n",
 		},
 		{
+			"shac-register_check-bad_ctx_name.star",
+			"shac.register_check: \"impl\"'s first parameter must be named \"ctx\"",
+			"  //shac-register_check-bad_ctx_name.star:18:20: in <toplevel>\n",
+		},
+		{
 			"shac-register_check-bad_type.star",
 			"shac.register_check: \"check\" must be a function or shac.check object, got string",
 			"  //shac-register_check-bad_type.star:15:20: in <toplevel>\n",
@@ -935,9 +940,14 @@ func TestTestDataFailOrThrow(t *testing.T) {
 			"  //shac-register_check-builtin.star:15:20: in <toplevel>\n",
 		},
 		{
-			"shac-register_check-callback.star",
+			"shac-register_check-callback_without_arguments.star",
 			"shac.register_check: \"impl\" must be a function accepting one \"ctx\" argument",
-			"  //shac-register_check-callback.star:18:20: in <toplevel>\n",
+			"  //shac-register_check-callback_without_arguments.star:18:20: in <toplevel>\n",
+		},
+		{
+			"shac-register_check-default_ctx.star",
+			"shac.register_check: \"impl\" must not have a default value for the \"ctx\" parameter",
+			"  //shac-register_check-default_ctx.star:18:20: in <toplevel>\n",
 		},
 		{
 			"shac-register_check-kwarg.star",
@@ -948,6 +958,11 @@ func TestTestDataFailOrThrow(t *testing.T) {
 			"shac-register_check-lambda.star",
 			"shac.register_check: \"name\" must be set when \"impl\" is a lambda",
 			"  //shac-register_check-lambda.star:18:20: in <toplevel>\n",
+		},
+		{
+			"shac-register_check-multiple_required_args.star",
+			"shac.register_check: \"impl\" can only have one required argument",
+			"  //shac-register_check-multiple_required_args.star:18:20: in <toplevel>\n",
 		},
 		{
 			"shac-register_check-no_arg.star",
@@ -1302,6 +1317,10 @@ func TestTestDataPrint(t *testing.T) {
 		{
 			"shac-register_check-object.star",
 			"[//shac-register_check-object.star:16] running from a check object\n",
+		},
+		{
+			"shac-register_check-optional_param.star",
+			"[//shac-register_check-optional_param.star:16] optional_param=\"optional-param-value\"\n",
 		},
 		{
 			"shac-register_check.star",
