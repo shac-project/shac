@@ -40,6 +40,7 @@ type luci struct {
 	doneChecks chan *sinkpb.TestResult
 
 	mu         sync.Mutex
+	wg         sync.WaitGroup
 	liveChecks map[string]*sinkpb.TestResult
 }
 
@@ -50,7 +51,11 @@ func (l *luci) init(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	// Do uploads in a persistent goroutine so HTTP requests don't block checks
+	// from running.
+	l.wg.Add(1)
 	go func() {
+		defer l.wg.Done()
 		client := &http.Client{}
 		requests := &sinkpb.ReportTestResultsRequest{}
 		for {
@@ -67,6 +72,8 @@ func (l *luci) init(ctx context.Context) error {
 					} else {
 						requests.TestResults = append(requests.TestResults, res)
 					}
+				// Wait a bit in case we get more results that we can upload in
+				// the same batch.
 				case <-time.After(20 * time.Millisecond):
 					loop = false
 				}
@@ -87,6 +94,8 @@ func (l *luci) init(ctx context.Context) error {
 
 func (l *luci) Close() error {
 	close(l.doneChecks)
+	// Wait for the upload goroutine to complete before exiting.
+	l.wg.Wait()
 	return nil
 }
 
