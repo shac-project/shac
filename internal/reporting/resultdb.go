@@ -35,6 +35,8 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
+const resultSinkMaxBatchSize = 500
+
 type luci struct {
 	basic
 	doneChecks chan *sinkpb.TestResult
@@ -47,10 +49,11 @@ type luci struct {
 	mu         sync.Mutex
 	wg         sync.WaitGroup
 	liveChecks map[string]*sinkpb.TestResult
+	errs       []error
 }
 
 func (l *luci) init(ctx context.Context) error {
-	l.doneChecks = make(chan *sinkpb.TestResult)
+	l.doneChecks = make(chan *sinkpb.TestResult, resultSinkMaxBatchSize)
 	l.liveChecks = map[string]*sinkpb.TestResult{}
 	r, err := resultSinkCtx()
 	if err != nil {
@@ -69,7 +72,7 @@ func (l *luci) init(ctx context.Context) error {
 				return
 			}
 			requests.TestResults = append(requests.TestResults, res)
-			for loop := true; loop && len(requests.TestResults) < 500; {
+			for loop := true; loop && len(requests.TestResults) < resultSinkMaxBatchSize; {
 				select {
 				case res, ok = <-l.doneChecks:
 					if res == nil || !ok {
@@ -84,14 +87,24 @@ func (l *luci) init(ctx context.Context) error {
 				}
 			}
 			b, err := protojson.MarshalOptions{}.Marshal(requests)
-			if err != nil {
-				panic(err)
-			}
 			requests.TestResults = requests.TestResults[:0]
-			// TODO(maruel): Run the HTTP request asynchronously.
-			if err = r.sendData(ctx, client, "ReportTestResults", b); err != nil {
-				fmt.Fprintf(os.Stderr, "TODO: implement HTTP retries! %s\n", err)
+			if err != nil {
+				l.mu.Lock()
+				l.errs = append(l.errs, err)
+				l.mu.Unlock()
+				continue
 			}
+
+			l.wg.Add(1)
+			go func() {
+				defer l.wg.Done()
+				// TODO(olivernewman): Implement HTTP retries.
+				if err = r.sendData(ctx, client, "ReportTestResults", b); err != nil {
+					l.mu.Lock()
+					l.errs = append(l.errs, err)
+					l.mu.Unlock()
+				}
+			}()
 		}
 	}()
 	return nil
@@ -101,6 +114,9 @@ func (l *luci) Close() error {
 	close(l.doneChecks)
 	// Wait for the upload goroutine to complete before exiting.
 	l.wg.Wait()
+	if len(l.errs) > 0 {
+		return l.errs[0]
+	}
 	return nil
 }
 
