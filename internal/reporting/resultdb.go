@@ -30,6 +30,7 @@ import (
 	resultpb "go.chromium.org/luci/resultdb/proto/v1"
 	sinkpb "go.chromium.org/luci/resultdb/sink/proto/v1"
 	"go.fuchsia.dev/shac-project/shac/internal/engine"
+	"golang.org/x/sync/errgroup"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -47,9 +48,8 @@ type luci struct {
 	batchWaitDuration time.Duration
 
 	mu         sync.Mutex
-	wg         sync.WaitGroup
+	eg         errgroup.Group
 	liveChecks map[string]*sinkpb.TestResult
-	errs       []error
 }
 
 func (l *luci) init(ctx context.Context) error {
@@ -61,15 +61,13 @@ func (l *luci) init(ctx context.Context) error {
 	}
 	// Do uploads in a persistent goroutine so HTTP requests don't block checks
 	// from running.
-	l.wg.Add(1)
-	go func() {
-		defer l.wg.Done()
+	l.eg.Go(func() error {
 		client := &http.Client{}
 		requests := &sinkpb.ReportTestResultsRequest{}
 		for {
 			res, ok := <-l.doneChecks
 			if res == nil || !ok {
-				return
+				return nil
 			}
 			requests.TestResults = append(requests.TestResults, res)
 			for loop := true; loop && len(requests.TestResults) < resultSinkMaxBatchSize; {
@@ -86,38 +84,28 @@ func (l *luci) init(ctx context.Context) error {
 					loop = false
 				}
 			}
-			b, err := protojson.MarshalOptions{}.Marshal(requests)
-			requests.TestResults = requests.TestResults[:0]
-			if err != nil {
-				l.mu.Lock()
-				l.errs = append(l.errs, err)
-				l.mu.Unlock()
-				continue
-			}
 
-			l.wg.Add(1)
-			go func() {
-				defer l.wg.Done()
-				// TODO(olivernewman): Implement HTTP retries.
-				if err = r.sendData(ctx, client, "ReportTestResults", b); err != nil {
-					l.mu.Lock()
-					l.errs = append(l.errs, err)
-					l.mu.Unlock()
+			b, marshalErr := protojson.MarshalOptions{}.Marshal(requests)
+			requests.TestResults = requests.TestResults[:0]
+			l.eg.Go(func() error {
+				if marshalErr != nil {
+					// Return error from here instead of from the outer function
+					// so that the outer function can continue doing uploads
+					// even if one upload attempt fails.
+					return marshalErr
 				}
-			}()
+				// TODO(olivernewman): Implement HTTP retries.
+				return r.sendData(ctx, client, "ReportTestResults", b)
+			})
 		}
-	}()
+	})
 	return nil
 }
 
 func (l *luci) Close() error {
 	close(l.doneChecks)
 	// Wait for the upload goroutine to complete before exiting.
-	l.wg.Wait()
-	if len(l.errs) > 0 {
-		return l.errs[0]
-	}
-	return nil
+	return l.eg.Wait()
 }
 
 func (l *luci) EmitAnnotation(ctx context.Context, check string, level engine.Level, message, root, file string, s engine.Span, replacements []string) error {
