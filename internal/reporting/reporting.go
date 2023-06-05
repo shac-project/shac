@@ -40,7 +40,10 @@ type Report interface {
 func Get(ctx context.Context) (Report, error) {
 	// On LUCI/Swarming. ResultDB!
 	if os.Getenv("LUCI_CONTEXT") != "" {
-		l := &luci{basic: basic{out: os.Stdout}}
+		l := &luci{
+			basic:             basic{out: os.Stdout},
+			batchWaitDuration: 20 * time.Millisecond,
+		}
 		if err := l.init(ctx); err != nil {
 			return nil, err
 		}

@@ -38,6 +38,11 @@ import (
 type luci struct {
 	basic
 	doneChecks chan *sinkpb.TestResult
+	// batchWaitDuration is the duration after having a test result enqueued
+	// that the reporter should wait before uploading it to ResultDB, in case
+	// more results are reported soon after that can be batched together.
+	// Overrideable to allow better determinism during tests.
+	batchWaitDuration time.Duration
 
 	mu         sync.Mutex
 	wg         sync.WaitGroup
@@ -74,7 +79,7 @@ func (l *luci) init(ctx context.Context) error {
 					}
 				// Wait a bit in case we get more results that we can upload in
 				// the same batch.
-				case <-time.After(20 * time.Millisecond):
+				case <-time.After(l.batchWaitDuration):
 					loop = false
 				}
 			}
@@ -171,6 +176,15 @@ func (l *luci) getTestResult(check string) *sinkpb.TestResult {
 
 // Support code.
 
+// luciContext corresponds to the schema of the file identified by the
+// LUCI_CONTEXT env var. See
+// https://crsrc.org/i/go/src/go.chromium.org/luci/lucictx/sections.proto for
+// the whole structure.
+type luciContext struct {
+	ResultDB   resultDB          `json:"resultdb"`
+	ResultSink resultSinkContext `json:"result_sink"`
+}
+
 // resultSinkContext holds the result_sink information parsed from LUCI_CONTEXT.
 type resultSinkContext struct {
 	AuthToken      string `json:"auth_token"`
@@ -178,11 +192,11 @@ type resultSinkContext struct {
 }
 
 type resultDB struct {
-	Hostname          string `json:"hostname"`
-	CurrentInvocation struct {
-		Name        string `json:"name"`
-		UpdateToken string `json:"update_token"`
-	} `json:"current_invocation"`
+	CurrentInvocation resultDBInvocation `json:"current_invocation"`
+}
+
+type resultDBInvocation struct {
+	Name string `json:"name"`
 }
 
 func (r *resultSinkContext) sendData(ctx context.Context, client *http.Client, endpoint string, data []byte) error {
@@ -216,12 +230,7 @@ func resultSinkCtx() (*resultSinkContext, error) {
 	if err != nil {
 		return nil, err
 	}
-	// See https://crsrc.org/i/go/src/go.chromium.org/luci/lucictx/sections.proto
-	// for the whole structure.
-	var ctx struct {
-		ResultDB   resultDB          `json:"resultdb"`
-		ResultSink resultSinkContext `json:"result_sink"`
-	}
+	var ctx luciContext
 	if err = json.Unmarshal(b, &ctx); err != nil {
 		return nil, err
 	}
