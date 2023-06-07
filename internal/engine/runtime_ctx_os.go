@@ -339,6 +339,6 @@ func ctxOsExec(ctx context.Context, s *shacState, name string, args starlark.Tup
 	cleanupFuncs = cleanupFuncs[:0]
 
 	chk := ctxCheck(ctx)
-	chk.suprocesses = append(chk.suprocesses, proc)
+	chk.subprocesses = append(chk.subprocesses, proc)
 	return proc, nil
 }

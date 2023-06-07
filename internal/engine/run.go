@@ -450,7 +450,7 @@ type registeredCheck struct {
 	*check
 	failErr      *failure // set when fail() is called from within the check, an abnormal failure.
 	highestLevel Level    // highest level emitted by EmitAnnotation.
-	suprocesses  []*subprocess
+	subprocesses []*subprocess
 }
 
 var checkCtxKey = "shac.check"
@@ -482,7 +482,7 @@ func (c *registeredCheck) call(ctx context.Context, env *starlarkEnv, args starl
 		return fmt.Errorf("check %q returned an object of type %s, expected None", c.name, r.Type())
 	}
 	var err error
-	for _, proc := range c.suprocesses {
+	for _, proc := range c.subprocesses {
 		if !proc.waitCalled {
 			proc.cleanup()
 			if err == nil {
