@@ -14,6 +14,6 @@
 
 def cb(ctx):
   ext = "bat" if ctx.os.name == "windows" else "sh"
-  print(ctx.os.exec([ctx.scm.root+"/hello_world." + ext]).stdout)
+  print(ctx.os.exec([ctx.scm.root+"/hello_world." + ext]).wait().stdout)
 
 shac.register_check(cb)

@@ -13,6 +13,17 @@
 # limitations under the License.
 
 def cb(ctx):
-  ctx.os.exec(["echo", "hello world"], cwd = "../foo").wait()
+  if ctx.os.name == "windows":
+    cmd = ["cmd.exe", "/c", "hello_world.bat"]
+  else:
+    cmd = ["./hello_world.sh"]
+
+  procs = []
+  for _ in range(10):
+    procs.append(ctx.os.exec(cmd))
+
+  for proc in procs:
+    res = proc.wait()
+    print(res.stdout.strip())
 
 shac.register_check(cb)

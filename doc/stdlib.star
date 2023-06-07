@@ -167,7 +167,7 @@ def _ctx_os_exec(cmd, cwd = None, env = None, allow_network = False, raise_on_fa
   Example:
     ```python
     def cb(ctx):
-      res = ctx.os.exec(["echo", "hello world"], cwd=".")
+      res = ctx.os.exec(["echo", "hello world"], cwd=".").wait()
       print(res.stdout)  # "hello world"
 
     shac.register_check(cb)
@@ -178,7 +178,7 @@ def _ctx_os_exec(cmd, cwd = None, env = None, allow_network = False, raise_on_fa
 
     ```python
     def cb(ctx):
-      res = ctx.os.exec(["cat", "does-not-exist.txt"], raise_on_failure = False)
+      res = ctx.os.exec(["cat", "does-not-exist.txt"], raise_on_failure = False).wait()
       print(res.retcode)  # 1
       print(res.stderr)   # cat: does-not-exist.txt: No such file or directory
 
@@ -189,7 +189,7 @@ def _ctx_os_exec(cmd, cwd = None, env = None, allow_network = False, raise_on_fa
 
     ```python
     def cb(ctx):
-      ctx.os.exec(["foo"], env = {"FOO_CONFIG": "foo.config"})
+      ctx.os.exec(["foo"], env = {"FOO_CONFIG": "foo.config"}).wait()
 
     shac.register_check(cb)
     ```
@@ -205,6 +205,7 @@ def _ctx_os_exec(cmd, cwd = None, env = None, allow_network = False, raise_on_fa
       fail if the subcommand returns a non-zero exit code. Defaults to true.
 
   Returns:
+    A subprocess object with a wait() method. wait() returns a
     struct(retcode=..., stdout="...", stderr="...")
   """
   pass

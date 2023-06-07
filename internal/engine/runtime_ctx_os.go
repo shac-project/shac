@@ -15,6 +15,7 @@
 package engine
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -27,6 +28,123 @@ import (
 	"go.fuchsia.dev/shac-project/shac/internal/sandbox"
 	"go.starlark.net/starlark"
 )
+
+// subprocess represents an in-progress subprocess as returned by ctx.os.exec().
+type subprocess struct {
+	cmd            *exec.Cmd
+	args           []string
+	stdout         *bytes.Buffer
+	stderr         *bytes.Buffer
+	raiseOnFailure bool
+	tempDir        string
+
+	waitCalled bool
+}
+
+var _ starlark.HasAttrs = (*subprocess)(nil)
+
+func (s *subprocess) String() string {
+	return fmt.Sprintf("<subprocess %q>", strings.Join(s.args, " "))
+}
+
+func (s *subprocess) Type() string {
+	return "subprocess"
+}
+
+func (s *subprocess) Truth() starlark.Bool {
+	return true
+}
+
+func (s *subprocess) Freeze() {
+}
+
+func (s *subprocess) Hash() (uint32, error) {
+	return 0, errors.New("unhashable type: subprocess")
+}
+
+func (s *subprocess) Attr(name string) (starlark.Value, error) {
+	switch name {
+	case "wait":
+		return subprocessWaitBuiltin.BindReceiver(s), nil
+	default:
+		return nil, nil
+	}
+}
+
+func (s *subprocess) AttrNames() []string {
+	return []string{"wait"}
+}
+
+func (s *subprocess) wait() (starlark.Value, error) {
+	if s.waitCalled {
+		return nil, fmt.Errorf("wait was already called")
+	}
+	s.waitCalled = true
+
+	defer s.cleanup()
+
+	err := s.cmd.Wait()
+	retcode := 0
+	if err != nil {
+		var errExit *exec.ExitError
+		if errors.As(err, &errExit) {
+			retcode = errExit.ExitCode()
+		} else {
+			// Something other than a normal non-zero exit.
+			return nil, err
+		}
+	}
+
+	// Limits output to 10Mib. If it needs more, a file should probably be used.
+	// If there is a use case, it's fine to increase.
+	const limit = 10 * 1024 * 1024
+	if s.stdout.Len() > limit {
+		return nil, errors.New("process returned too much stdout")
+	}
+	if s.stderr.Len() > limit {
+		return nil, errors.New("process returned too much stderr")
+	}
+
+	if retcode != 0 && s.raiseOnFailure {
+		var msgBuilder strings.Builder
+		msgBuilder.WriteString(fmt.Sprintf("command failed with exit code %d: %s", retcode, s.args))
+		if s.stderr.Len() > 0 {
+			msgBuilder.WriteString("\n")
+			msgBuilder.WriteString(s.stderr.String())
+		}
+		return nil, fmt.Errorf(msgBuilder.String())
+	}
+	return toValue("completed_subprocess", starlark.StringDict{
+		"retcode": starlark.MakeInt(retcode),
+		"stdout":  starlark.String(s.stdout.String()),
+		"stderr":  starlark.String(s.stderr.String()),
+	}), nil
+}
+
+func (s *subprocess) cleanup() error {
+	// Kill the process before doing any other cleanup steps to ensure resources
+	// are no longer in use.
+	err := s.cmd.Process.Kill()
+	// Kill() doesn't block until the process actually completes, so we need to
+	// wait before cleaning up resources.
+	_ = s.cmd.Wait()
+
+	if err2 := os.RemoveAll(s.tempDir); err == nil {
+		err = err2
+	}
+	buffers.push(s.stdout)
+	buffers.push(s.stderr)
+	s.stdout, s.stderr = nil, nil
+
+	return err
+}
+
+var subprocessWaitBuiltin = newBoundBuiltin("wait", func(ctx context.Context, s *shacState, name string, self starlark.Value, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+	if err := starlark.UnpackArgs(name, args, kwargs); err != nil {
+		return nil, err
+	}
+	return self.(*subprocess).wait()
+})
 
 // ctxOsExec implements the native function ctx.os.exec().
 //
@@ -50,12 +168,33 @@ func ctxOsExec(ctx context.Context, s *shacState, name string, args starlark.Tup
 		return nil, errors.New("cmdline must not be an empty list")
 	}
 
+	var cleanupFuncs []func() error
+	defer func() {
+		for _, f := range cleanupFuncs {
+			// Ignore errors during cleanup because cleanupFuncs will only be
+			// populated if another error occurred prior to starting the
+			// subprocess.
+			f()
+		}
+	}()
+
 	tempDir, err := s.newTempDir()
 	if err != nil {
 		return nil, err
 	}
-	// TODO(olivernewman): Catch errors.
-	defer os.RemoveAll(tempDir)
+
+	cleanupFuncs = append(cleanupFuncs, func() error {
+		return os.RemoveAll(tempDir)
+	})
+
+	stdout := buffers.get()
+	stderr := buffers.get()
+
+	cleanupFuncs = append(cleanupFuncs, func() error {
+		buffers.push(stdout)
+		buffers.push(stderr)
+		return nil
+	})
 
 	env := map[string]string{
 		"PATH":    os.Getenv("PATH"),
@@ -175,62 +314,31 @@ func ctxOsExec(ctx context.Context, s *shacState, name string, args starlark.Tup
 
 	cmd := s.sandbox.Command(ctx, config)
 
-	stdout := buffers.get()
-	stderr := buffers.get()
-	defer func() {
-		buffers.push(stdout)
-		buffers.push(stderr)
-	}()
 	// TODO(olivernewman): Also handle commands that may output non-utf-8 bytes.
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr
 
-	retcode, err := execCmd(cmd)
-	// Limits output to 10Mib. If it needs more, a file should probably be used.
-	// If there is a use case, it's fine to increase.
-	const limit = 10 * 1024 * 1024
-	if stdout.Len() > limit {
-		return nil, errors.New("process returned too much stdout")
-	}
-	if stderr.Len() > limit {
-		return nil, errors.New("process returned too much stderr")
-	}
+	// Serialize start given the issue described at sandbox.Mu.
+	sandbox.Mu.RLock()
+	err = cmd.Start()
+	sandbox.Mu.RUnlock()
 	if err != nil {
 		return nil, err
 	}
-	if retcode != 0 && argraiseOnFailure {
-		var msgBuilder strings.Builder
-		msgBuilder.WriteString(fmt.Sprintf("command failed with exit code %d: %s", retcode, argcmd))
-		if stderr.Len() > 0 {
-			msgBuilder.WriteString("\n")
-			msgBuilder.WriteString(stderr.String())
-		}
-		return nil, fmt.Errorf(msgBuilder.String())
-	}
-	return toValue("completed_subprocess", starlark.StringDict{
-		"retcode": starlark.MakeInt(retcode),
-		"stdout":  starlark.String(stdout.String()),
-		"stderr":  starlark.String(stderr.String()),
-	}), nil
-}
 
-func execCmd(cmd *exec.Cmd) (int, error) {
-	// Serialize start given the issue described at sandbox.Mu.
-	sandbox.Mu.RLock()
-	err := cmd.Start()
-	sandbox.Mu.RUnlock()
-	if err != nil {
-		// The executable didn't start.
-		return 0, err
+	proc := &subprocess{
+		cmd:            cmd,
+		args:           sequenceToStrings(argcmd),
+		stdout:         stdout,
+		stderr:         stderr,
+		raiseOnFailure: bool(argraiseOnFailure),
+		tempDir:        tempDir,
 	}
-	if err = cmd.Wait(); err == nil {
-		// Happy path.
-		return 0, nil
-	}
-	var errExit *exec.ExitError
-	if !errors.As(err, &errExit) {
-		// Something else than an normal non-zero exit.
-		return 0, err
-	}
-	return errExit.ExitCode(), nil
+	// Only clean up now if starting the subprocess failed; otherwise it will
+	// get cleaned up by wait().
+	cleanupFuncs = cleanupFuncs[:0]
+
+	chk := ctxCheck(ctx)
+	chk.suprocesses = append(chk.suprocesses, proc)
+	return proc, nil
 }

@@ -13,6 +13,11 @@
 # limitations under the License.
 
 def cb(ctx):
-  ctx.os.exec(["echo", "hello world"], cwd = "../foo").wait()
+    proc = ctx.os.exec(["echo", "hello"])
+    print("str(proc): %s" % str(proc))
+    print("type(proc): %s" % type(proc))
+    print("bool(proc): %s" % bool(proc))
+    print("dir(proc): %s" % dir(proc))
+    proc.wait()
 
 shac.register_check(cb)

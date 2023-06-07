@@ -28,9 +28,9 @@ def _gofmt(ctx, simplify = True):
   if simplify:
     base_cmd.append("-s")
 
-  unformatted = ctx.os.exec(base_cmd + ["-l"] + go_files).stdout.splitlines()
+  unformatted = ctx.os.exec(base_cmd + ["-l"] + go_files).wait().stdout.splitlines()
   for f in unformatted:
-    new_contents = ctx.os.exec(base_cmd + [f]).stdout
+    new_contents = ctx.os.exec(base_cmd + [f]).wait().stdout
     ctx.emit.annotation(
       level="error",
       message="needs formatting",
@@ -54,7 +54,7 @@ def _gosec(ctx, version = "v2.15.0", level = "error"):
     level: level at which issues should be emitted.
   """
   exe = _go_install(ctx, "github.com/securego/gosec/v2/cmd/gosec", version)
-  res = ctx.os.exec([exe, "-fmt=json", "-quiet", "-exclude=G304", "-exclude-dir=.tools", "./..."], raise_on_failure = False)
+  res = ctx.os.exec([exe, "-fmt=json", "-quiet", "-exclude=G304", "-exclude-dir=.tools", "./..."], raise_on_failure = False).wait()
   if res.retcode:
     # Schema is https://pkg.go.dev/github.com/securego/gosec/v2#ReportInfo
     d = json.decode(res.stdout)
@@ -88,7 +88,7 @@ def _ineffassign(ctx, version = "v0.0.0-20230107090616-13ace0543b28"):
     [exe, "./..."],
     raise_on_failure = False,
     env = _go_env(ctx, "ineffassign"),
-  )
+  ).wait()
   # ineffassign's README claims that it emits a retcode of 1 if it returns any
   # findings, but it actually emits a retcode of 3.
   # https://github.com/gordonklaus/ineffassign/blob/4cc7213b9bc8b868b2990c372f6fa057fa88b91c/ineffassign.go#L70
@@ -137,7 +137,7 @@ def _staticcheck(ctx, version = "v0.4.3"):
     # TODO(olivernewman): Figure out why staticcheck needs network access and
     # remove. We may need to make sure to `go get` all dependencies first?
     allow_network = True,
-  )
+  ).wait()
   if res.retcode not in (0, 1) or res.stderr:
     ctx.emit.annotation(
       level="error",
@@ -194,7 +194,7 @@ def _shadow(ctx, version = "v0.7.0"):
     ],
     env=_go_env(ctx, "shadow"),
     allow_network=True,
-  )
+  ).wait()
 
   # Example output:
   # {
@@ -233,7 +233,7 @@ def _go_install(ctx, pkg, version):
     ["go", "install", "%s@%s" % (pkg, version)],
     allow_network = True,
     env = _go_env(ctx, tool_name)
-  )
+  ).wait()
 
   return "%s/%s" % (env["GOBIN"], tool_name)
 

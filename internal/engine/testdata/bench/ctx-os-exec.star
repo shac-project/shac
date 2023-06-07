@@ -17,7 +17,7 @@ def cb(ctx):
     cmd = ["cmd.exe", "/c", "stdio.bat"]
   else:
     cmd = ["./stdio.sh"]
-  res = ctx.os.exec(cmd)
+  res = ctx.os.exec(cmd).wait()
   print("retcode: %d" % res.retcode)
   print("stdout: %s" % res.stdout.strip())
   print("stderr: %s" % res.stderr.strip())

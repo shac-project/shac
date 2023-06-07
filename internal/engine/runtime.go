@@ -95,31 +95,50 @@ func toValue(name string, d starlark.StringDict) starlark.Value {
 }
 
 type builtin func(ctx context.Context, s *shacState, name string, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error)
+type boundBuiltin func(ctx context.Context, s *shacState, name string, self starlark.Value, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error)
 
 // newBuiltin registers a go function as a Starlark builtin.
 //
 // It's identical to `starlark.NewBuiltin()`, but prepends the function name to
 // the text of any returned errors as a usability improvement.
 func newBuiltin(name string, impl builtin) *starlark.Builtin {
-	wrapper := func(th *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
-		ctx := getContext(th)
-		s := ctxShacState(ctx)
-		val, err := impl(ctx, s, name, args, kwargs)
-		// starlark.UnpackArgs already adds the function name prefix to errors
-		// it returns, so make sure not to duplicate the prefix if it's already
-		// there.
-		if err != nil && !strings.HasPrefix(err.Error(), name+": ") {
-			err = fmt.Errorf("%s: %w", name, err)
-		}
-		if val != nil {
-			// All values returned by builtins are immutable. This is not a hard
-			// requirement, and can be relaxed if there's a use case for mutable
-			// return values, but it's still a sensible default.
-			val.Freeze()
-		}
-		return val, err
+	return starlark.NewBuiltin(name, func(th *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+		return builtinWrapper(th, name, func(ctx context.Context, s *shacState) (starlark.Value, error) {
+			return impl(ctx, s, name, args, kwargs)
+		})
+	})
+}
+
+// newBoundBuiltin registers a go function as a Starlark builtin that's bound to
+// an object.
+//
+// The method receiver is passed to `impl` as an argument.
+func newBoundBuiltin(name string, impl boundBuiltin) *starlark.Builtin {
+	return starlark.NewBuiltin(name, func(th *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+		return builtinWrapper(th, name, func(ctx context.Context, s *shacState) (starlark.Value, error) {
+			self := fn.Receiver()
+			return impl(ctx, s, name, self, args, kwargs)
+		})
+	})
+}
+
+func builtinWrapper(th *starlark.Thread, name string, f func(ctx context.Context, s *shacState) (starlark.Value, error)) (starlark.Value, error) {
+	ctx := getContext(th)
+	s := ctxShacState(ctx)
+	val, err := f(ctx, s)
+	// starlark.UnpackArgs already adds the function name prefix to errors
+	// it returns, so make sure not to duplicate the prefix if it's already
+	// there.
+	if err != nil && !strings.HasPrefix(err.Error(), name+": ") {
+		err = fmt.Errorf("%s: %w", name, err)
 	}
-	return starlark.NewBuiltin(name, wrapper)
+	if val != nil {
+		// All values returned by builtins are immutable. This is not a hard
+		// requirement, and can be relaxed if there's a use case for mutable
+		// return values, but it's still a sensible default.
+		val.Freeze()
+	}
+	return val, err
 }
 
 func newBuiltinNone(name string, f func(ctx context.Context, s *shacState, name string, args starlark.Tuple, kwargs []starlark.Tuple) error) *starlark.Builtin {

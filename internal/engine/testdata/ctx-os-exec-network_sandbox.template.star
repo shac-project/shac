@@ -17,7 +17,7 @@ def cb(ctx):
     ["./http_get.sh", "{{.ServerURL}}"],
     allow_network=("{{.AllowNetwork}}" == "true"),
     raise_on_failure=False,
-  )
+  ).wait()
   if res.retcode:
     print("Exit code: %d" % res.retcode)
   print(res.stdout)

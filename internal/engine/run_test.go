@@ -763,8 +763,8 @@ func TestTestDataFailOrThrow(t *testing.T) {
 		},
 		{
 			"ctx-os-exec-10Mib-exceed.star",
-			"ctx.os.exec: process returned too much stderr",
-			"  //ctx-os-exec-10Mib-exceed.star:16:20: in cb\n",
+			"wait: process returned too much stderr",
+			"  //ctx-os-exec-10Mib-exceed.star:16:91: in cb\n",
 		},
 		{
 			"ctx-os-exec-bad_arg.star",
@@ -797,14 +797,19 @@ func TestTestDataFailOrThrow(t *testing.T) {
 			"  //ctx-os-exec-command_not_in_path.star:16:14: in cb\n",
 		},
 		{
+			"ctx-os-exec-double_wait.star",
+			"wait: wait was already called",
+			"  //ctx-os-exec-double_wait.star:18:12: in cb\n",
+		},
+		{
 			"ctx-os-exec-false.star",
 			func() string {
 				if !isBashAvail && runtime.GOOS == "windows" {
 					return "ctx.os.exec: exec: \"false\": executable file not found in %PATH%"
 				}
-				return "ctx.os.exec: command failed with exit code 1: [\"false\"]"
+				return "wait: command failed with exit code 1: [false]"
 			}(),
-			"  //ctx-os-exec-false.star:16:14: in cb\n",
+			"  //ctx-os-exec-false.star:16:30: in cb\n",
 		},
 		{
 			"ctx-os-exec-invalid_cwd.star",
@@ -830,6 +835,16 @@ func TestTestDataFailOrThrow(t *testing.T) {
 			"ctx-os-exec-no_cmd.star",
 			"ctx.os.exec: cmdline must not be an empty list",
 			"  //ctx-os-exec-no_cmd.star:16:14: in cb\n",
+		},
+		{
+			"ctx-os-exec-no_wait.star",
+			"wait() was not called on <subprocess \"echo hello world\">",
+			"",
+		},
+		{
+			"ctx-os-exec-result_unhashable.star",
+			"unhashable type: subprocess",
+			"  //ctx-os-exec-result_unhashable.star:17:14: in cb\n",
 		},
 		{
 			"ctx-re-allmatches-no_arg.star",
@@ -1277,6 +1292,10 @@ func TestTestDataPrint(t *testing.T) {
 			}(),
 		},
 		{
+			"ctx-os-exec-parallel.star",
+			strings.Repeat("[//ctx-os-exec-parallel.star:27] Hello, world\n", 10),
+		},
+		{
 			"ctx-os-exec-success.star",
 			"[//ctx-os-exec-success.star:21] retcode: 0\n" +
 				"[//ctx-os-exec-success.star:22] stdout: hello from stdout\n" +
@@ -1327,6 +1346,13 @@ func TestTestDataPrint(t *testing.T) {
 			"[//shac-register_check.star:16] running\n",
 		},
 		{
+			"subprocess.star",
+			"[//subprocess.star:17] str(proc): <subprocess \"echo hello\">\n" +
+				"[//subprocess.star:18] type(proc): subprocess\n" +
+				"[//subprocess.star:19] bool(proc): True\n" +
+				"[//subprocess.star:20] dir(proc): [\"wait\"]\n",
+		},
+		{
 			"true.star",
 			"[//true.star:15] True\n",
 		},
@@ -1370,7 +1396,7 @@ func TestRun_Filesystem_Sandboxing(t *testing.T) {
 	}
 	writeFile(t, root, "shac.star", ""+
 		"def cb(ctx):\n"+
-		"  res = ctx.os.exec([ctx.scm.root + \"/foo.sh\"], raise_on_failure = False)\n"+
+		"  res = ctx.os.exec([ctx.scm.root + \"/foo.sh\"], raise_on_failure = False).wait()\n"+
 		"  print(\"retcode: %d\" % res.retcode)\n"+
 		"  print(res.stderr)\n"+
 		"shac.register_check(cb)\n")

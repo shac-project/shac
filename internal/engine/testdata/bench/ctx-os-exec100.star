@@ -17,7 +17,7 @@ def cb(ctx):
     cmd = ["cmd.exe", "/c", "stdio.bat"]
   else:
     cmd = ["./stdio.sh"]
-  res = ctx.os.exec(cmd)
+  res = ctx.os.exec(cmd).wait()
   # Emit everything as a single statement. Since each check run in parallel,
   # each of the print statement can be interleaved by other checks running
   # concurrently.

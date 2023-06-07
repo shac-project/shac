@@ -13,7 +13,7 @@
 # limitations under the License.
 
 def cb(ctx):
-  res = ctx.os.exec(["go", "run", "ctx-os-exec-10Mib.go"], env = _go_env(ctx))
+  res = ctx.os.exec(["go", "run", "ctx-os-exec-10Mib.go"], env = _go_env(ctx)).wait()
   print(res.retcode)
 
 def _go_env(ctx):
