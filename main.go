@@ -28,7 +28,7 @@ import (
 
 func main() {
 	if err := cli.Main(os.Args); err != nil && !errors.Is(err, flag.ErrHelp) {
-		var stackerr engine.BacktracableError
+		var stackerr engine.BacktraceableError
 		if errors.As(err, &stackerr) {
 			_, _ = os.Stderr.WriteString(stackerr.Backtrace())
 		}

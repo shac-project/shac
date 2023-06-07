@@ -25,8 +25,8 @@ import (
 // The information will have been provided via the Report interface.
 var ErrCheckFailed = errors.New("a check failed")
 
-// BacktracableError is an error that has a starlark backtrace attached to it.
-type BacktracableError interface {
+// BacktraceableError is an error that has a starlark backtrace attached to it.
+type BacktraceableError interface {
 	error
 	// Backtrace returns a user-friendly error message describing the stack
 	// of calls that led to this error, along with the error message itself.
@@ -72,6 +72,6 @@ func (e *evalError) Backtrace() string {
 }
 
 var (
-	_ BacktracableError = (*failure)(nil)
-	_ BacktracableError = (*evalError)(nil)
+	_ BacktraceableError = (*failure)(nil)
+	_ BacktraceableError = (*evalError)(nil)
 )
