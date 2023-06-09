@@ -27,6 +27,7 @@ shac doc shac.star | less
 
 ## Documentation
 
+* [doc/design.md](doc/design.md): High-level design information.
 * [doc/stdlib.md](doc/stdlib.md): shac runtime standard library documentation.
 * [doc/stdlib.star](doc/stdlib.star): shac runtime standard library starlark
   pseudo code.
