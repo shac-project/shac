@@ -842,6 +842,26 @@ func TestTestDataFailOrThrow(t *testing.T) {
 			"",
 		},
 		{
+			"ctx-os-exec-ok_retcodes.star",
+			func() string {
+				if runtime.GOOS == "windows" {
+					return "wait: command failed with exit code 0: [cmd.exe /c exit 0]"
+				}
+				return "wait: command failed with exit code 0: [true]"
+			}(),
+			"  //ctx-os-exec-ok_retcodes.star:28:43: in cb\n",
+		},
+		{
+			"ctx-os-exec-ok_retcodes_invalid_element.star",
+			"ctx.os.exec: for parameter \"ok_retcodes\": got [0, \"blah\"], wanted sequence of ints",
+			"  //ctx-os-exec-ok_retcodes_invalid_element.star:16:14: in cb\n",
+		},
+		{
+			"ctx-os-exec-ok_retcodes_invalid_type.star",
+			"ctx.os.exec: for parameter \"ok_retcodes\": got \"blah\", wanted sequence of ints",
+			"  //ctx-os-exec-ok_retcodes_invalid_type.star:16:14: in cb\n",
+		},
+		{
 			"ctx-os-exec-result_unhashable.star",
 			"unhashable type: subprocess",
 			"  //ctx-os-exec-result_unhashable.star:17:14: in cb\n",

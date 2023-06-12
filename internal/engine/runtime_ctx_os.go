@@ -19,6 +19,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -36,6 +37,7 @@ type subprocess struct {
 	stdout         *bytes.Buffer
 	stderr         *bytes.Buffer
 	raiseOnFailure bool
+	okRetcodes     []int
 	tempDir        string
 
 	waitCalled bool
@@ -105,7 +107,7 @@ func (s *subprocess) wait() (starlark.Value, error) {
 		return nil, errors.New("process returned too much stderr")
 	}
 
-	if retcode != 0 && s.raiseOnFailure {
+	if !contains(s.okRetcodes, retcode) && s.raiseOnFailure {
 		var msgBuilder strings.Builder
 		msgBuilder.WriteString(fmt.Sprintf("command failed with exit code %d: %s", retcode, s.args))
 		if s.stderr.Len() > 0 {
@@ -155,17 +157,35 @@ func ctxOsExec(ctx context.Context, s *shacState, name string, args starlark.Tup
 	var argenv = starlark.NewDict(0)
 	var argraiseOnFailure starlark.Bool = true
 	var argallowNetwork starlark.Bool
+	var argokRetcodes starlark.Value = starlark.None
 	if err := starlark.UnpackArgs(name, args, kwargs,
 		"cmd", &argcmd,
 		"cwd?", &argcwd,
 		"env?", &argenv,
-		"raise_on_failure?", &argraiseOnFailure,
 		"allow_network?", &argallowNetwork,
+		"ok_retcodes?", &argokRetcodes,
+		"raise_on_failure?", &argraiseOnFailure,
 	); err != nil {
 		return nil, err
 	}
 	if argcmd.Len() == 0 {
 		return nil, errors.New("cmdline must not be an empty list")
+	}
+
+	var okRetcodes []int
+	if argokRetcodes == starlark.None {
+		okRetcodes = append(okRetcodes, 0)
+	} else {
+		if !argraiseOnFailure {
+			return nil, fmt.Errorf("cannot combine \"ok_retcodes\" and \"raise_on_failure=False\"")
+		}
+		seqOkRetcodes, ok := argokRetcodes.(starlark.Sequence)
+		if ok {
+			okRetcodes = sequenceToInts(seqOkRetcodes)
+		}
+		if !ok || okRetcodes == nil {
+			return nil, fmt.Errorf("for parameter \"ok_retcodes\": got %s, wanted sequence of ints", argokRetcodes)
+		}
 	}
 
 	var cleanupFuncs []func() error
@@ -332,6 +352,7 @@ func ctxOsExec(ctx context.Context, s *shacState, name string, args starlark.Tup
 		stdout:         stdout,
 		stderr:         stderr,
 		raiseOnFailure: bool(argraiseOnFailure),
+		okRetcodes:     okRetcodes,
 		tempDir:        tempDir,
 	}
 	// Only clean up now if starting the subprocess failed; otherwise it will
@@ -341,4 +362,36 @@ func ctxOsExec(ctx context.Context, s *shacState, name string, args starlark.Tup
 	chk := ctxCheck(ctx)
 	chk.subprocesses = append(chk.subprocesses, proc)
 	return proc, nil
+}
+
+// sequenceToInts converts a starlark sequence (list, tuple) into a slice of
+// ints.
+func sequenceToInts(s starlark.Sequence) []int {
+	out := make([]int, 0, s.Len())
+	iter := s.Iterate()
+	var x starlark.Value
+	for iter.Next(&x) {
+		i, ok := x.(starlark.Int)
+		if !ok {
+			return nil
+		}
+		i64, ok := i.Int64()
+		if !ok {
+			return nil
+		}
+		if i64 > math.MaxInt || i64 < math.MinInt {
+			return nil
+		}
+		out = append(out, int(i64))
+	}
+	return out
+}
+
+func contains[T comparable](slice []T, target T) bool {
+	for _, item := range slice {
+		if item == target {
+			return true
+		}
+	}
+	return false
 }

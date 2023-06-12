@@ -158,7 +158,14 @@ def _ctx_io_tempdir():
   pass
 
 
-def _ctx_os_exec(cmd, cwd = None, env = None, allow_network = False, raise_on_failure = True):
+def _ctx_os_exec(
+  cmd,
+  cwd = None,
+  env = None,
+  allow_network = False,
+  ok_retcodes = None,
+  raise_on_failure = True,
+):
   """Runs a command as a subprocess.
 
   Subprocesses are denied network access by default on Linux. Use
@@ -201,8 +208,12 @@ def _ctx_os_exec(cmd, cwd = None, env = None, allow_network = False, raise_on_fa
     env: (optional) Dictionary of environment variables to set for the
       subprocess.
     allow_network: (optional) Allow network access. Defaults to false.
-    raise_on_failure: (optional): Whether the running check should automatically
+    ok_retcodes: (optional) List of exit codes that should be considered
+      successes. Any other exit code will immediately fail the check. The
+      effective default is [0].
+    raise_on_failure: (optional) Whether the running check should automatically
       fail if the subcommand returns a non-zero exit code. Defaults to true.
+      Cannot be false if ok_retcodes is also set.
 
   Returns:
     A subprocess object with a wait() method. wait() returns a

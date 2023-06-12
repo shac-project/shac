@@ -86,21 +86,12 @@ def _ineffassign(ctx, version = "v0.0.0-20230107090616-13ace0543b28"):
   exe = _go_install(ctx, "github.com/gordonklaus/ineffassign", version)
   res = ctx.os.exec(
     [exe, "./..."],
-    raise_on_failure = False,
     env = _go_env(ctx, "ineffassign"),
+    # ineffassign's README claims that it emits a retcode of 1 if it returns any
+    # findings, but it actually emits a retcode of 3.
+    # https://github.com/gordonklaus/ineffassign/blob/4cc7213b9bc8b868b2990c372f6fa057fa88b91c/ineffassign.go#L70
+    ok_retcodes = [0, 3],
   ).wait()
-  # ineffassign's README claims that it emits a retcode of 1 if it returns any
-  # findings, but it actually emits a retcode of 3.
-  # https://github.com/gordonklaus/ineffassign/blob/4cc7213b9bc8b868b2990c372f6fa057fa88b91c/ineffassign.go#L70
-  if res.retcode not in (0, 3):
-    ctx.emit.annotation(
-      level="error",
-      message="unexpected error from ineffassign (retcode %d):\n%s" % (
-        res.retcode,
-        res.stderr,
-      ),
-    )
-    return
 
   # ineffassign emits some duplicate lines.
   for line in sorted(set(res.stderr.splitlines())):
@@ -132,21 +123,12 @@ def _staticcheck(ctx, version = "v0.4.3"):
   env["STATICCHECK_CACHE"] = env["GOCACHE"]
   res = ctx.os.exec(
     [exe, "-f=json", "./..."],
-    raise_on_failure = False,
+    ok_retcodes = [0, 1],
     env = env,
     # TODO(olivernewman): Figure out why staticcheck needs network access and
     # remove. We may need to make sure to `go get` all dependencies first?
     allow_network = True,
   ).wait()
-  if res.retcode not in (0, 1) or res.stderr:
-    ctx.emit.annotation(
-      level="error",
-      message="unexpected error from staticcheck (retcode %d):\n%s" % (
-        res.retcode,
-        res.stderr,
-      ),
-    )
-    return
 
   # Output is JSON-lines.
   # https://staticcheck.io/docs/running-staticcheck/cli/formatters/#json
