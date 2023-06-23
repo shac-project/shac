@@ -66,6 +66,6 @@ def check_license_headers(ctx):
     if lines[0].startswith("#!"):
       lines = lines[1:]
     if not ctx.re.match(_EXPECTED_HEADER_RE, "\n".join(lines)):
-      ctx.emit.annotation(
+      ctx.emit.finding(
           level="error",
           message="%s does not start with expected license header" % path)

@@ -108,7 +108,7 @@ func (l *luci) Close() error {
 	return l.eg.Wait()
 }
 
-func (l *luci) EmitAnnotation(ctx context.Context, check string, level engine.Level, message, root, file string, s engine.Span, replacements []string) error {
+func (l *luci) EmitFinding(ctx context.Context, check string, level engine.Level, message, root, file string, s engine.Span, replacements []string) error {
 	r := l.getTestResult(check)
 	check = html.EscapeString(check)
 	lev := html.EscapeString(string(level))

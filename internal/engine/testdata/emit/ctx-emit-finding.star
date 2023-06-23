@@ -13,7 +13,7 @@
 # limitations under the License.
 
 def cb(ctx):
-  ctx.emit.annotation(
+  ctx.emit.finding(
       level="warning",
       message="please fix",
       filepath="file.txt",
@@ -22,8 +22,8 @@ def cb(ctx):
       end_line=10,
       end_col=1,
       replacements=("a", "tuple"))
-  ctx.emit.annotation(level="notice", line=100, col=2, message="great code")
-  ctx.emit.annotation(
+  ctx.emit.finding(level="notice", line=100, col=2, message="great code")
+  ctx.emit.finding(
       level="warning",
       message="please fix",
       filepath="file.txt",
@@ -32,13 +32,13 @@ def cb(ctx):
       end_line=10,
       end_col=1,
       replacements=["a", "list"])
-  ctx.emit.annotation(
+  ctx.emit.finding(
       level="warning",
       message="weird",
       line=1,
       end_line=10,
       replacements={"a": True, "dict": 42})
-  ctx.emit.annotation(
+  ctx.emit.finding(
       level="warning",
       message="no span, full file",
       replacements=["this text is a replacement\nfor the entire file\n"])

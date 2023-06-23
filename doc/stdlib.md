@@ -46,30 +46,30 @@ ctx.emit is the object that exposes the API to emit results for checks.
 
 Fields:
 
-- annotation
+- finding
 - artifact
 
-## ctx.emit.annotation
+## ctx.emit.finding
 
-Emits an annotation from the current check.
+Emits a finding from the current check.
 
 ### Example
 
-A check level annotation:
+A check level finding:
 
 ```python
 def cb(ctx):
-  ctx.emit.annotation(level="warning", message="Do not change anything")
+  ctx.emit.finding(level="warning", message="Do not change anything")
 
 shac.register_check(cb)
 ```
 
-An annotation associated with a specific file:
+An finding associated with a specific file:
 
 ```python
 def cb(ctx):
   for path, _ in ctx.scm.affected_files().items():
-    ctx.emit.annotation(
+    ctx.emit.finding(
         level="notice",
         message="great code",
         filepath=path,
@@ -78,13 +78,13 @@ def cb(ctx):
 shac.register_check(cb)
 ```
 
-An annotation associated with a specific span within a file:
+An finding associated with a specific span within a file:
 
 ```python
 def cb(ctx):
   for path, meta in ctx.scm.affected_files().items():
     for num, line in meta.new_lines():
-      ctx.emit.annotation(
+      ctx.emit.finding(
           level="error",
           message="This line is superfluous",
           filepath=path,
@@ -100,13 +100,13 @@ shac.register_check(cb)
 ### Arguments
 
 * **level**: One of "notice", "warning" or "error".
-* **message**: Message of the annotation.
+* **message**: Message of the finding.
 * **filepath**: (optional) Path to the source file to annotate.
-* **line**: (optional) Line where the annotation should start. 1 based.
-* **col**: (optional) Column where the annotation should start. 1 based.
-* **end_line**: (optional) Line where the annotation should end if it represents a span. 1 based.
-* **end_col**: (optional) Column where the annotation should end if it represents a span. 1 based.
-* **replacements**: (optional) A sequence of str, representing possible replacement suggestions. The sequence can be a list or a tuple. The replacements apply to the entire file if no span is specified for the annotation.
+* **line**: (optional) Line where the finding should start. 1 based.
+* **col**: (optional) Column where the finding should start. 1 based.
+* **end_line**: (optional) Line where the finding should end if it represents a span. 1 based.
+* **end_col**: (optional) Column where the finding should end if it represents a span. 1 based.
+* **replacements**: (optional) A sequence of str, representing possible replacement suggestions. The sequence can be a list or a tuple. The replacements apply to the entire file if no span is specified for the finding.
 
 ## ctx.emit.artifact
 

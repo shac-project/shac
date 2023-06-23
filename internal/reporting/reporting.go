@@ -81,7 +81,7 @@ func (b *basic) Close() error {
 	return nil
 }
 
-func (b *basic) EmitAnnotation(ctx context.Context, check string, level engine.Level, message, root, file string, s engine.Span, replacements []string) error {
+func (b *basic) EmitFinding(ctx context.Context, check string, level engine.Level, message, root, file string, s engine.Span, replacements []string) error {
 	if file != "" {
 		// TODO(maruel): Do not drop span and replacements!
 		if s.Start.Line > 0 {
@@ -134,7 +134,7 @@ func (g *github) Close() error {
 	return nil
 }
 
-func (g *github) EmitAnnotation(ctx context.Context, check string, level engine.Level, message, root, file string, s engine.Span, replacements []string) error {
+func (g *github) EmitFinding(ctx context.Context, check string, level engine.Level, message, root, file string, s engine.Span, replacements []string) error {
 	if file != "" {
 		// TODO(maruel): Do not drop replacements!
 		if s.Start.Line > 0 {
@@ -191,7 +191,7 @@ func (i *interactive) Close() error {
 	return nil
 }
 
-func (i *interactive) EmitAnnotation(ctx context.Context, check string, level engine.Level, message, root, file string, s engine.Span, replacements []string) error {
+func (i *interactive) EmitFinding(ctx context.Context, check string, level engine.Level, message, root, file string, s engine.Span, replacements []string) error {
 	c := levelColor[level]
 	if file != "" {
 		// TODO(maruel): Do not drop replacements!

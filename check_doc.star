@@ -33,13 +33,13 @@ def check_docs(ctx):
   want = _struct_signature(ctx)
   got = _struct_signature(doc_ctx)
   if want != got:
-    ctx.emit.annotation(
+    ctx.emit.finding(
         level="error",
         message="stdlib.star needs to be updated. Want:\n%s\nGot:\n%s" % (want, got))
   want = _struct_signature(shac)
   got = _struct_signature(doc_shac)
   if want != got:
-    ctx.emit.annotation(
+    ctx.emit.finding(
         level="error",
         message="stdlib.star needs to be updated. Want:\n%s\nGot:\n%s" % (want, got))
 

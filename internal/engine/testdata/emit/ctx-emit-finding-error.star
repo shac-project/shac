@@ -13,6 +13,14 @@
 # limitations under the License.
 
 def cb(ctx):
-  ctx.emit.annotation(level="invalid", message="foo")
+  ctx.emit.finding(
+      level="error",
+      message="bad code",
+      filepath="file.txt",
+      line=1,
+      col=1,
+      end_line=10,
+      end_col=1,
+      replacements=["nothing", "broken code"])
 
 shac.register_check(cb)

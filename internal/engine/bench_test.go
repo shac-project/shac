@@ -48,21 +48,21 @@ func BenchmarkPrint100_Git(b *testing.B) {
 	benchStarlarkPrint(b, "testdata/bench", "print100.star", true, want)
 }
 
-func BenchmarkCtxEmitAnnotation(b *testing.B) {
-	// Use ctx-emit-annotation-warning.star since it only emit once, which makes
+func BenchmarkCtxEmitFinding(b *testing.B) {
+	// Use ctx-emit-finding-warning.star since it only emit once, which makes
 	// understanding memory allocation easier.
 	root := b.TempDir()
-	copyFile(b, root, "testdata/bench/ctx-emit-annotation.star")
+	copyFile(b, root, "testdata/bench/ctx-emit-finding.star")
 	copyFile(b, root, "testdata/bench/file.txt")
 	r := reportEmitNoPrint{reportNoPrint: reportNoPrint{t: b}}
-	o := Options{Report: &r, Root: root, main: "ctx-emit-annotation.star"}
+	o := Options{Report: &r, Root: root, main: "ctx-emit-finding.star"}
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		if err := Run(context.Background(), &o); err != nil {
 			b.Fatal(err)
 		}
-		r.annotations = r.annotations[:0]
+		r.findings = r.findings[:0]
 		r.artifacts = r.artifacts[:0]
 	}
 }
@@ -79,7 +79,7 @@ func BenchmarkCtxEmitArtifact(b *testing.B) {
 		if err := Run(context.Background(), &o); err != nil {
 			b.Fatal(err)
 		}
-		r.annotations = r.annotations[:0]
+		r.findings = r.findings[:0]
 		r.artifacts = r.artifacts[:0]
 	}
 }

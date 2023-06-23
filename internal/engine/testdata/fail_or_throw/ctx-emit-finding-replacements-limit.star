@@ -13,9 +13,10 @@
 # limitations under the License.
 
 def cb(ctx):
-  ctx.emit.annotation(
+  too_many = ["a"] * 101
+  ctx.emit.finding(
       level="notice",
       message="fix it",
-      replacements=("nothing", 42))
+      replacements=too_many)
 
 shac.register_check(cb)

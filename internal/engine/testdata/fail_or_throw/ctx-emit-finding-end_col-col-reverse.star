@@ -13,12 +13,12 @@
 # limitations under the License.
 
 def cb(ctx):
-  ctx.emit.annotation(
+  ctx.emit.finding(
       level="notice",
       message="fix it",
       line=1,
-      col=1,
-      end_line=-10,
+      col=2,
+      end_line=1,
       end_col=1)
 
 shac.register_check(cb)

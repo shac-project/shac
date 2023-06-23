@@ -43,15 +43,15 @@ func TestBasic(t *testing.T) {
 	r := basic{out: &buf}
 	ctx := context.Background()
 	// No context.
-	if err := r.EmitAnnotation(ctx, "mycheck", engine.Notice, "message1", "", "", engine.Span{}, nil); err != nil {
+	if err := r.EmitFinding(ctx, "mycheck", engine.Notice, "message1", "", "", engine.Span{}, nil); err != nil {
 		t.Fatal(err)
 	}
 	// Only a file.
-	if err := r.EmitAnnotation(ctx, "mycheck", engine.Notice, "message2", "", "testdata/file.txt", engine.Span{}, nil); err != nil {
+	if err := r.EmitFinding(ctx, "mycheck", engine.Notice, "message2", "", "testdata/file.txt", engine.Span{}, nil); err != nil {
 		t.Fatal(err)
 	}
 	// File and line number. More than this is ignored.
-	if err := r.EmitAnnotation(ctx, "mycheck", engine.Notice, "message3", "", "testdata/file.txt", engine.Span{Start: engine.Cursor{Line: 10}}, nil); err != nil {
+	if err := r.EmitFinding(ctx, "mycheck", engine.Notice, "message3", "", "testdata/file.txt", engine.Span{Start: engine.Cursor{Line: 10}}, nil); err != nil {
 		t.Fatal(err)
 	}
 	if err := r.EmitArtifact(ctx, "mycheck", "", "testdata/file.txt", []byte("content")); err == nil {
@@ -82,27 +82,27 @@ func TestGitHub(t *testing.T) {
 	r := github{out: &buf}
 	ctx := context.Background()
 	// No context.
-	if err := r.EmitAnnotation(ctx, "mycheck", engine.Notice, "message1", "", "", engine.Span{}, nil); err != nil {
+	if err := r.EmitFinding(ctx, "mycheck", engine.Notice, "message1", "", "", engine.Span{}, nil); err != nil {
 		t.Fatal(err)
 	}
 	// Only a file.
-	if err := r.EmitAnnotation(ctx, "mycheck", engine.Notice, "message2", "", "testdata/file.txt", engine.Span{}, nil); err != nil {
+	if err := r.EmitFinding(ctx, "mycheck", engine.Notice, "message2", "", "testdata/file.txt", engine.Span{}, nil); err != nil {
 		t.Fatal(err)
 	}
 	// File and line number.
-	if err := r.EmitAnnotation(ctx, "mycheck", engine.Notice, "message3", "", "testdata/file.txt", engine.Span{Start: engine.Cursor{Line: 10}}, nil); err != nil {
+	if err := r.EmitFinding(ctx, "mycheck", engine.Notice, "message3", "", "testdata/file.txt", engine.Span{Start: engine.Cursor{Line: 10}}, nil); err != nil {
 		t.Fatal(err)
 	}
 	// File, line number and column.
-	if err := r.EmitAnnotation(ctx, "mycheck", engine.Notice, "message4", "", "testdata/file.txt", engine.Span{Start: engine.Cursor{Line: 10, Col: 1}}, nil); err != nil {
+	if err := r.EmitFinding(ctx, "mycheck", engine.Notice, "message4", "", "testdata/file.txt", engine.Span{Start: engine.Cursor{Line: 10, Col: 1}}, nil); err != nil {
 		t.Fatal(err)
 	}
 	// File, two line numbers.
-	if err := r.EmitAnnotation(ctx, "mycheck", engine.Notice, "message5", "", "testdata/file.txt", engine.Span{Start: engine.Cursor{Line: 10}, End: engine.Cursor{Line: 12}}, nil); err != nil {
+	if err := r.EmitFinding(ctx, "mycheck", engine.Notice, "message5", "", "testdata/file.txt", engine.Span{Start: engine.Cursor{Line: 10}, End: engine.Cursor{Line: 12}}, nil); err != nil {
 		t.Fatal(err)
 	}
 	// file, start and end span on separate lines.
-	if err := r.EmitAnnotation(ctx, "mycheck", engine.Notice, "message6", "", "testdata/file.txt", engine.Span{Start: engine.Cursor{Line: 10, Col: 1}, End: engine.Cursor{Line: 12, Col: 2}}, nil); err != nil {
+	if err := r.EmitFinding(ctx, "mycheck", engine.Notice, "message6", "", "testdata/file.txt", engine.Span{Start: engine.Cursor{Line: 10, Col: 1}, End: engine.Cursor{Line: 12, Col: 2}}, nil); err != nil {
 		t.Fatal(err)
 	}
 	if err := r.EmitArtifact(ctx, "mycheck", "", "testdata/file.txt", []byte("content")); err == nil {
@@ -129,7 +129,7 @@ func TestGitHub(t *testing.T) {
 	}
 }
 
-func TestInteractive_Annotation(t *testing.T) {
+func TestInteractive_Finding(t *testing.T) {
 	t.Parallel()
 	data := []struct {
 		name     string
@@ -330,7 +330,7 @@ func TestInteractive_Annotation(t *testing.T) {
 			// Note that many of the ANSI code are hacked out in ansi_test.go.
 			r := interactive{out: colorable.NewNonColorable(&buf)}
 			ctx := context.Background()
-			if err := r.EmitAnnotation(ctx, "mycheck", l.l, "message1", "testdata", l.filepath, l.span, nil); err != nil {
+			if err := r.EmitFinding(ctx, "mycheck", l.l, "message1", "testdata", l.filepath, l.span, nil); err != nil {
 				t.Fatal(err)
 			}
 			if err := r.Close(); err != nil {

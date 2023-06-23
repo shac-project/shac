@@ -423,7 +423,7 @@ func TestRun_SCM_Git_Recursive(t *testing.T) {
 		"  for p, m in ctx.scm.affected_files().items():\n"+
 		"    if p.endswith(\".txt\"):\n"+
 		"      print(name + \": \" + p + \"=\" + m.new_lines()[0][1])\n"+
-		"      ctx.emit.annotation(level=\"notice\", message=name, filepath=p)\n"+
+		"      ctx.emit.finding(level=\"notice\", message=name, filepath=p)\n"+
 		"    else:\n"+
 		"      print(name + \": \" + p)\n"+
 		"shac.register_check(cb)\n")
@@ -433,7 +433,7 @@ func TestRun_SCM_Git_Recursive(t *testing.T) {
 		"  for p, m in ctx.scm.affected_files().items():\n"+
 		"    if p.endswith(\".txt\"):\n"+
 		"      print(name + \": \" + p + \"=\" + m.new_lines()[0][1])\n"+
-		"      ctx.emit.annotation(level=\"notice\", message=name, filepath=p)\n"+
+		"      ctx.emit.finding(level=\"notice\", message=name, filepath=p)\n"+
 		"    else:\n"+
 		"      print(name + \": \" + p)\n"+
 		"shac.register_check(cb)\n")
@@ -444,7 +444,7 @@ func TestRun_SCM_Git_Recursive(t *testing.T) {
 		"  for p, m in ctx.scm.affected_files().items():\n"+
 		"    if p.endswith(\".txt\"):\n"+
 		"      print(name + \": \" + p + \"=\" + m.new_lines()[0][1])\n"+
-		"      ctx.emit.annotation(level=\"notice\", message=name, filepath=p)\n"+
+		"      ctx.emit.finding(level=\"notice\", message=name, filepath=p)\n"+
 		"    else:\n"+
 		"      print(name + \": \" + p)\n"+
 		"shac.register_check(cb)\n")
@@ -474,7 +474,7 @@ func TestRun_SCM_Git_Recursive(t *testing.T) {
 	if diff := cmp.Diff(want, got); diff != "" {
 		t.Fatalf("mismatch (-want +got):\n%s", diff)
 	}
-	annotations := []annotation{
+	findings := []finding{
 		{
 			Check:   "cb",
 			Level:   "notice",
@@ -491,8 +491,8 @@ func TestRun_SCM_Git_Recursive(t *testing.T) {
 		},
 	}
 	// With parallel execution, the output will not be deterministic. Sort it manually.
-	sort.Slice(r.annotations, func(i, j int) bool { return r.annotations[i].File < r.annotations[j].File })
-	if diff := cmp.Diff(annotations, r.annotations); diff != "" {
+	sort.Slice(r.findings, func(i, j int) bool { return r.findings[i].File < r.findings[j].File })
+	if diff := cmp.Diff(findings, r.findings); diff != "" {
 		t.Errorf("mismatch (-want +got):\n%s", diff)
 	}
 }
@@ -545,7 +545,7 @@ func TestRun_SCM_Git_Recursive_Shared(t *testing.T) {
 		"  for p, m in ctx.scm.affected_files().items():\n"+
 		"    if p.endswith(\".txt\"):\n"+
 		"      print(p + \"=\" + m.new_lines()[0][1])\n"+
-		"      ctx.emit.annotation(level=\"notice\", message=\"internal\", filepath=p)\n"+
+		"      ctx.emit.finding(level=\"notice\", message=\"internal\", filepath=p)\n"+
 		"    else:\n"+
 		"      print(p)\n")
 	runGit(t, root, "add", ".")
@@ -567,7 +567,7 @@ func TestRun_SCM_Git_Recursive_Shared(t *testing.T) {
 	if diff := cmp.Diff(want, got); diff != "" {
 		t.Fatalf("mismatch (-want +got):\n%s", diff)
 	}
-	annotations := []annotation{
+	findings := []finding{
 		{
 			Check:   "cb",
 			Level:   "notice",
@@ -577,8 +577,8 @@ func TestRun_SCM_Git_Recursive_Shared(t *testing.T) {
 		},
 	}
 	// With parallel execution, the output will not be deterministic. Sort it manually.
-	sort.Slice(r.annotations, func(i, j int) bool { return r.annotations[i].File < r.annotations[j].File })
-	if diff := cmp.Diff(annotations, r.annotations); diff != "" {
+	sort.Slice(r.findings, func(i, j int) bool { return r.findings[i].File < r.findings[j].File })
+	if diff := cmp.Diff(findings, r.findings); diff != "" {
 		t.Errorf("mismatch (-want +got):\n%s", diff)
 	}
 }
@@ -607,86 +607,6 @@ func TestTestDataFailOrThrow(t *testing.T) {
 				"  //backtrace.star:16:7: in fn2\n",
 		},
 		{
-			"ctx-emit-annotation-col-line.star",
-			"ctx.emit.annotation: for parameter \"col\": \"line\" must be specified",
-			"  //ctx-emit-annotation-col-line.star:16:22: in cb\n",
-		},
-		{
-			"ctx-emit-annotation-col.star",
-			"ctx.emit.annotation: for parameter \"col\": got -10, line are 1 based",
-			"  //ctx-emit-annotation-col.star:16:22: in cb\n",
-		},
-		{
-			"ctx-emit-annotation-end_col-col-reverse.star",
-			"ctx.emit.annotation: for parameter \"end_col\": must be greater than or equal to \"col\"",
-			"  //ctx-emit-annotation-end_col-col-reverse.star:16:22: in cb\n",
-		},
-		{
-			"ctx-emit-annotation-end_col-col.star",
-			"ctx.emit.annotation: for parameter \"end_col\": \"col\" must be specified",
-			"  //ctx-emit-annotation-end_col-col.star:16:22: in cb\n",
-		},
-		{
-			"ctx-emit-annotation-end_col.star",
-			"ctx.emit.annotation: for parameter \"end_col\": got -10, line are 1 based",
-			"  //ctx-emit-annotation-end_col.star:16:22: in cb\n",
-		},
-		{
-			"ctx-emit-annotation-end_line-line-reverse.star",
-			"ctx.emit.annotation: for parameter \"end_line\": must be greater than or equal to \"line\"",
-			"  //ctx-emit-annotation-end_line-line-reverse.star:16:22: in cb\n",
-		},
-		{
-			"ctx-emit-annotation-end_line-line.star",
-			"ctx.emit.annotation: for parameter \"end_line\": \"line\" must be specified",
-			"  //ctx-emit-annotation-end_line-line.star:16:22: in cb\n",
-		},
-		{
-			"ctx-emit-annotation-end_line.star",
-			"ctx.emit.annotation: for parameter \"end_line\": got -10, line are 1 based",
-			"  //ctx-emit-annotation-end_line.star:16:22: in cb\n",
-		},
-		{
-			"ctx-emit-annotation-kwarg.star",
-			"ctx.emit.annotation: unexpected keyword argument \"foo\"",
-			"  //ctx-emit-annotation-kwarg.star:16:22: in cb\n",
-		},
-		{
-			"ctx-emit-annotation-level.star",
-			"ctx.emit.annotation: for parameter \"level\": got \"invalid\", want one of \"notice\", \"warning\" or \"error\"",
-			"  //ctx-emit-annotation-level.star:16:22: in cb\n",
-		},
-		{
-			"ctx-emit-annotation-line.star",
-			"ctx.emit.annotation: for parameter \"line\": got -1, line are 1 based",
-			"  //ctx-emit-annotation-line.star:16:22: in cb\n",
-		},
-		{
-			"ctx-emit-annotation-message.star",
-			"ctx.emit.annotation: for parameter \"message\": got \"\", want string",
-			"  //ctx-emit-annotation-message.star:16:22: in cb\n",
-		},
-		{
-			"ctx-emit-annotation-replacements-limit.star",
-			"ctx.emit.annotation: for parameter \"replacements\": excessive number (101) of replacements",
-			"  //ctx-emit-annotation-replacements-limit.star:17:22: in cb\n",
-		},
-		{
-			"ctx-emit-annotation-replacements-list.star",
-			"ctx.emit.annotation: for parameter \"replacements\": got list, want sequence of str",
-			"  //ctx-emit-annotation-replacements-list.star:16:22: in cb\n",
-		},
-		{
-			"ctx-emit-annotation-replacements-str.star",
-			"ctx.emit.annotation: for parameter \"replacements\": got string, want starlark.Sequence",
-			"  //ctx-emit-annotation-replacements-str.star:16:22: in cb\n",
-		},
-		{
-			"ctx-emit-annotation-replacements-tuple.star",
-			"ctx.emit.annotation: for parameter \"replacements\": got tuple, want sequence of str",
-			"  //ctx-emit-annotation-replacements-tuple.star:16:22: in cb\n",
-		},
-		{
 			"ctx-emit-artifact-dir.star",
 			"ctx.emit.artifact: for parameter \"filepath\": \".\" is a directory",
 			"  //ctx-emit-artifact-dir.star:16:20: in cb\n",
@@ -710,6 +630,86 @@ func TestTestDataFailOrThrow(t *testing.T) {
 			"ctx-emit-artifact-windows.star",
 			"ctx.emit.artifact: for parameter \"filepath\": \"foo\\\\bar\" use POSIX style path",
 			"  //ctx-emit-artifact-windows.star:16:20: in cb\n",
+		},
+		{
+			"ctx-emit-finding-col-line.star",
+			"ctx.emit.finding: for parameter \"col\": \"line\" must be specified",
+			"  //ctx-emit-finding-col-line.star:16:19: in cb\n",
+		},
+		{
+			"ctx-emit-finding-col.star",
+			"ctx.emit.finding: for parameter \"col\": got -10, line are 1 based",
+			"  //ctx-emit-finding-col.star:16:19: in cb\n",
+		},
+		{
+			"ctx-emit-finding-end_col-col-reverse.star",
+			"ctx.emit.finding: for parameter \"end_col\": must be greater than or equal to \"col\"",
+			"  //ctx-emit-finding-end_col-col-reverse.star:16:19: in cb\n",
+		},
+		{
+			"ctx-emit-finding-end_col-col.star",
+			"ctx.emit.finding: for parameter \"end_col\": \"col\" must be specified",
+			"  //ctx-emit-finding-end_col-col.star:16:19: in cb\n",
+		},
+		{
+			"ctx-emit-finding-end_col.star",
+			"ctx.emit.finding: for parameter \"end_col\": got -10, line are 1 based",
+			"  //ctx-emit-finding-end_col.star:16:19: in cb\n",
+		},
+		{
+			"ctx-emit-finding-end_line-line-reverse.star",
+			"ctx.emit.finding: for parameter \"end_line\": must be greater than or equal to \"line\"",
+			"  //ctx-emit-finding-end_line-line-reverse.star:16:19: in cb\n",
+		},
+		{
+			"ctx-emit-finding-end_line-line.star",
+			"ctx.emit.finding: for parameter \"end_line\": \"line\" must be specified",
+			"  //ctx-emit-finding-end_line-line.star:16:19: in cb\n",
+		},
+		{
+			"ctx-emit-finding-end_line.star",
+			"ctx.emit.finding: for parameter \"end_line\": got -10, line are 1 based",
+			"  //ctx-emit-finding-end_line.star:16:19: in cb\n",
+		},
+		{
+			"ctx-emit-finding-kwarg.star",
+			"ctx.emit.finding: unexpected keyword argument \"foo\"",
+			"  //ctx-emit-finding-kwarg.star:16:19: in cb\n",
+		},
+		{
+			"ctx-emit-finding-level.star",
+			"ctx.emit.finding: for parameter \"level\": got \"invalid\", want one of \"notice\", \"warning\" or \"error\"",
+			"  //ctx-emit-finding-level.star:16:19: in cb\n",
+		},
+		{
+			"ctx-emit-finding-line.star",
+			"ctx.emit.finding: for parameter \"line\": got -1, line are 1 based",
+			"  //ctx-emit-finding-line.star:16:19: in cb\n",
+		},
+		{
+			"ctx-emit-finding-message.star",
+			"ctx.emit.finding: for parameter \"message\": got \"\", want string",
+			"  //ctx-emit-finding-message.star:16:19: in cb\n",
+		},
+		{
+			"ctx-emit-finding-replacements-limit.star",
+			"ctx.emit.finding: for parameter \"replacements\": excessive number (101) of replacements",
+			"  //ctx-emit-finding-replacements-limit.star:17:19: in cb\n",
+		},
+		{
+			"ctx-emit-finding-replacements-list.star",
+			"ctx.emit.finding: for parameter \"replacements\": got list, want sequence of str",
+			"  //ctx-emit-finding-replacements-list.star:16:19: in cb\n",
+		},
+		{
+			"ctx-emit-finding-replacements-str.star",
+			"ctx.emit.finding: for parameter \"replacements\": got string, want starlark.Sequence",
+			"  //ctx-emit-finding-replacements-str.star:16:19: in cb\n",
+		},
+		{
+			"ctx-emit-finding-replacements-tuple.star",
+			"ctx.emit.finding: for parameter \"replacements\": got tuple, want sequence of str",
+			"  //ctx-emit-finding-replacements-tuple.star:16:19: in cb\n",
 		},
 		{
 			"ctx-immutable.star",
@@ -1133,14 +1133,36 @@ func TestTestDataEmit(t *testing.T) {
 	t.Parallel()
 	root, got := enumDir(t, "emit")
 	data := []struct {
-		name        string
-		annotations []annotation
-		artifacts   []artifact
-		err         string
+		name      string
+		findings  []finding
+		artifacts []artifact
+		err       string
 	}{
 		{
-			"ctx-emit-annotation-error.star",
-			[]annotation{
+			"ctx-emit-artifact.star",
+			nil,
+			[]artifact{
+				{
+					Check:   "cb",
+					File:    "file.txt",
+					Content: []byte("content as str"),
+				},
+				{
+					Check:   "cb",
+					File:    "file.txt",
+					Content: []byte("content as bytes"),
+				},
+				{
+					Check: "cb",
+					Root:  root,
+					File:  "file.txt",
+				},
+			},
+			"",
+		},
+		{
+			"ctx-emit-finding-error.star",
+			[]finding{
 				{
 					Check:        "cb",
 					Level:        Error,
@@ -1155,8 +1177,8 @@ func TestTestDataEmit(t *testing.T) {
 			"a check failed",
 		},
 		{
-			"ctx-emit-annotation.star",
-			[]annotation{
+			"ctx-emit-finding.star",
+			[]finding{
 				{
 					Check:        "cb",
 					Level:        Warning,
@@ -1198,28 +1220,6 @@ func TestTestDataEmit(t *testing.T) {
 			nil,
 			"",
 		},
-		{
-			"ctx-emit-artifact.star",
-			nil,
-			[]artifact{
-				{
-					Check:   "cb",
-					File:    "file.txt",
-					Content: []byte("content as str"),
-				},
-				{
-					Check:   "cb",
-					File:    "file.txt",
-					Content: []byte("content as bytes"),
-				},
-				{
-					Check: "cb",
-					Root:  root,
-					File:  "file.txt",
-				},
-			},
-			"",
-		},
 	}
 	want := make([]string, len(data))
 	for i := range data {
@@ -1245,7 +1245,7 @@ func TestTestDataEmit(t *testing.T) {
 			} else if err != nil {
 				t.Fatal(err)
 			}
-			if diff := cmp.Diff(data[i].annotations, r.annotations); diff != "" {
+			if diff := cmp.Diff(data[i].findings, r.findings); diff != "" {
 				t.Errorf("mismatch (-want +got):\n%s", diff)
 			}
 			if diff := cmp.Diff(data[i].artifacts, r.artifacts); diff != "" {
@@ -1553,8 +1553,8 @@ type reportNoPrint struct {
 	t testing.TB
 }
 
-func (r *reportNoPrint) EmitAnnotation(ctx context.Context, check string, level Level, message, root, file string, s Span, replacements []string) error {
-	r.t.Errorf("unexpected annotation: %s: %s, %q, %s, %s, %# v, %v", check, level, message, root, file, s, replacements)
+func (r *reportNoPrint) EmitFinding(ctx context.Context, check string, level Level, message, root, file string, s Span, replacements []string) error {
+	r.t.Errorf("unexpected finding: %s: %s, %q, %s, %s, %# v, %v", check, level, message, root, file, s, replacements)
 	return errors.New("not implemented")
 }
 
@@ -1582,7 +1582,7 @@ func (r *reportPrint) Print(ctx context.Context, check, file string, line int, m
 	r.mu.Unlock()
 }
 
-type annotation struct {
+type finding struct {
 	Check        string
 	Level        Level
 	Message      string
@@ -1601,14 +1601,14 @@ type artifact struct {
 
 type reportEmitNoPrint struct {
 	reportNoPrint
-	mu          sync.Mutex
-	annotations []annotation
-	artifacts   []artifact
+	mu        sync.Mutex
+	findings  []finding
+	artifacts []artifact
 }
 
-func (r *reportEmitNoPrint) EmitAnnotation(ctx context.Context, check string, level Level, message, root, file string, s Span, replacements []string) error {
+func (r *reportEmitNoPrint) EmitFinding(ctx context.Context, check string, level Level, message, root, file string, s Span, replacements []string) error {
 	r.mu.Lock()
-	r.annotations = append(r.annotations, annotation{
+	r.findings = append(r.findings, finding{
 		Check:        check,
 		Level:        level,
 		Message:      message,
@@ -1630,13 +1630,13 @@ func (r *reportEmitNoPrint) EmitArtifact(ctx context.Context, check, root, file 
 
 type reportEmitPrint struct {
 	reportPrint
-	annotations []annotation
-	artifacts   []artifact
+	findings  []finding
+	artifacts []artifact
 }
 
-func (r *reportEmitPrint) EmitAnnotation(ctx context.Context, check string, level Level, message, root, file string, s Span, replacements []string) error {
+func (r *reportEmitPrint) EmitFinding(ctx context.Context, check string, level Level, message, root, file string, s Span, replacements []string) error {
 	r.mu.Lock()
-	r.annotations = append(r.annotations, annotation{
+	r.findings = append(r.findings, finding{
 		Check:        check,
 		Level:        level,
 		Message:      message,

@@ -27,8 +27,8 @@ func getCtx(root string) starlark.Value {
 	return toValue("ctx", starlark.StringDict{
 		// Implemented in runtime_ctx_emit.go
 		"emit": toValue("ctx.emit", starlark.StringDict{
-			"annotation": newBuiltinNone("ctx.emit.annotation", ctxEmitAnnotation),
-			"artifact":   newBuiltinNone("ctx.emit.artifact", ctxEmitArtifact),
+			"finding":  newBuiltinNone("ctx.emit.finding", ctxEmitFinding),
+			"artifact": newBuiltinNone("ctx.emit.artifact", ctxEmitArtifact),
 		}),
 		"io": toValue("ctx.io", starlark.StringDict{
 			"read_file": newBuiltin("ctx.io.read_file", ctxIoReadFile),

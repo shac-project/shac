@@ -13,7 +13,7 @@
 # limitations under the License.
 
 def cb(ctx):
-  ctx.emit.annotation(
+  ctx.emit.finding(
       level="notice",
       message="fix it",
       replacements=["nothing", 42])

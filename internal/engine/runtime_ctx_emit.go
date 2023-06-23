@@ -28,7 +28,7 @@ import (
 	"go.starlark.net/starlark"
 )
 
-func ctxEmitAnnotation(ctx context.Context, s *shacState, name string, args starlark.Tuple, kwargs []starlark.Tuple) error {
+func ctxEmitFinding(ctx context.Context, s *shacState, name string, args starlark.Tuple, kwargs []starlark.Tuple) error {
 	var arglevel starlark.String
 	var argmessage starlark.String
 	var argfilepath starlark.String
@@ -121,7 +121,7 @@ func ctxEmitAnnotation(ctx context.Context, s *shacState, name string, args star
 			return fmt.Errorf("for parameter \"filepath\": %s is not tracked", argfilepath)
 		}
 	}
-	if err := s.r.EmitAnnotation(ctx, c.name, level, message, root, file, span, replacements); err != nil {
+	if err := s.r.EmitFinding(ctx, c.name, level, message, root, file, span, replacements); err != nil {
 		return fmt.Errorf("failed to emit: %w", err)
 	}
 	return nil

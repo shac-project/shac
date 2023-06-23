@@ -31,7 +31,7 @@ def _gofmt(ctx, simplify = True):
   unformatted = ctx.os.exec(base_cmd + ["-l"] + go_files).wait().stdout.splitlines()
   for f in unformatted:
     new_contents = ctx.os.exec(base_cmd + [f]).wait().stdout
-    ctx.emit.annotation(
+    ctx.emit.finding(
       level="error",
       message="needs formatting",
       filepath=f,
@@ -60,12 +60,12 @@ def _gosec(ctx, version = "v2.15.0", level = "error"):
     d = json.decode(res.stdout)
     o = len(ctx.scm.root)+1
     for file, data in d["Golang errors"]:
-      ctx.emit.annotation(
+      ctx.emit.finding(
           level="error", message=i["error"], filepath=file[o:], line=int(i["line"]),
           col=int(i["column"]))
     for i in d["Issues"]:
       line = i["line"].split("-")[0]
-      ctx.emit.annotation(
+      ctx.emit.finding(
           level=level, message=i["rule_id"] + ": " + i["details"],
           filepath=i["file"][o:], line=int(line), col=int(i["column"]))
 
@@ -96,7 +96,7 @@ def _ineffassign(ctx, version = "v0.0.0-20230107090616-13ace0543b28"):
   # ineffassign emits some duplicate lines.
   for line in sorted(set(res.stderr.splitlines())):
     match = ctx.re.match(r"^%s/(.+):(\d+):(\d+): (.+)$" % ctx.scm.root, line)
-    ctx.emit.annotation(
+    ctx.emit.finding(
       level="error",
       filepath=match.groups[1],
       line=int(match.groups[2]),
@@ -140,7 +140,7 @@ def _staticcheck(ctx, version = "v0.4.3"):
       end_kwargs["end_line"] = f["end"]["line"]
       end_kwargs["end_col"] = f["end"]["column"] - 1
 
-    ctx.emit.annotation(
+    ctx.emit.finding(
       # Either "error" or "warning".
       level=f["severity"],
       message=f["message"],
@@ -196,7 +196,7 @@ def _shadow(ctx, version = "v0.7.0"):
 
   for finding in findings:
     match = ctx.re.match(r"^%s/(.+):(\d+):(\d+)$" % ctx.scm.root, finding["posn"])
-    ctx.emit.annotation(
+    ctx.emit.finding(
       level="error",
       filepath=match.groups[1],
       line=int(match.groups[2]),
