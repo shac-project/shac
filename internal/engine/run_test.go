@@ -1193,6 +1193,11 @@ func TestTestDataEmit(t *testing.T) {
 					Level:   Notice,
 					Message: "great code",
 					Span:    Span{Start: Cursor{Line: 100, Col: 2}},
+				}, {
+					Check:   "cb",
+					Level:   "notice",
+					Message: "nice",
+					Span:    Span{Start: Cursor{Line: 100, Col: 2}, End: Cursor{Line: 100, Col: 3}},
 				},
 				{
 					Check:        "cb",

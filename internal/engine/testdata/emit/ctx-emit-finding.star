@@ -23,6 +23,7 @@ def cb(ctx):
       end_col=1,
       replacements=("a", "tuple"))
   ctx.emit.finding(level="notice", line=100, col=2, message="great code")
+  ctx.emit.finding(level="notice", line=100, col=2, end_col=3, message="nice")
   ctx.emit.finding(
       level="warning",
       message="please fix",
