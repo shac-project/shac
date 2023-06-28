@@ -223,12 +223,12 @@ func (i *interactive) EmitFinding(ctx context.Context, check string, level engin
 						if s.End.Line == s.Start.Line && s.End.Col > 0 {
 							// Silently ignore when the ending offset is misaligned. It's easy to get wrong.
 							ec := s.End.Col
-							if ec > len(lines[l]) {
+							if ec > len(lines[l])+1 {
 								// Consider raising an alert so the check can be fixed.
-								ec = len(lines[l])
+								ec = len(lines[l]) + 1
 							}
 							// Intra-line highlight.
-							fmt.Fprintf(i.out, "  %s%s%s%s%s\n", lines[l][:s.Start.Col-1], c, lines[l][s.Start.Col-1:ec], reset, lines[l][ec:])
+							fmt.Fprintf(i.out, "  %s%s%s%s%s\n", lines[l][:s.Start.Col-1], c, lines[l][s.Start.Col-1:ec-1], reset, lines[l][ec-1:])
 						} else {
 							fmt.Fprintf(i.out, "  %s%s%s%s\n", lines[l][:s.Start.Col-1], c, lines[l][s.Start.Col-1:], reset)
 						}
@@ -243,11 +243,11 @@ func (i *interactive) EmitFinding(ctx context.Context, check string, level engin
 					if s.End.Col > 0 {
 						// Silently ignore when the ending offset is misaligned. It's easy to get wrong.
 						ec := s.End.Col
-						if ec > len(lines[l]) {
+						if ec > len(lines[l])+1 {
 							// Consider raising an alert so the check can be fixed.
-							ec = len(lines[l])
+							ec = len(lines[l]) + 1
 						}
-						fmt.Fprintf(i.out, "  %s%s%s%s\n", c, lines[l][:ec], reset, lines[l][ec:])
+						fmt.Fprintf(i.out, "  %s%s%s%s\n", c, lines[l][:ec-1], reset, lines[l][ec-1:])
 					} else {
 						fmt.Fprintf(i.out, "  %s%s%s\n", c, lines[l], reset)
 					}

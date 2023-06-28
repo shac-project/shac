@@ -81,7 +81,7 @@ def _ctx_emit_finding(level, message, filepath = None, line = None, col = None, 
               line=num,
               col=1,
               end_line=num,
-              end_col=len(line))
+              end_col=len(line)) + 1,
           )
 
     shac.register_check(cb)
@@ -94,9 +94,9 @@ def _ctx_emit_finding(level, message, filepath = None, line = None, col = None, 
     line: (optional) Line where the finding should start. 1 based.
     col: (optional) Column where the finding should start. 1 based.
     end_line: (optional) Line where the finding should end if it represents a
-      span. 1 based.
+      span, inclusive. 1 based.
     end_col: (optional) Column where the finding should end if it represents a
-      span. 1 based.
+      span, exclusive. 1 based.
     replacements: (optional) A sequence of str, representing possible
       replacement suggestions. The sequence can be a list or a tuple. The
       replacements apply to the entire file if no span is specified for the

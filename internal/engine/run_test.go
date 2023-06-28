@@ -642,9 +642,9 @@ func TestTestDataFailOrThrow(t *testing.T) {
 			"  //ctx-emit-finding-col.star:16:19: in cb\n",
 		},
 		{
-			"ctx-emit-finding-end_col-col-reverse.star",
-			"ctx.emit.finding: for parameter \"end_col\": must be greater than or equal to \"col\"",
-			"  //ctx-emit-finding-end_col-col-reverse.star:16:19: in cb\n",
+			"ctx-emit-finding-end_col-col-equal.star",
+			"ctx.emit.finding: for parameter \"end_col\": must be greater than \"col\"",
+			"  //ctx-emit-finding-end_col-col-equal.star:16:19: in cb\n",
 		},
 		{
 			"ctx-emit-finding-end_col-col.star",

@@ -54,7 +54,7 @@ def new_todos(ctx):
           line=num,
           col=line.index(m.groups[0])+1,
           end_line=num,
-          end_col=len(line),
+          end_col=len(line)+1,
       )
 
 

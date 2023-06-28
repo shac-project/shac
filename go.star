@@ -138,7 +138,7 @@ def _staticcheck(ctx, version = "v0.4.3"):
     end_kwargs = {}
     if f["end"]["line"]:
       end_kwargs["end_line"] = f["end"]["line"]
-      end_kwargs["end_col"] = f["end"]["column"] - 1
+      end_kwargs["end_col"] = f["end"]["column"]
 
     ctx.emit.finding(
       # Either "error" or "warning".

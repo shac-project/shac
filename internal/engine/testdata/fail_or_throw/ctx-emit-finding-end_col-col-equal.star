@@ -19,6 +19,6 @@ def cb(ctx):
       line=1,
       col=2,
       end_line=1,
-      end_col=1)
+      end_col=2)
 
 shac.register_check(cb)

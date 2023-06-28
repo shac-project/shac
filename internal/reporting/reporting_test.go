@@ -251,7 +251,7 @@ func TestInteractive_Finding(t *testing.T) {
 			"span 2 lines",
 			engine.Notice,
 			"file.txt",
-			engine.Span{Start: engine.Cursor{Line: 1, Col: 2}, End: engine.Cursor{Line: 2, Col: 2}},
+			engine.Span{Start: engine.Cursor{Line: 1, Col: 2}, End: engine.Cursor{Line: 2, Col: 3}},
 			"<R>[<Hc>mycheck<R>/<G>notice<R>] file.txt(1): message1\n" +
 				"\n" +
 				"  T<G>his<R>\n" +
@@ -263,7 +263,7 @@ func TestInteractive_Finding(t *testing.T) {
 			"span end col overflow",
 			engine.Notice,
 			"file.txt",
-			engine.Span{Start: engine.Cursor{Line: 4, Col: 1}, End: engine.Cursor{Line: 5, Col: 10}},
+			engine.Span{Start: engine.Cursor{Line: 4, Col: 1}, End: engine.Cursor{Line: 5, Col: 11}},
 			"<R>[<Hc>mycheck<R>/<G>notice<R>] file.txt(4): message1\n" +
 				"\n" +
 				"  Has\n" +
@@ -276,7 +276,7 @@ func TestInteractive_Finding(t *testing.T) {
 			"span intra-line 1 char",
 			engine.Notice,
 			"file.txt",
-			engine.Span{Start: engine.Cursor{Line: 5, Col: 2}, End: engine.Cursor{Line: 5, Col: 2}},
+			engine.Span{Start: engine.Cursor{Line: 5, Col: 2}, End: engine.Cursor{Line: 5, Col: 3}},
 			"<R>[<Hc>mycheck<R>/<G>notice<R>] file.txt(5): message1\n" +
 				"\n" +
 				"  A\n" +
@@ -288,7 +288,7 @@ func TestInteractive_Finding(t *testing.T) {
 			"span intra-line 2 chars",
 			engine.Notice,
 			"file.txt",
-			engine.Span{Start: engine.Cursor{Line: 5, Col: 2}, End: engine.Cursor{Line: 5, Col: 3}},
+			engine.Span{Start: engine.Cursor{Line: 5, Col: 2}, End: engine.Cursor{Line: 5, Col: 4}},
 			"<R>[<Hc>mycheck<R>/<G>notice<R>] file.txt(5): message1\n" +
 				"\n" +
 				"  A\n" +
@@ -300,7 +300,7 @@ func TestInteractive_Finding(t *testing.T) {
 			"span intra-line EOL",
 			engine.Notice,
 			"file.txt",
-			engine.Span{Start: engine.Cursor{Line: 5, Col: 1}, End: engine.Cursor{Line: 5, Col: 6}},
+			engine.Span{Start: engine.Cursor{Line: 5, Col: 1}, End: engine.Cursor{Line: 5, Col: 7}},
 			"<R>[<Hc>mycheck<R>/<G>notice<R>] file.txt(5): message1\n" +
 				"\n" +
 				"  A\n" +
@@ -312,7 +312,7 @@ func TestInteractive_Finding(t *testing.T) {
 			"span intra-line EOL overflow",
 			engine.Notice,
 			"file.txt",
-			engine.Span{Start: engine.Cursor{Line: 5, Col: 1}, End: engine.Cursor{Line: 5, Col: 10}},
+			engine.Span{Start: engine.Cursor{Line: 5, Col: 1}, End: engine.Cursor{Line: 5, Col: 11}},
 			"<R>[<Hc>mycheck<R>/<G>notice<R>] file.txt(5): message1\n" +
 				"\n" +
 				"  A\n" +

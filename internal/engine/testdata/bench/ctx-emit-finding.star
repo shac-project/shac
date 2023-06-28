@@ -20,7 +20,7 @@ def cb(ctx):
       line=1,
       col=1,
       end_line=10,
-      end_col=1,
+      end_col=2,
       replacements=("a", "tuple"))
 
 shac.register_check(cb)
