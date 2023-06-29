@@ -32,6 +32,24 @@ shac doc shac.star | less
 * [doc/stdlib.star](doc/stdlib.star): shac runtime standard library starlark
   pseudo code.
 
+## Road map
+
+Planned features/changes, in descending order by priority:
+
+* [ ] Automatic fix application with handling for conflicting suggestions
+* [ ] Configuring files to exclude from shac analysis in `shac.textproto`
+* [ ] Include unstaged files in analysis, including respecting unstaged
+  `shac.star` files
+* [ ] Provide a `.shac` cache directory that checks can write to
+* [ ] Mount checkout directory read-only
+* [ ] Built-in formatting of Starlark files
+* [ ] Configurable "pass-throughs" - non-default environment variables and
+  mounts that can optionally be passed through to the sandbox
+* [ ] Add `glob` arguments to `ctx.scm.{all,affected}_files()` functions for
+  easier filtering
+* [ ] Filesystem sandboxing on MacOS
+* [ ] Windows sandboxing
+
 ## Contributing
 
 ⚠ The source of truth is at
