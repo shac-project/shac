@@ -42,6 +42,7 @@ Planned features/changes, in descending order by priority:
   `shac.star` files
 * [ ] Provide a `.shac` cache directory that checks can write to
 * [ ] Mount checkout directory read-only
+* [ ] Give checks access to the commit message via `ctx.scm`
 * [ ] Built-in formatting of Starlark files
 * [ ] Configurable "pass-throughs" - non-default environment variables and
   mounts that can optionally be passed through to the sandbox
