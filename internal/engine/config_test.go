@@ -24,6 +24,7 @@ import (
 )
 
 func TestDocument_Validate(t *testing.T) {
+	t.Parallel()
 	data := []struct {
 		in  string
 		err string
@@ -445,6 +446,7 @@ func TestDocument_Validate(t *testing.T) {
 	for i, l := range data {
 		l := l
 		t.Run(strconv.Itoa(i), func(t *testing.T) {
+			t.Parallel()
 			t.Log(l.in)
 			doc := Document{}
 			if err := prototext.Unmarshal([]byte(l.in), &doc); err != nil {
@@ -462,6 +464,7 @@ func TestDocument_Validate(t *testing.T) {
 }
 
 func TestSumDigest(t *testing.T) {
+	t.Parallel()
 	in := "requirements {\n" +
 		"  direct {\n" +
 		"    url: \"example.com/bar\"\n" +

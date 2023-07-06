@@ -27,6 +27,7 @@ import (
 
 func TestDocStdlib(t *testing.T) {
 	// This is a state change detector.
+	t.Parallel()
 	got, err := Doc("stdlib")
 	if err != nil {
 		t.Fatal(err)
@@ -41,6 +42,7 @@ func TestDocStdlib(t *testing.T) {
 }
 
 func TestDoc(t *testing.T) {
+	t.Parallel()
 	p, err := filepath.Abs("../../shac.star")
 	if err != nil {
 		t.Fatal(err)
@@ -55,6 +57,7 @@ func TestDoc(t *testing.T) {
 }
 
 func TestDocTemplate(t *testing.T) {
+	t.Parallel()
 	data := []struct {
 		in   string
 		want string
@@ -84,6 +87,7 @@ func TestDocTemplate(t *testing.T) {
 	for i, line := range data {
 		line := line
 		t.Run(strconv.Itoa(i), func(t *testing.T) {
+			t.Parallel()
 			got, err := genDoc(t.TempDir(), "main.star", line.in, false)
 			if err != nil {
 				t.Fatal(err)
@@ -99,14 +103,7 @@ func TestDocgenGenerator(t *testing.T) {
 	// It's not really a unit test, it's more to document parts of what is
 	// available in the template engine.
 	t.Parallel()
-	g := docgen.Generator{
-		Starlark: func(m string) (string, error) {
-			if m != "main.star" {
-				t.Fatal(m)
-			}
-			// See https://pkg.go.dev/go.chromium.org/luci/lucicfg/docgen/docstring for
-			// the parsing algorithm.
-			src := `
+	src := `
 # This is a comment.
 def _affected_files():
   """Returns affected files.
@@ -132,9 +129,6 @@ file = struct(
   action = "A",
 )
 `
-			return src, nil
-		},
-	}
 	common := `{{ $af := Symbol "main.star" "ctx.scm.affected_files" }}` +
 		`{{- $file := Symbol "main.star" "file" }}` +
 		`{{- $ctx := Symbol "main.star" "ctx" }}`
@@ -186,6 +180,17 @@ file = struct(
 	for i, line := range data {
 		line := line
 		t.Run(strconv.Itoa(i), func(t *testing.T) {
+			t.Parallel()
+			g := docgen.Generator{
+				Starlark: func(m string) (string, error) {
+					if m != "main.star" {
+						t.Fatal(m)
+					}
+					// See https://pkg.go.dev/go.chromium.org/luci/lucicfg/docgen/docstring for
+					// the parsing algorithm.
+					return src, nil
+				},
+			}
 			b, err := g.Render(common + line.in)
 			if err != nil {
 				t.Fatal(err)

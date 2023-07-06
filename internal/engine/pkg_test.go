@@ -35,6 +35,7 @@ import (
 )
 
 func TestFSToDigest_Reproducible(t *testing.T) {
+	t.Parallel()
 	// Reuse a simple Go project that is in Go Proxy (https://proxy.golang.org/).
 	// This ensures the algorithm matches the expected value.
 	// Intentionally unzip to disk so we don't use funky in-memory file system
@@ -72,6 +73,7 @@ func TestFSToDigest_Reproducible(t *testing.T) {
 }
 
 func TestFSToDigest_Fail(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	if d, err := FSToDigest(os.DirFS(root), ""); d != "" {
 		t.Fatal(d)
@@ -90,6 +92,7 @@ func TestFSToDigest_Fail(t *testing.T) {
 }
 
 func TestPackageManager(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	mu := sync.Mutex{}
 	var cmds []string

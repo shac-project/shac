@@ -121,6 +121,7 @@ func TestRun_SCM_Raw(t *testing.T) {
 	writeFile(t, root, "a.txt", "First file")
 	copySCM(t, root)
 	t.Run("affected", func(t *testing.T) {
+		t.Parallel()
 		want := "[//ctx-scm-affected_files.star:19] \n" +
 			"a.txt: \n" +
 			"ctx-scm-affected_files-include_deleted.star: \n" +
@@ -308,10 +309,12 @@ func TestRun_SCM_DeletedFile(t *testing.T) {
 	}
 
 	t.Run("affected", func(t *testing.T) {
+		t.Parallel()
 		want := "[//ctx-scm-affected_files.star:19] \n\n"
 		testStarlarkPrint(t, root, "ctx-scm-affected_files.star", false, want)
 	})
 	t.Run("affected-include_deleted", func(t *testing.T) {
+		t.Parallel()
 		want := "[//ctx-scm-affected_files-include_deleted.star:24] \n" +
 			"file-to-delete.txt (D): ()\n" +
 			"\n"
@@ -1105,6 +1108,7 @@ func TestRunNetworkSandbox(t *testing.T) {
 	for i := range data {
 		i := i
 		t.Run(data[i].name, func(t *testing.T) {
+			t.Parallel()
 			server := httptest.NewServer(handler)
 			defer server.Close()
 
@@ -1236,6 +1240,7 @@ func TestTestDataEmit(t *testing.T) {
 	for i := range data {
 		i := i
 		t.Run(data[i].name, func(t *testing.T) {
+			t.Parallel()
 			r := reportEmitNoPrint{reportNoPrint: reportNoPrint{t: t}}
 			o := Options{Report: &r, Root: root, main: data[i].name, config: "../config/valid.textproto"}
 			err := Run(context.Background(), &o)
@@ -1392,6 +1397,7 @@ func TestTestDataPrint(t *testing.T) {
 	for i := range data {
 		i := i
 		t.Run(data[i].name, func(t *testing.T) {
+			t.Parallel()
 			testStarlarkPrint(t, p, data[i].name, false, data[i].want)
 		})
 	}
