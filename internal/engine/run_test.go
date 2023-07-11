@@ -166,31 +166,49 @@ func TestRun_SCM_Git_NoUpstream_Pristine(t *testing.T) {
 	copySCM(t, root)
 	runGit(t, root, "add", "ctx-scm-*.star")
 	runGit(t, root, "commit", "-m", "Third commit")
-	t.Run("affected", func(t *testing.T) {
-		t.Parallel()
-		want := "[//ctx-scm-affected_files.star:19] \n" +
-			scmStarlarkAddedFiles +
-			"\n"
-		testStarlarkPrint(t, root, "ctx-scm-affected_files.star", false, want)
-	})
-	t.Run("affected/all", func(t *testing.T) {
-		t.Parallel()
-		want := "[//ctx-scm-affected_files.star:19] \n" +
-			"a.txt: A\n" +
-			scmStarlarkAddedFiles +
-			"z.txt: A\n" +
-			"\n"
-		testStarlarkPrint(t, root, "ctx-scm-affected_files.star", true, want)
-	})
-	t.Run("all", func(t *testing.T) {
-		t.Parallel()
-		want := "[//ctx-scm-all_files.star:19] \n" +
-			"a.txt: A\n" +
-			scmStarlarkAddedFiles +
-			"z.txt: A\n" +
-			"\n"
-		testStarlarkPrint(t, root, "ctx-scm-all_files.star", false, want)
-	})
+
+	data := []struct {
+		name string
+		all  bool
+		want string
+	}{
+		{
+			"ctx-scm-affected_files.star",
+			false,
+			"[//ctx-scm-affected_files.star:19] \n" +
+				scmStarlarkAddedFiles +
+				"\n",
+		},
+		{
+			"ctx-scm-affected_files.star",
+			true,
+			"[//ctx-scm-affected_files.star:19] \n" +
+				"a.txt: A\n" +
+				scmStarlarkAddedFiles +
+				"z.txt: A\n" +
+				"\n",
+		},
+		{
+			"ctx-scm-all_files.star",
+			false,
+			"[//ctx-scm-all_files.star:19] \n" +
+				"a.txt: A\n" +
+				scmStarlarkAddedFiles +
+				"z.txt: A\n" +
+				"\n",
+		},
+	}
+	for i := range data {
+		i := i
+		name := data[i].name
+		if data[i].all {
+			name += "/all"
+		}
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			testStarlarkPrint(t, root, data[i].name, data[i].all, data[i].want)
+		})
+	}
 }
 
 func TestRun_SCM_Git_NoUpstream_Staged(t *testing.T) {
@@ -199,34 +217,52 @@ func TestRun_SCM_Git_NoUpstream_Staged(t *testing.T) {
 	root := makeGit(t)
 	copySCM(t, root)
 	runGit(t, root, "add", "ctx-scm-*.star")
-	t.Run("affected", func(t *testing.T) {
-		t.Parallel()
-		want := "[//ctx-scm-affected_files.star:19] \n" +
-			scmStarlarkAddedFiles +
-			"\n"
-		testStarlarkPrint(t, root, "ctx-scm-affected_files.star", false, want)
-	})
-	t.Run("affected-new_lines", func(t *testing.T) {
-		t.Parallel()
-		want := "[//ctx-scm-affected_files-new_lines.star:31] ctx-scm-affected_files-include_deleted.star\n" +
-			"1: # Copyright 2023 The Shac Authors\n"
-		testStarlarkPrint(t, root, "ctx-scm-affected_files-new_lines.star", false, want)
-	})
-	t.Run("affected-new_lines/all", func(t *testing.T) {
-		t.Parallel()
-		want := "[//ctx-scm-affected_files-new_lines.star:31] a.txt\n" +
-			"1: First file\n"
-		testStarlarkPrint(t, root, "ctx-scm-affected_files-new_lines.star", true, want)
-	})
-	t.Run("all", func(t *testing.T) {
-		t.Parallel()
-		want := "[//ctx-scm-all_files.star:19] \n" +
-			"a.txt: A\n" +
-			scmStarlarkAddedFiles +
-			"z.txt: A\n" +
-			"\n"
-		testStarlarkPrint(t, root, "ctx-scm-all_files.star", false, want)
-	})
+
+	data := []struct {
+		name string
+		all  bool
+		want string
+	}{
+		{
+			"ctx-scm-affected_files.star",
+			false,
+			"[//ctx-scm-affected_files.star:19] \n" +
+				scmStarlarkAddedFiles +
+				"\n",
+		},
+		{
+			"ctx-scm-affected_files-new_lines.star",
+			false,
+			"[//ctx-scm-affected_files-new_lines.star:31] ctx-scm-affected_files-include_deleted.star\n" +
+				"1: # Copyright 2023 The Shac Authors\n",
+		},
+		{
+			"ctx-scm-affected_files-new_lines.star",
+			true,
+			"[//ctx-scm-affected_files-new_lines.star:31] a.txt\n" +
+				"1: First file\n",
+		},
+		{
+			"ctx-scm-all_files.star",
+			false,
+			"[//ctx-scm-all_files.star:19] \n" +
+				"a.txt: A\n" +
+				scmStarlarkAddedFiles +
+				"z.txt: A\n" +
+				"\n",
+		},
+	}
+	for i := range data {
+		i := i
+		name := data[i].name
+		if data[i].all {
+			name += "/all"
+		}
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			testStarlarkPrint(t, root, data[i].name, data[i].all, data[i].want)
+		})
+	}
 }
 
 func TestRun_SCM_Git_Upstream_Staged(t *testing.T) {
@@ -238,24 +274,35 @@ func TestRun_SCM_Git_Upstream_Staged(t *testing.T) {
 	runGit(t, root, "branch", "--set-upstream-to", "up")
 	copySCM(t, root)
 	runGit(t, root, "add", "ctx-scm-*.star")
-	t.Run("affected", func(t *testing.T) {
-		t.Parallel()
-		want := "[//ctx-scm-affected_files.star:19] \n" +
-			"a.txt: R\n" +
-			scmStarlarkAddedFiles +
-			"z.txt: A\n" +
-			"\n"
-		testStarlarkPrint(t, root, "ctx-scm-affected_files.star", false, want)
-	})
-	t.Run("all", func(t *testing.T) {
-		t.Parallel()
-		want := "[//ctx-scm-all_files.star:19] \n" +
-			"a.txt: A\n" +
-			scmStarlarkAddedFiles +
-			"z.txt: A\n" +
-			"\n"
-		testStarlarkPrint(t, root, "ctx-scm-all_files.star", false, want)
-	})
+
+	data := []struct {
+		name string
+		want string
+	}{
+		{
+			"ctx-scm-affected_files.star",
+			"[//ctx-scm-affected_files.star:19] \n" +
+				"a.txt: R\n" +
+				scmStarlarkAddedFiles +
+				"z.txt: A\n" +
+				"\n",
+		},
+		{
+			"ctx-scm-all_files.star",
+			"[//ctx-scm-all_files.star:19] \n" +
+				"a.txt: A\n" +
+				scmStarlarkAddedFiles +
+				"z.txt: A\n" +
+				"\n",
+		},
+	}
+	for i := range data {
+		i := i
+		t.Run(data[i].name, func(t *testing.T) {
+			t.Parallel()
+			testStarlarkPrint(t, root, data[i].name, false, data[i].want)
+		})
+	}
 }
 
 func TestRun_SCM_Git_Submodule(t *testing.T) {
@@ -273,25 +320,34 @@ func TestRun_SCM_Git_Submodule(t *testing.T) {
 	copySCM(t, root)
 	runGit(t, root, "add", "ctx-scm-*.star")
 
-	t.Run("affected", func(t *testing.T) {
-		t.Parallel()
-		want := "[//ctx-scm-affected_files.star:19] \n" +
-			".gitmodules: A\n" +
-			scmStarlarkAddedFiles +
-			"\n"
-		testStarlarkPrint(t, root, "ctx-scm-affected_files.star", false, want)
-	})
-
-	t.Run("all", func(t *testing.T) {
-		t.Parallel()
-		want := "[//ctx-scm-all_files.star:19] \n" +
-			".gitmodules: A\n" +
-			"a.txt: A\n" +
-			scmStarlarkAddedFiles +
-			"z.txt: A\n" +
-			"\n"
-		testStarlarkPrint(t, root, "ctx-scm-all_files.star", false, want)
-	})
+	data := []struct {
+		name string
+		want string
+	}{
+		{
+			"ctx-scm-affected_files.star",
+			"[//ctx-scm-affected_files.star:19] \n" +
+				".gitmodules: A\n" +
+				scmStarlarkAddedFiles +
+				"\n",
+		},
+		{
+			"ctx-scm-all_files.star",
+			"[//ctx-scm-all_files.star:19] \n" +
+				".gitmodules: A\n" +
+				"a.txt: A\n" +
+				scmStarlarkAddedFiles +
+				"z.txt: A\n" +
+				"\n",
+		},
+	}
+	for i := range data {
+		i := i
+		t.Run(data[i].name, func(t *testing.T) {
+			t.Parallel()
+			testStarlarkPrint(t, root, data[i].name, false, data[i].want)
+		})
+	}
 }
 
 func TestRun_SCM_DeletedFile(t *testing.T) {
@@ -308,35 +364,42 @@ func TestRun_SCM_DeletedFile(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	t.Run("affected", func(t *testing.T) {
-		t.Parallel()
-		want := "[//ctx-scm-affected_files.star:19] \n\n"
-		testStarlarkPrint(t, root, "ctx-scm-affected_files.star", false, want)
-	})
-	t.Run("affected-include_deleted", func(t *testing.T) {
-		t.Parallel()
-		want := "[//ctx-scm-affected_files-include_deleted.star:24] \n" +
-			"file-to-delete.txt (D): ()\n" +
-			"\n"
-		testStarlarkPrint(t, root, "ctx-scm-affected_files-include_deleted.star", false, want)
-	})
-	t.Run("all", func(t *testing.T) {
-		t.Parallel()
-		want := "[//ctx-scm-all_files.star:19] \n" +
-			"a.txt: A\n" +
-			"z.txt: A\n" +
-			"\n"
-		testStarlarkPrint(t, root, "ctx-scm-all_files.star", false, want)
-	})
-	t.Run("all_include_deleted", func(t *testing.T) {
-		t.Parallel()
-		want := "[//ctx-scm-all_files-include_deleted.star:19] \n" +
-			"a.txt: A\n" +
-			"file-to-delete.txt: D\n" +
-			"z.txt: A\n" +
-			"\n"
-		testStarlarkPrint(t, root, "ctx-scm-all_files-include_deleted.star", false, want)
-	})
+	data := []struct {
+		name string
+		want string
+	}{
+		{
+			"ctx-scm-affected_files.star",
+			"[//ctx-scm-affected_files.star:19] \n\n",
+		},
+		{
+			"ctx-scm-affected_files-include_deleted.star",
+			"[//ctx-scm-affected_files-include_deleted.star:24] \n" +
+				"file-to-delete.txt (D): ()\n" +
+				"\n",
+		},
+		{
+			"ctx-scm-all_files.star",
+			"[//ctx-scm-all_files.star:19] \n" +
+				"a.txt: A\n" +
+				"z.txt: A\n" +
+				"\n",
+		},
+		{
+			"ctx-scm-all_files-include_deleted.star",
+			"[//ctx-scm-all_files-include_deleted.star:19] \n" +
+				"a.txt: A\n" +
+				"file-to-delete.txt: D\n" +
+				"z.txt: A\n" +
+				"\n"},
+	}
+	for i := range data {
+		i := i
+		t.Run(data[i].name, func(t *testing.T) {
+			t.Parallel()
+			testStarlarkPrint(t, root, data[i].name, false, data[i].want)
+		})
+	}
 }
 
 func TestRun_SCM_Git_Binary_File(t *testing.T) {
@@ -349,27 +412,43 @@ func TestRun_SCM_Git_Binary_File(t *testing.T) {
 	writeFileBytes(t, root, "a.bin", []byte{0, 1, 2, 3}, 0o600)
 	runGit(t, root, "add", "a.bin")
 
-	t.Run("affected", func(t *testing.T) {
-		t.Parallel()
-		want := "[//ctx-scm-affected_files.star:19] \n" +
-			"a.bin: A\n" +
-			"\n"
-		testStarlarkPrint(t, root, "ctx-scm-affected_files.star", false, want)
-	})
+	data := []struct {
+		name string
+		all  bool
+		want string
+	}{
+		{
+			"ctx-scm-affected_files.star",
+			false,
+			"[//ctx-scm-affected_files.star:19] \n" +
+				"a.bin: A\n" +
+				"\n",
+		},
+		{
+			"ctx-scm-affected_files-new_lines.star",
+			false,
+			// Only a binary file is touched, no lines should be considered
+			// affected.
+			"[//ctx-scm-affected_files-new_lines.star:33] no new lines\n",
+		},
+		{
+			"ctx-scm-affected_files-new_lines.star",
+			true,
+			"[//ctx-scm-affected_files-new_lines.star:33] no new lines\n",
+		},
+	}
 
-	t.Run("affected-new_lines", func(t *testing.T) {
-		t.Parallel()
-		// Only a binary file is touched, no lines should be considered
-		// affected.
-		want := "[//ctx-scm-affected_files-new_lines.star:33] no new lines\n"
-		testStarlarkPrint(t, root, "ctx-scm-affected_files-new_lines.star", false, want)
-	})
-
-	t.Run("affected-new_lines/all", func(t *testing.T) {
-		t.Parallel()
-		want := "[//ctx-scm-affected_files-new_lines.star:33] no new lines\n"
-		testStarlarkPrint(t, root, "ctx-scm-affected_files-new_lines.star", true, want)
-	})
+	for i := range data {
+		i := i
+		name := data[i].name
+		if data[i].all {
+			name += "/all"
+		}
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			testStarlarkPrint(t, root, data[i].name, data[i].all, data[i].want)
+		})
+	}
 }
 
 func TestRun_SCM_Git_Broken(t *testing.T) {
