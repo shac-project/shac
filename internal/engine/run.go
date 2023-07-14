@@ -31,6 +31,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/go-git/go-git/plumbing/format/gitignore"
 	"go.fuchsia.dev/shac-project/shac/internal/sandbox"
 	"go.starlark.net/resolve"
 	"go.starlark.net/starlark"
@@ -53,6 +54,8 @@ type Cursor struct {
 	// Require keyed arguments.
 	_ struct{}
 }
+
+var errEmptyIgnore = errors.New("ignore fields cannot be empty strings")
 
 // Span represents a section in a source file or a change description.
 type Span struct {
@@ -174,6 +177,17 @@ func Run(ctx context.Context, o *Options) error {
 	scm, err := getSCM(ctx, root, o.AllFiles)
 	if err != nil {
 		return err
+	}
+	var patterns []gitignore.Pattern
+	for _, p := range doc.Ignore {
+		if p == "" {
+			return errEmptyIgnore
+		}
+		patterns = append(patterns, gitignore.ParsePattern(p, nil))
+	}
+	scm = &filteredSCM{
+		matcher: gitignore.NewMatcher(patterns),
+		scm:     scm,
 	}
 
 	tmpdir, err := os.MkdirTemp("", "shac")

@@ -34,6 +34,7 @@ import (
 	"time"
 
 	"github.com/google/go-cmp/cmp"
+	"google.golang.org/protobuf/encoding/prototext"
 )
 
 func TestRun_Fail(t *testing.T) {
@@ -113,6 +114,88 @@ func TestRun_Fail(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestRun_Ignore(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	writeFile(t, root, "shac.textproto", prototext.Format(&Document{
+		Ignore: []string{
+			"/dir/",
+			"file_in_root.txt",
+			"!file_in_root.txt", // Should take precedence.
+			"*.ignored",
+			"*.star",
+		},
+	}))
+
+	writeFile(t, root, "file_in_root.txt", "foo")
+	writeFile(t, root, "other_file_in_root.txt", "foo")
+	writeFile(t, root, "dir/ignored_file.txt", "bar")
+	writeFile(t, root, "nested/dir/unignored_file.txt", "baz")
+	writeFile(t, root, "other/nested/file.txt", "quux")
+	writeFile(t, root, "abc.ignored", "abc")
+	writeFile(t, root, "x/def.ignored", "def")
+
+	copySCM(t, root)
+
+	data := []struct {
+		name string
+		want string
+	}{
+		{
+			"ctx-scm-affected_files.star",
+			"[//ctx-scm-affected_files.star:19] \n" +
+				"file_in_root.txt: \n" +
+				"nested/dir/unignored_file.txt: \n" +
+				"other/nested/file.txt: \n" +
+				"other_file_in_root.txt: \n" +
+				"shac.textproto: \n" +
+				"\n",
+		},
+		{
+			"ctx-scm-affected_files-new_lines.star",
+			"[//ctx-scm-affected_files-new_lines.star:31] file_in_root.txt\n" +
+				"1: foo\n",
+		},
+		{
+			"ctx-scm-all_files.star",
+			"[//ctx-scm-all_files.star:19] \n" +
+				"file_in_root.txt: \n" +
+				"nested/dir/unignored_file.txt: \n" +
+				"other/nested/file.txt: \n" +
+				"other_file_in_root.txt: \n" +
+				"shac.textproto: \n" +
+				"\n",
+		},
+	}
+	for i := range data {
+		i := i
+		t.Run(data[i].name, func(t *testing.T) {
+			t.Parallel()
+			testStarlarkPrint(t, root, data[i].name, false, data[i].want)
+		})
+	}
+
+	t.Run("empty ignore field", func(t *testing.T) {
+		t.Parallel()
+		root := t.TempDir()
+		writeFile(t, root, "shac.textproto", prototext.Format(&Document{
+			Ignore: []string{
+				"*.foo",
+				"",
+			},
+		}))
+
+		r := reportPrint{reportNoPrint: reportNoPrint{t: t}}
+		o := Options{Report: &r, Root: root, AllFiles: false, main: "shac.star"}
+		err := Run(context.Background(), &o)
+		if err == nil {
+			t.Fatal("Expected empty ignore field to be rejected")
+		} else if !errors.Is(err, errEmptyIgnore) {
+			t.Fatalf("Expected error %q, got %q", errEmptyIgnore, err)
+		}
+	})
 }
 
 func TestRun_SCM_Raw(t *testing.T) {
@@ -1603,7 +1686,11 @@ func writeFile(t testing.TB, root, path, content string) {
 }
 
 func writeFileBytes(t testing.TB, root, path string, content []byte, perm os.FileMode) {
-	if err := os.WriteFile(filepath.Join(root, path), content, perm); err != nil {
+	abs := filepath.Join(root, path)
+	if err := os.MkdirAll(filepath.Dir(abs), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(abs, content, perm); err != nil {
 		t.Fatal(err)
 	}
 }

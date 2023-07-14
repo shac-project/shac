@@ -30,6 +30,7 @@ import (
 	"sync"
 	"unsafe"
 
+	"github.com/go-git/go-git/plumbing/format/gitignore"
 	"go.starlark.net/starlark"
 )
 
@@ -124,6 +125,43 @@ type scmCheckout interface {
 	affectedFiles(ctx context.Context, includeDeleted bool) ([]file, error)
 	allFiles(ctx context.Context, includeDeleted bool) ([]file, error)
 	newLines(ctx context.Context, f file) (starlark.Value, error)
+}
+
+type filteredSCM struct {
+	matcher gitignore.Matcher
+	scm     scmCheckout
+}
+
+func (f *filteredSCM) affectedFiles(ctx context.Context, includeDeleted bool) ([]file, error) {
+	files, err := f.scm.affectedFiles(ctx, includeDeleted)
+	return f.filter(files), err
+}
+
+func (f *filteredSCM) allFiles(ctx context.Context, includeDeleted bool) ([]file, error) {
+	files, err := f.scm.allFiles(ctx, includeDeleted)
+	return f.filter(files), err
+}
+
+func (f *filteredSCM) newLines(ctx context.Context, fi file) (starlark.Value, error) {
+	return f.scm.newLines(ctx, fi)
+}
+
+// filter modifies the input slice of files in-place, removing any items that
+// match one of the ignore patterns.
+func (f *filteredSCM) filter(files []file) []file {
+	offset := 0
+	for i := 0; i+offset < len(files); {
+		fi := files[i+offset]
+		if f.matcher.Match(strings.Split(fi.rootedpath(), "/"), false) {
+			offset++
+		} else {
+			i++
+		}
+		if i+offset < len(files) {
+			files[i] = files[i+offset]
+		}
+	}
+	return files[:len(files)-offset]
 }
 
 // subdirSCM is a scmCheckout that only reports files from a subdirectory.
