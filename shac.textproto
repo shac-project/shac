@@ -12,5 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# TODO(olivernewman): Build github.com/protocolbuffers/txtpbfmt into shac and
+# enforce formatting of shac.textproto files in all repos that use shac.
+
 min_shac_version: "0.0.0"
 allow_network: False
+ignore: "/vendor/"

@@ -1,0 +1,139 @@
+// Copyright 2019 The LUCI Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+package luci.resultsink.v1;
+
+import "google/protobuf/duration.proto";
+import "google/protobuf/struct.proto";
+import "google/protobuf/timestamp.proto";
+import "go.chromium.org/luci/resultdb/proto/v1/common.proto";
+import "go.chromium.org/luci/resultdb/proto/v1/failure_reason.proto";
+import "go.chromium.org/luci/resultdb/proto/v1/test_metadata.proto";
+import "go.chromium.org/luci/resultdb/proto/v1/test_result.proto";
+
+option go_package = "go.chromium.org/luci/resultdb/sink/proto/v1;sinkpb";
+
+// A local equivalent of luci.resultdb.TestResult message
+// in ../../v1/test_result.proto.
+// See its comments for details.
+message TestResult {
+  reserved 10; // test_location
+  reserved "test_location";
+
+  // Equivalent of luci.resultdb.v1.TestResult.TestId.
+  string test_id = 1;
+
+  // Equivalent of luci.resultdb.v1.TestResult.result_id.
+  //
+  // If omitted, a random, unique ID is generated..
+  string result_id = 2;
+
+  // Equivalent of luci.resultdb.v1.TestResult.expected.
+  bool expected = 3;
+
+  // Equivalent of luci.resultdb.v1.TestResult.status.
+  luci.resultdb.v1.TestStatus status = 4;
+
+  // Equivalent of luci.resultdb.v1.TestResult.summary_html.
+  string summary_html = 5;
+
+  // Equivalent of luci.resultdb.v1.TestResult.start_time.
+  google.protobuf.Timestamp start_time = 6;
+
+  // Equivalent of luci.resultdb.v1.TestResult.duration.
+  google.protobuf.Duration duration = 7;
+
+  // Equivalent of luci.resultdb.v1.TestResult.tags.
+  repeated luci.resultdb.v1.StringPair tags = 8;
+
+  // Artifacts to upload and associate with this test result.
+  // The map key is an artifact id.
+  map<string, Artifact> artifacts = 9;
+
+  // Equivalent of luci.resultdb.v1.TestResult.test_metadata.
+  luci.resultdb.v1.TestMetadata test_metadata = 11;
+
+  // Equivalent of luci.resultdb.v1.TestResult.failure_reason.
+  luci.resultdb.v1.FailureReason failure_reason = 12;
+
+  // Equivalent of luci.resultdb.v1.TestResult.variant.
+  // The variant for all test cases should be passed by command line args to rdb
+  // stream, however you can override or add to the variant on a per test case
+  // basis using this field.
+  luci.resultdb.v1.Variant variant = 13;
+
+  // Arbitrary JSON object that contains structured, domain-specific properties
+  // of the test result.
+  //
+  // The serialized size must be <= 4096 bytes.
+  google.protobuf.Struct properties = 14;
+}
+
+// A local equivalent of luci.resultdb.Artifact message
+// in ../../rpc/v1/artifact.proto.
+// See its comments for details.
+// Does not have a name or artifact_id because they are represented by the
+// TestResult.artifacts map key.
+// Next id: 5
+message Artifact {
+  // Body should be only one of the following:
+  // - file_path (file should exist. contents & gcs_uri should not be set)
+  // - contents (file_path & gcs_uri should not be set)
+  // - gcs_uri for GCS artifact (file_path & contents should not be set)
+  oneof body {
+    // Absolute path to the artifact file on the same machine as the
+    // ResultSink server.
+    string file_path = 1;
+
+    // Contents of the artifact. Useful when sending a file from a different
+    // machine.
+    // TODO(nodir, sajjadm): allow sending contents in chunks.
+    bytes contents = 2;
+
+    // The GCS URI of the artifact if it's stored in GCS.
+    string gcs_uri = 4;
+  }
+
+  // Equivalent of luci.resultdb.v1.Artifact.content_type.
+  string content_type = 3;
+}
+
+// A file with test results.
+message TestResultFile {
+  // Absolute OS-native path to the results file on the same machine as the
+  // ResultSink server.
+  string path = 1;
+
+  // A result file format.
+  enum Format {
+    // The file is a sequence of TestResult JSON objects (not a JSON Array).
+    // The default format.
+    LUCI = 0;
+
+    // Chromium's JSON Test Results format
+    // https://chromium.googlesource.com/chromium/src/+/master/docs/testing/json_test_results_format.md
+    CHROMIUM_JSON_TEST_RESULTS = 1;
+
+    // GTest format.
+    // Not well documented.
+    // Implementation:
+    // https://cs.chromium.org/chromium/src/base/test/launcher/test_results_tracker.cc
+    GOOGLE_TEST = 2;
+  }
+
+  // Format of the file.
+  Format format = 2;
+}

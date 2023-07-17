@@ -229,6 +229,11 @@ def _go_env(ctx, key):
     # Disable cgo as it's not necessary and not all development platforms have
     # the necessary headers.
     "CGO_ENABLED": "0",
+    "GOFLAGS": " ".join([
+      # Disable embedding VCS information because it causes ineffassign builds
+      # to fail on some machines.
+      "-buildvcs=false",
+    ]),
     "GOPATH": gopath,
     "GOBIN": "%s/bin" % gopath,
     # Cache within the directory to avoid writing to $HOME/.cache.
