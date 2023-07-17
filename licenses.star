@@ -42,6 +42,8 @@ _SKIP_FILE_REGEXES = [
   r"(.*/)?\.gitignore",
   # text files in testdata/ need not contain a license header.
   r"(.*/)?testdata/(.+)\.txt",
+  # TODO(olivernewman): Remove after un-vendoring the slices library.
+  r"internal/slices/slices.go",
 ]
 
 def check_license_headers(ctx):
