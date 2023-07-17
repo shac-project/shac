@@ -154,11 +154,11 @@ jobs:
         fi
     - name: 'Check: addlicense; all sources have a license header (ubuntu)'
       if: always() && matrix.os == 'ubuntu-latest'
-      run: addlicense -check .
+      run: addlicense -check -ignore 'vendor/**' .
     - name: "Check: misspelling; code doesn't contain misspelling (ubuntu)"
       if: always() && matrix.os == 'ubuntu-latest'
       run: |
-        ERR=$(misspell .)
+        ERR=$(find . -type f | grep -v vendor/ | xargs misspell)
         if ! test -z "$ERR"; then
           echo "$ERR"
           echo "## ⚠ misspell Failed" >> ../_comments.txt
