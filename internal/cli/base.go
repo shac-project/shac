@@ -12,43 +12,29 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package cli is the shac CLI code.
 package cli
 
 import (
-	"context"
-	"errors"
-	"os"
-
 	flag "github.com/spf13/pflag"
 	"go.fuchsia.dev/shac-project/shac/internal/engine"
 )
 
-type docCmd struct {
+type commandBase struct {
+	root      string
+	allFiles  bool
+	noRecurse bool
 }
 
-func (*docCmd) Name() string {
-	return "doc"
+func (c *commandBase) SetFlags(f *flag.FlagSet) {
+	f.StringVar(&c.root, "root", ".", "path to the root of the tree to analyse")
+	f.BoolVar(&c.allFiles, "all", false, "checks all the files instead of guess the upstream to diff against")
+	f.BoolVar(&c.noRecurse, "no-recurse", false, "do not look for shac.star files recursively")
 }
 
-func (*docCmd) Description() string {
-	return "Prints out documentation for a starlark file.\nUse \"stdlib\" to print out the standard library documentation."
-}
-
-func (*docCmd) SetFlags(f *flag.FlagSet) {
-}
-
-func (*docCmd) Execute(ctx context.Context, args []string) error {
-	f := "stdlib"
-	if len(args) == 1 {
-		f = args[0]
-	} else if len(args) > 1 {
-		return errors.New("only specify one source")
+func (c *commandBase) options() engine.Options {
+	return engine.Options{
+		Root:     c.root,
+		AllFiles: c.allFiles,
+		Recurse:  !c.noRecurse,
 	}
-	doc, err := engine.Doc(f)
-	if err != nil {
-		return err
-	}
-	_, _ = os.Stdout.WriteString(doc)
-	return nil
 }

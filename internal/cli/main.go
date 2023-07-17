@@ -69,6 +69,7 @@ func Main(args []string) error {
 
 	subcommands := [...]subcommand{
 		&checkCmd{},
+		&fixCmd{},
 		&docCmd{},
 		&helpCmd{},
 	}

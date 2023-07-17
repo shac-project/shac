@@ -34,6 +34,6 @@ func (*helpCmd) Description() string {
 func (*helpCmd) SetFlags(f *flag.FlagSet) {
 }
 
-func (d *helpCmd) Execute(ctx context.Context, args []string) error {
+func (*helpCmd) Execute(ctx context.Context, args []string) error {
 	return flag.ErrHelp
 }

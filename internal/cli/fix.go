@@ -12,43 +12,48 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package cli is the shac CLI code.
 package cli
 
 import (
 	"context"
 	"errors"
-	"os"
 
 	flag "github.com/spf13/pflag"
 	"go.fuchsia.dev/shac-project/shac/internal/engine"
+	"go.fuchsia.dev/shac-project/shac/internal/reporting"
 )
 
-type docCmd struct {
+type fixCmd struct {
+	commandBase
 }
 
-func (*docCmd) Name() string {
-	return "doc"
+func (*fixCmd) Name() string {
+	return "fix"
 }
 
-func (*docCmd) Description() string {
-	return "Prints out documentation for a starlark file.\nUse \"stdlib\" to print out the standard library documentation."
+func (*fixCmd) Description() string {
+	return "Run checks and make suggested fixes."
 }
 
-func (*docCmd) SetFlags(f *flag.FlagSet) {
+func (c *fixCmd) SetFlags(f *flag.FlagSet) {
+	c.commandBase.SetFlags(f)
 }
 
-func (*docCmd) Execute(ctx context.Context, args []string) error {
-	f := "stdlib"
-	if len(args) == 1 {
-		f = args[0]
-	} else if len(args) > 1 {
-		return errors.New("only specify one source")
+func (c *fixCmd) Execute(ctx context.Context, args []string) error {
+	if len(args) != 0 {
+		return errors.New("unsupported arguments")
 	}
-	doc, err := engine.Doc(f)
+
+	r, err := reporting.Get(ctx)
 	if err != nil {
 		return err
 	}
-	_, _ = os.Stdout.WriteString(doc)
-	return nil
+	o := c.options()
+	o.Report = r
+
+	err = engine.Run(ctx, &o)
+	if err2 := r.Close(); err == nil {
+		err = err2
+	}
+	return err
 }

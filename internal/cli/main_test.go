@@ -30,6 +30,7 @@ func TestMainHelp(t *testing.T) {
 		{[]string{"shac"}, "Usage of shac:\n"},
 		{[]string{"shac", "--help"}, "Usage of shac:\n"},
 		{[]string{"shac", "check", "--help"}, "Usage of shac check:\n"},
+		{[]string{"shac", "fix", "--help"}, "Usage of shac fix:\n"},
 		{[]string{"shac", "doc", "--help"}, "Usage of shac doc:\n"},
 	}
 	for i, line := range data {

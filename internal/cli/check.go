@@ -24,9 +24,7 @@ import (
 )
 
 type checkCmd struct {
-	root      string
-	allFiles  bool
-	noRecurse bool
+	commandBase
 }
 
 func (*checkCmd) Name() string {
@@ -38,25 +36,21 @@ func (*checkCmd) Description() string {
 }
 
 func (c *checkCmd) SetFlags(f *flag.FlagSet) {
-	f.StringVar(&c.root, "root", ".", "path to the root of the tree to analyse")
-	f.BoolVar(&c.allFiles, "all", false, "checks all the files instead of guess the upstream to diff against")
-	f.BoolVar(&c.noRecurse, "no-recurse", false, "do not look for shac.star files recursively")
+	c.commandBase.SetFlags(f)
 }
 
 func (c *checkCmd) Execute(ctx context.Context, args []string) error {
 	if len(args) != 0 {
 		return errors.New("unsupported arguments")
 	}
+
 	r, err := reporting.Get(ctx)
 	if err != nil {
 		return err
 	}
-	o := engine.Options{
-		Report:   r,
-		Root:     c.root,
-		AllFiles: c.allFiles,
-		Recurse:  !c.noRecurse,
-	}
+	o := c.options()
+	o.Report = r
+
 	err = engine.Run(ctx, &o)
 	if err2 := r.Close(); err == nil {
 		err = err2
