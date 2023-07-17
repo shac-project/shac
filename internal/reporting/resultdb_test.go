@@ -77,7 +77,6 @@ func TestResultDBReporter(t *testing.T) {
 	})
 
 	r := luci{
-		basic: basic{out: io.Discard},
 		// Use a very high batch wait duration to ensure we *always* batch small
 		// numbers of requests together.
 		batchWaitDuration: 24 * time.Hour,

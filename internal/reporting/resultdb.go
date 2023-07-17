@@ -39,7 +39,6 @@ import (
 const resultSinkMaxBatchSize = 500
 
 type luci struct {
-	basic
 	doneChecks chan *sinkpb.TestResult
 	// batchWaitDuration is the duration after having a test result enqueued
 	// that the reporter should wait before uploading it to ResultDB, in case
@@ -160,8 +159,10 @@ func (l *luci) CheckCompleted(ctx context.Context, check string, start time.Time
 	l.mu.Lock()
 	delete(l.liveChecks, check)
 	l.mu.Unlock()
-	l.basic.CheckCompleted(ctx, check, start, d, level, err)
 	l.doneChecks <- r
+}
+
+func (l *luci) Print(ctx context.Context, check, file string, line int, message string) {
 }
 
 func (l *luci) getTestResult(check string) *sinkpb.TestResult {

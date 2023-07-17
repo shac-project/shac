@@ -38,39 +38,40 @@ type Report interface {
 // Get returns the right reporting implementation based on the current
 // environment.
 func Get(ctx context.Context) (Report, error) {
+	r := &multiReport{}
+
 	// On LUCI/Swarming. ResultDB!
 	if os.Getenv("LUCI_CONTEXT") != "" {
 		l := &luci{
-			basic:             basic{out: os.Stdout},
 			batchWaitDuration: 20 * time.Millisecond,
 		}
 		if err := l.init(ctx); err != nil {
 			return nil, err
 		}
-		return l, nil
+		r.Reporters = append(r.Reporters, l)
 	}
 
-	// On GitHub Actions.
-	if os.Getenv("GITHUB_RUN_ID") != "" {
-		// Emits GitHub Workflows commands.
-		return &github{out: os.Stdout}, nil
-	}
-
-	// Active terminal. Colors! This includes VSCode's integrated terminal.
-	if os.Getenv("TERM") != "dumb" && isatty.IsTerminal(os.Stderr.Fd()) {
-		return &interactive{
+	// The following reporters all emit to stdout so they are mutually
+	// exclusive.
+	switch {
+	case os.Getenv("GITHUB_RUN_ID") != "":
+		// On GitHub Actions. Emits GitHub Workflows commands.
+		r.Reporters = append(r.Reporters, &github{out: os.Stdout})
+	case os.Getenv("TERM") != "dumb" && isatty.IsTerminal(os.Stderr.Fd()):
+		// Active terminal. Colors! This includes VSCode's integrated terminal.
+		r.Reporters = append(r.Reporters, &interactive{
 			out: colorable.NewColorableStdout(),
-		}, nil
-	}
-
-	// VSCode extension.
-	if os.Getenv("VSCODE_GIT_IPC_HANDLE") != "" {
+		})
+	case os.Getenv("VSCODE_GIT_IPC_HANDLE") != "":
+		// VSCode extension.
 		// TODO(maruel): Return SARIF.
-		return &basic{out: os.Stdout}, nil
+		r.Reporters = append(r.Reporters, &basic{out: os.Stdout})
+	default:
+		// Anything else, e.g. redirected output.
+		r.Reporters = append(r.Reporters, &basic{out: os.Stdout})
 	}
 
-	// Anything else, e.g. redirected output.
-	return &basic{out: os.Stdout}, nil
+	return r, nil
 }
 
 type basic struct {
