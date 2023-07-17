@@ -13,8 +13,19 @@
 # limitations under the License.
 
 def cb(ctx):
-  out = "\n"
+  out = "\nWith deleted:\n"
   for path, meta in ctx.scm.affected_files(include_deleted = True).items():
+    out += "%s (%s): %s\n" % (
+      path,
+      meta.action,
+      # Only print at most the first line.
+      meta.new_lines()[:1],
+    )
+
+  # Now try with `include_deleted = False` to make sure the output is different
+  # even when the result is cached internally.
+  out += "\nWithout deleted:\n"
+  for path, meta in ctx.scm.affected_files(include_deleted = False).items():
     out += "%s (%s): %s\n" % (
       path,
       meta.action,

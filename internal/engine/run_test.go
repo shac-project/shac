@@ -457,10 +457,12 @@ func TestRun_SCM_DeletedFile(t *testing.T) {
 		},
 		{
 			"ctx-scm-affected_files-include_deleted.star",
-			"[//ctx-scm-affected_files-include_deleted.star:24] \n" +
+			"[//ctx-scm-affected_files-include_deleted.star:35] \n" +
+				"With deleted:\n" +
 				"file-to-delete.txt (D): ()\n" +
-				"\n",
-		},
+				"\n" +
+				"Without deleted:\n" +
+				"\n"},
 		{
 			"ctx-scm-all_files.star",
 			"[//ctx-scm-all_files.star:19] \n" +
@@ -470,9 +472,14 @@ func TestRun_SCM_DeletedFile(t *testing.T) {
 		},
 		{
 			"ctx-scm-all_files-include_deleted.star",
-			"[//ctx-scm-all_files-include_deleted.star:19] \n" +
+			"[//ctx-scm-all_files-include_deleted.star:26] \n" +
+				"With deleted:\n" +
 				"a.txt: A\n" +
 				"file-to-delete.txt: D\n" +
+				"z.txt: A\n" +
+				"\n" +
+				"Without deleted:\n" +
+				"a.txt: A\n" +
 				"z.txt: A\n" +
 				"\n"},
 	}

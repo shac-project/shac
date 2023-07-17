@@ -432,9 +432,6 @@ func (g *gitCheckout) affectedFiles(ctx context.Context, includeDeleted bool) ([
 				g.err = fmt.Errorf("missing trailing NUL character from git diff --name-status -z -C %s", g.upstream.hash)
 				break
 			}
-			if action == "D" && !includeDeleted {
-				continue
-			}
 			// TODO(olivernewman): Omit deleted submodules. For now they're
 			// treated the same as deleted regular files.
 			if action == "D" || !g.isSubmodule(path) {
@@ -447,7 +444,10 @@ func (g *gitCheckout) affectedFiles(ctx context.Context, includeDeleted bool) ([
 		}
 		sort.Slice(g.modified, func(i, j int) bool { return g.modified[i].rootedpath() < g.modified[j].rootedpath() })
 	}
-	return g.modified, g.err
+	if includeDeleted {
+		return g.modified, g.err
+	}
+	return withoutDeleted(g.modified), g.err
 }
 
 // allFiles returns all the files in this checkout.
@@ -465,9 +465,7 @@ func (g *gitCheckout) allFiles(ctx context.Context, includeDeleted bool) ([]file
 			for _, path := range items {
 				fi, err := os.Stat(filepath.Join(g.checkoutRoot, path))
 				if errors.Is(err, fs.ErrNotExist) {
-					if includeDeleted {
-						g.all = append(g.all, &fileImpl{a: "D", path: path})
-					}
+					g.all = append(g.all, &fileImpl{a: "D", path: path})
 					continue
 				} else if err != nil {
 					return nil, err
@@ -483,7 +481,20 @@ func (g *gitCheckout) allFiles(ctx context.Context, includeDeleted bool) ([]file
 			g.all = []file{}
 		}
 	}
-	return g.all, g.err
+	if includeDeleted {
+		return g.all, g.err
+	}
+	return withoutDeleted(g.all), g.err
+}
+
+func withoutDeleted(files []file) []file {
+	var res []file
+	for _, f := range files {
+		if f.action() != "D" {
+			res = append(res, f)
+		}
+	}
+	return res
 }
 
 func (g *gitCheckout) isSubmodule(path string) bool {
