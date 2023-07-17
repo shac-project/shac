@@ -186,8 +186,10 @@ func Run(ctx context.Context, o *Options) error {
 		patterns = append(patterns, gitignore.ParsePattern(p, nil))
 	}
 	scm = &filteredSCM{
-		matcher: gitignore.NewMatcher(patterns),
-		scm:     scm,
+		matcher:  gitignore.NewMatcher(patterns),
+		scm:      scm,
+		modified: map[bool][]file{},
+		all:      map[bool][]file{},
 	}
 
 	tmpdir, err := os.MkdirTemp("", "shac")

@@ -130,16 +130,35 @@ type scmCheckout interface {
 type filteredSCM struct {
 	matcher gitignore.Matcher
 	scm     scmCheckout
+
+	// Mutable. Lazy loaded. Keys are `include_deleted` values.
+	mu       sync.Mutex
+	modified map[bool][]file // modified files in this checkout.
+	all      map[bool][]file // all files in the repo.
 }
 
 func (f *filteredSCM) affectedFiles(ctx context.Context, includeDeleted bool) ([]file, error) {
-	files, err := f.scm.affectedFiles(ctx, includeDeleted)
-	return f.filter(files), err
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	var err error
+	if _, ok := f.modified[includeDeleted]; !ok {
+		var files []file
+		files, err = f.scm.affectedFiles(ctx, includeDeleted)
+		f.modified[includeDeleted] = f.filter(files)
+	}
+	return f.modified[includeDeleted], err
 }
 
 func (f *filteredSCM) allFiles(ctx context.Context, includeDeleted bool) ([]file, error) {
-	files, err := f.scm.allFiles(ctx, includeDeleted)
-	return f.filter(files), err
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	var err error
+	if _, ok := f.all[includeDeleted]; !ok {
+		var files []file
+		files, err = f.scm.allFiles(ctx, includeDeleted)
+		f.all[includeDeleted] = f.filter(files)
+	}
+	return f.all[includeDeleted], err
 }
 
 func (f *filteredSCM) newLines(ctx context.Context, fi file) (starlark.Value, error) {
