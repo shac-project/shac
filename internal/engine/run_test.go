@@ -1239,7 +1239,7 @@ func TestTestDataFailOrThrow(t *testing.T) {
 	}
 }
 
-func TestRunNetworkSandbox(t *testing.T) {
+func TestRun_NetworkSandbox(t *testing.T) {
 	if runtime.GOOS != "darwin" &&
 		!(runtime.GOOS == "linux" && (runtime.GOARCH == "amd64" || runtime.GOARCH == "arm64")) {
 		t.Skipf("Network sandboxing not supported on platform %s-%s", runtime.GOOS, runtime.GOARCH)
@@ -1572,7 +1572,7 @@ func TestTestDataPrint(t *testing.T) {
 	}
 }
 
-func TestRun_Filesystem_Sandboxing(t *testing.T) {
+func TestRun_FilesystemSandbox(t *testing.T) {
 	if runtime.GOOS != "linux" || (runtime.GOARCH != "amd64" && runtime.GOARCH != "arm64") {
 		t.Skip("sandboxing is only supported on linux-{arm64,amd64}")
 	}
@@ -1587,23 +1587,25 @@ func TestRun_Filesystem_Sandboxing(t *testing.T) {
 
 	root := t.TempDir()
 
-	writeFile(t, root, "foo.sh", ""+
+	writeFile(t, root, "sandbox_read.sh", ""+
 		"#!/bin/sh\n"+
 		"set -e\n"+
 		"cat \""+fileOutsideRoot+"\"\n")
-	if err := os.Chmod(filepath.Join(root, "foo.sh"), 0o700); err != nil {
+	if err := os.Chmod(filepath.Join(root, "sandbox_read.sh"), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	writeFile(t, root, "shac.star", ""+
-		"def cb(ctx):\n"+
-		"  res = ctx.os.exec([ctx.scm.root + \"/foo.sh\"], raise_on_failure = False).wait()\n"+
-		"  print(\"retcode: %d\" % res.retcode)\n"+
-		"  print(res.stderr)\n"+
-		"shac.register_check(cb)\n")
 
-	want := "[//shac.star:3] retcode: 1\n" +
-		"[//shac.star:4] cat: " + fileOutsideRoot + ": No such file or directory\n\n"
-	testStarlarkPrint(t, root, "shac.star", false, want)
+	copyFile(t, root, filepath.Join("testdata", "sandbox_write.sh"))
+	copyFile(t,
+		root,
+		filepath.Join("testdata", "ctx-os-exec-filesystem_sandbox.star"))
+
+	want := "[//ctx-os-exec-filesystem_sandbox.star:17] sandbox_read.sh retcode: 1\n" +
+		"[//ctx-os-exec-filesystem_sandbox.star:18] cat: " + fileOutsideRoot + ": No such file or directory\n" +
+		"\n" +
+		"[//ctx-os-exec-filesystem_sandbox.star:21] sandbox_write.sh retcode: 1\n" +
+		"[//ctx-os-exec-filesystem_sandbox.star:22] touch: cannot touch 'file.txt': Read-only file system\n\n"
+	testStarlarkPrint(t, root, "ctx-os-exec-filesystem_sandbox.star", false, want)
 }
 
 // Utilities
@@ -1677,6 +1679,7 @@ func copySCM(t testing.TB, dst string) {
 }
 
 func copyFile(t testing.TB, dst, src string) {
+	t.Helper()
 	d, err := os.ReadFile(src)
 	if err != nil {
 		t.Fatal(err)

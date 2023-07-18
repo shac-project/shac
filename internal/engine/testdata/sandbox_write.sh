@@ -1,3 +1,4 @@
+#!/bin/sh
 # Copyright 2023 The Shac Authors
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,13 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# TODO(olivernewman): Build github.com/protocolbuffers/txtpbfmt into shac and
-# enforce formatting of shac.textproto files in all repos that use shac.
+set -e
 
-min_shac_version: "0.0.0"
-allow_network: False
-ignore: "/vendor/"
-# TODO(olivernewman): Make root non-writable once we can use caches and
-# pass-throughs to avoid having checks install tools and do Go builds within the
-# checkout directory.
-writable_root: true
+touch file.txt

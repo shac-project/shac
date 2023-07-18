@@ -12,13 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# TODO(olivernewman): Build github.com/protocolbuffers/txtpbfmt into shac and
-# enforce formatting of shac.textproto files in all repos that use shac.
+def cb(ctx):
+  res = ctx.os.exec([ctx.scm.root + "/sandbox_read.sh"], raise_on_failure = False).wait()
+  print("sandbox_read.sh retcode: %d" % res.retcode)
+  print(res.stderr)
 
-min_shac_version: "0.0.0"
-allow_network: False
-ignore: "/vendor/"
-# TODO(olivernewman): Make root non-writable once we can use caches and
-# pass-throughs to avoid having checks install tools and do Go builds within the
-# checkout directory.
-writable_root: true
+  res = ctx.os.exec([ctx.scm.root + "/sandbox_write.sh"], raise_on_failure = False).wait()
+  print("sandbox_write.sh retcode: %d" % res.retcode)
+  print(res.stderr)
+
+shac.register_check(cb)

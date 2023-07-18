@@ -289,8 +289,8 @@ func ctxOsExec(ctx context.Context, s *shacState, name string, args starlark.Tup
 	// config.Mounts is ignored for the moment on Windows.
 	if runtime.GOOS != "windows" {
 		config.Mounts = []sandbox.Mount{
-			// TODO(olivernewman): Mount the checkout read-only by default.
-			{Path: s.root, Writeable: true},
+			// TODO(olivernewman): Mount the checkout read-only unconditionally.
+			{Path: s.root, Writeable: s.writableRoot},
 			// OS-provided utilities.
 			{Path: "/dev/null", Writeable: true},
 			{Path: "/dev/urandom"},

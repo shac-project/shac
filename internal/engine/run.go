@@ -201,14 +201,14 @@ func Run(ctx context.Context, o *Options) error {
 	if err != nil {
 		return err
 	}
-	err = runInner(ctx, root, tmpdir, main, o.Report, doc.AllowNetwork, o.Recurse, scm, packages)
+	err = runInner(ctx, root, tmpdir, main, o.Report, doc.AllowNetwork, doc.WritableRoot, o.Recurse, scm, packages)
 	if err2 := os.RemoveAll(tmpdir); err == nil {
 		err = err2
 	}
 	return err
 }
 
-func runInner(ctx context.Context, root, tmpdir, main string, r Report, allowNetwork, recurse bool, scm scmCheckout, packages map[string]fs.FS) error {
+func runInner(ctx context.Context, root, tmpdir, main string, r Report, allowNetwork, writableRoot, recurse bool, scm scmCheckout, packages map[string]fs.FS) error {
 	sb, err := sandbox.New(tmpdir)
 	if err != nil {
 		return err
@@ -246,6 +246,7 @@ func runInner(ctx context.Context, root, tmpdir, main string, r Report, allowNet
 						env:          &env,
 						r:            r,
 						allowNetwork: allowNetwork,
+						writableRoot: writableRoot,
 						main:         main,
 						root:         root,
 						subdir:       d,
@@ -264,6 +265,7 @@ func runInner(ctx context.Context, root, tmpdir, main string, r Report, allowNet
 				env:          &env,
 				r:            r,
 				allowNetwork: allowNetwork,
+				writableRoot: writableRoot,
 				main:         main,
 				root:         root,
 				tmpdir:       filepath.Join(tmpdir, "0"),
@@ -330,6 +332,7 @@ type shacState struct {
 	env          *starlarkEnv
 	r            Report
 	allowNetwork bool
+	writableRoot bool
 	main         string
 	// root is the root for the root shac.star that was executed. Native path
 	// style.
