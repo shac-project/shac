@@ -130,35 +130,16 @@ type scmCheckout interface {
 type filteredSCM struct {
 	matcher gitignore.Matcher
 	scm     scmCheckout
-
-	// Mutable. Lazy loaded. Keys are `include_deleted` values.
-	mu       sync.Mutex
-	modified map[bool][]file // modified files in this checkout.
-	all      map[bool][]file // all files in the repo.
 }
 
 func (f *filteredSCM) affectedFiles(ctx context.Context, includeDeleted bool) ([]file, error) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	var err error
-	if _, ok := f.modified[includeDeleted]; !ok {
-		var files []file
-		files, err = f.scm.affectedFiles(ctx, includeDeleted)
-		f.modified[includeDeleted] = f.filter(files)
-	}
-	return f.modified[includeDeleted], err
+	files, err := f.scm.affectedFiles(ctx, includeDeleted)
+	return f.filter(files), err
 }
 
 func (f *filteredSCM) allFiles(ctx context.Context, includeDeleted bool) ([]file, error) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	var err error
-	if _, ok := f.all[includeDeleted]; !ok {
-		var files []file
-		files, err = f.scm.allFiles(ctx, includeDeleted)
-		f.all[includeDeleted] = f.filter(files)
-	}
-	return f.all[includeDeleted], err
+	files, err := f.scm.allFiles(ctx, includeDeleted)
+	return f.filter(files), err
 }
 
 func (f *filteredSCM) newLines(ctx context.Context, fi file) (starlark.Value, error) {
@@ -190,38 +171,18 @@ type subdirSCM struct {
 	// subdir is the subdirectory to filter on. It must be a POSIX path.
 	// It must be non-empty and end with "/".
 	subdir string
-
-	// Mutable. Lazy loaded.
-	mu       sync.Mutex
-	modified []file // modified files in this checkout.
-	all      []file // all files in the repo.
-	err      error
 }
 
 func (s *subdirSCM) affectedFiles(ctx context.Context, includeDeleted bool) ([]file, error) {
-	var f []file
-	s.mu.Lock()
-	if s.modified == nil && s.err == nil {
-		s.modified, s.err = s.s.affectedFiles(ctx, includeDeleted)
-		s.modified = s.filterFiles(s.modified)
-	}
-	err := s.err
-	f = s.modified
-	s.mu.Unlock()
-	return f, err
+	affected, err := s.s.affectedFiles(ctx, includeDeleted)
+	affected = s.filterFiles(affected)
+	return affected, err
 }
 
 func (s *subdirSCM) allFiles(ctx context.Context, includeDeleted bool) ([]file, error) {
-	var f []file
-	s.mu.Lock()
-	if s.all == nil && s.err == nil {
-		s.all, s.err = s.s.allFiles(ctx, includeDeleted)
-		s.all = s.filterFiles(s.all)
-	}
-	err := s.err
-	f = s.all
-	s.mu.Unlock()
-	return f, err
+	all, err := s.s.allFiles(ctx, includeDeleted)
+	all = s.filterFiles(all)
+	return all, err
 }
 
 // filterFiles returns the list of files that are applicable for this subdir.
@@ -291,6 +252,46 @@ func getSCM(ctx context.Context, root string, allFiles bool) (scmCheckout, error
 	return &rawTree{root: root}, nil
 }
 
+// cachingSCM wraps any other scmCheckout and memoizes return values.
+type cachingSCM struct {
+	scm scmCheckout
+
+	mu sync.Mutex
+	// Mutable. Lazy loaded. Keys are `include_deleted` values.
+	affected map[bool][]file
+	all      map[bool][]file
+}
+
+func (c *cachingSCM) affectedFiles(ctx context.Context, includeDeleted bool) ([]file, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.affected == nil {
+		c.affected = make(map[bool][]file)
+	}
+	var err error
+	if _, ok := c.affected[includeDeleted]; !ok {
+		c.affected[includeDeleted], err = c.scm.affectedFiles(ctx, includeDeleted)
+	}
+	return c.affected[includeDeleted], err
+}
+
+func (c *cachingSCM) allFiles(ctx context.Context, includeDeleted bool) ([]file, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.all == nil {
+		c.all = make(map[bool][]file)
+	}
+	var err error
+	if _, ok := c.all[includeDeleted]; !ok {
+		c.all[includeDeleted], err = c.scm.allFiles(ctx, includeDeleted)
+	}
+	return c.all[includeDeleted], err
+}
+
+func (c *cachingSCM) newLines(ctx context.Context, fi file) (starlark.Value, error) {
+	return c.scm.newLines(ctx, fi)
+}
+
 // gitCheckout represents a git checkout.
 type gitCheckout struct {
 	// Configuration.
@@ -303,11 +304,8 @@ type gitCheckout struct {
 	head         commitRef
 	upstream     commitRef
 
-	// Mutable. Late initialized information.
-	mu       sync.Mutex
-	modified []file // modified files in this checkout.
-	all      []file // all files in the repo.
-	err      error  // save error.
+	mu  sync.Mutex
+	err error // save error.
 }
 
 func (g *gitCheckout) init(ctx context.Context, root string) error {
@@ -398,57 +396,52 @@ func (g *gitCheckout) affectedFiles(ctx context.Context, includeDeleted bool) ([
 	}
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	if g.modified == nil {
-		// Each line has a variable number of NUL character, so process one at a time.
-		for o := g.run(ctx, "diff", "--name-status", "-z", "-C", g.upstream.hash); len(o) != 0; {
-			var action, path string
-			if i := strings.IndexByte(o, 0); i != -1 {
-				// For rename, ignore the percentage number.
-				action = o[:1]
+	modified := []file{}
+	// Each line has a variable number of NUL character, so process one at a time.
+	for o := g.run(ctx, "diff", "--name-status", "-z", "-C", g.upstream.hash); len(o) != 0; {
+		var action, path string
+		if i := strings.IndexByte(o, 0); i != -1 {
+			// For rename, ignore the percentage number.
+			action = o[:1]
+			o = o[i+1:]
+			if i = strings.IndexByte(o, 0); i != -1 {
+				path = o[:i]
 				o = o[i+1:]
-				if i = strings.IndexByte(o, 0); i != -1 {
-					path = o[:i]
-					o = o[i+1:]
-					if action == "C" {
-						if i = strings.IndexByte(o, 0); i != -1 {
-							// Ignore the source for now.
-							path = o[:i]
-							o = o[i+1:]
-						} else {
-							path = ""
-						}
-					} else if action == "R" {
-						if i = strings.IndexByte(o, 0); i != -1 {
-							// Ignore the source for now.
-							path = o[:i]
-							o = o[i+1:]
-						} else {
-							path = ""
-						}
+				if action == "C" {
+					if i = strings.IndexByte(o, 0); i != -1 {
+						// Ignore the source for now.
+						path = o[:i]
+						o = o[i+1:]
+					} else {
+						path = ""
+					}
+				} else if action == "R" {
+					if i = strings.IndexByte(o, 0); i != -1 {
+						// Ignore the source for now.
+						path = o[:i]
+						o = o[i+1:]
+					} else {
+						path = ""
 					}
 				}
 			}
-			if path == "" {
-				g.err = fmt.Errorf("missing trailing NUL character from git diff --name-status -z -C %s", g.upstream.hash)
-				break
-			}
-			path = filepath.ToSlash(path)
-			// TODO(olivernewman): Omit deleted submodules. For now they're
-			// treated the same as deleted regular files.
-			if action == "D" || !g.isSubmodule(path) {
-				// TODO(maruel): Share with allFiles.
-				g.modified = append(g.modified, &fileImpl{a: action, path: path})
-			}
 		}
-		if g.modified == nil {
-			g.modified = []file{}
+		if path == "" {
+			g.err = fmt.Errorf("missing trailing NUL character from git diff --name-status -z -C %s", g.upstream.hash)
+			break
 		}
-		sort.Slice(g.modified, func(i, j int) bool { return g.modified[i].rootedpath() < g.modified[j].rootedpath() })
+		if action == "D" && !includeDeleted {
+			continue
+		}
+		// TODO(olivernewman): Omit deleted submodules. For now they're
+		// treated the same as deleted regular files.
+		if action == "D" || !g.isSubmodule(path) {
+			// TODO(maruel): Share with allFiles.
+			modified = append(modified, &fileImpl{a: action, path: filepath.ToSlash(path)})
+		}
 	}
-	if includeDeleted {
-		return g.modified, g.err
-	}
-	return withoutDeleted(g.modified), g.err
+	sort.Slice(modified, func(i, j int) bool { return modified[i].rootedpath() < modified[j].rootedpath() })
+	return modified, g.err
 }
 
 // allFiles returns all the files in this checkout.
@@ -457,45 +450,29 @@ func (g *gitCheckout) affectedFiles(ctx context.Context, includeDeleted bool) ([
 func (g *gitCheckout) allFiles(ctx context.Context, includeDeleted bool) ([]file, error) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	if g.all == nil {
-		// Paths are returned in POSIX style even on Windows.
-		// TODO(maruel): Extract more information.
-		if o := g.run(ctx, "ls-files", "-z"); len(o) != 0 {
-			items := strings.Split(o[:len(o)-1], "\x00")
-			g.all = make([]file, 0, len(items))
-			for _, path := range items {
-				fi, err := os.Stat(filepath.Join(g.checkoutRoot, path))
-				if errors.Is(err, fs.ErrNotExist) {
-					g.all = append(g.all, &fileImpl{a: "D", path: filepath.ToSlash(path)})
-					continue
-				} else if err != nil {
-					return nil, err
-				}
-				if !fi.IsDir() { // Not a submodule.
-					// TODO(maruel): Still include action from affectedFiles()?
-					// TODO(maruel): Share with affectedFiles.
-					g.all = append(g.all, &fileImpl{a: "A", path: filepath.ToSlash(path)})
-				}
+	// Paths are returned in POSIX style even on Windows.
+	// TODO(maruel): Extract more information.
+	o := g.run(ctx, "ls-files", "-z")
+	items := strings.Split(o[:len(o)-1], "\x00")
+	all := make([]file, 0, len(items))
+	for _, path := range items {
+		fi, err := os.Stat(filepath.Join(g.checkoutRoot, path))
+		if errors.Is(err, fs.ErrNotExist) {
+			if includeDeleted {
+				all = append(all, &fileImpl{a: "D", path: filepath.ToSlash(path)})
 			}
-			sort.Slice(g.all, func(i, j int) bool { return g.all[i].rootedpath() < g.all[j].rootedpath() })
-		} else {
-			g.all = []file{}
+			continue
+		} else if err != nil {
+			return nil, err
+		}
+		if !fi.IsDir() { // Not a submodule.
+			// TODO(maruel): Still include action from affectedFiles()?
+			// TODO(maruel): Share with affectedFiles.
+			all = append(all, &fileImpl{a: "A", path: filepath.ToSlash(path)})
 		}
 	}
-	if includeDeleted {
-		return g.all, g.err
-	}
-	return withoutDeleted(g.all), g.err
-}
-
-func withoutDeleted(files []file) []file {
-	var res []file
-	for _, f := range files {
-		if f.action() != "D" {
-			res = append(res, f)
-		}
-	}
-	return res
+	sort.Slice(all, func(i, j int) bool { return all[i].rootedpath() < all[j].rootedpath() })
+	return all, g.err
 }
 
 func (g *gitCheckout) isSubmodule(path string) bool {
