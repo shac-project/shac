@@ -432,6 +432,7 @@ func (g *gitCheckout) affectedFiles(ctx context.Context, includeDeleted bool) ([
 				g.err = fmt.Errorf("missing trailing NUL character from git diff --name-status -z -C %s", g.upstream.hash)
 				break
 			}
+			path = filepath.ToSlash(path)
 			// TODO(olivernewman): Omit deleted submodules. For now they're
 			// treated the same as deleted regular files.
 			if action == "D" || !g.isSubmodule(path) {
@@ -465,7 +466,7 @@ func (g *gitCheckout) allFiles(ctx context.Context, includeDeleted bool) ([]file
 			for _, path := range items {
 				fi, err := os.Stat(filepath.Join(g.checkoutRoot, path))
 				if errors.Is(err, fs.ErrNotExist) {
-					g.all = append(g.all, &fileImpl{a: "D", path: path})
+					g.all = append(g.all, &fileImpl{a: "D", path: filepath.ToSlash(path)})
 					continue
 				} else if err != nil {
 					return nil, err
@@ -473,7 +474,7 @@ func (g *gitCheckout) allFiles(ctx context.Context, includeDeleted bool) ([]file
 				if !fi.IsDir() { // Not a submodule.
 					// TODO(maruel): Still include action from affectedFiles()?
 					// TODO(maruel): Share with affectedFiles.
-					g.all = append(g.all, &fileImpl{a: "A", path: path})
+					g.all = append(g.all, &fileImpl{a: "A", path: filepath.ToSlash(path)})
 				}
 			}
 			sort.Slice(g.all, func(i, j int) bool { return g.all[i].rootedpath() < g.all[j].rootedpath() })
@@ -611,7 +612,7 @@ func (r *rawTree) allFiles(ctx context.Context, includeDeleted bool) ([]file, er
 		err = filepath.WalkDir(r.root, func(path string, d fs.DirEntry, err2 error) error {
 			if err2 == nil {
 				if !d.IsDir() {
-					r.all = append(r.all, &fileImpl{path: path[l:]})
+					r.all = append(r.all, &fileImpl{path: filepath.ToSlash(path[l:])})
 				}
 			}
 			return nil
