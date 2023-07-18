@@ -35,6 +35,10 @@ message Document {
   // File paths to ignore/un-ignore. Syntax matches that of .gitignore. See
   // https://git-scm.com/docs/gitignore.
   repeated string ignore = 6;
+  // Whether to allow checks write access to the SCM root directory.
+  // TODO(olivernewman): Remove this option once named caches and pass-throughs
+  // are implemented.
+  bool writable_root = 7;
 }
 
 // Requirements lists all the external dependencies, both direct and transitive
