@@ -36,8 +36,8 @@ shac doc shac.star | less
 
 Planned features/changes, in descending order by priority:
 
+* [x] Configuring files to exclude from shac analysis in `shac.textproto`
 * [ ] Automatic fix application with handling for conflicting suggestions
-* [ ] Configuring files to exclude from shac analysis in `shac.textproto`
 * [ ] Include unstaged files in analysis, including respecting unstaged
   `shac.star` files
 * [ ] Provide a `.shac` cache directory that checks can write to
@@ -52,6 +52,7 @@ Planned features/changes, in descending order by priority:
   easier filtering
 * [ ] Filesystem sandboxing on MacOS
 * [ ] Windows sandboxing
+* [ ] Testing framework for checks
 
 ## Contributing
 
