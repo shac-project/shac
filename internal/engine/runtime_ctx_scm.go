@@ -367,6 +367,12 @@ func (g *gitCheckout) run(ctx context.Context, args ...string) string {
 			"GIT_EXTERNAL_DIFF=",
 			"GIT_DIFF_OPTS=",
 		)
+		gitConfig := map[string]string{
+			// Prevents automatic unicode decomposition of filenames. Only has
+			// an effect on macOS.
+			"core.precomposeUnicode": "true",
+		}
+		g.env = append(g.env, gitConfigEnv(gitConfig)...)
 	}
 	cmd.Env = g.env
 	b := buffers.get()
@@ -385,6 +391,32 @@ func (g *gitCheckout) run(ctx context.Context, args ...string) string {
 		}
 	}
 	return strings.TrimSpace(out)
+}
+
+// gitConfigEnv converts a map of key-value git config pairs into corresponding
+// environment variables.
+//
+// See https://git-scm.com/docs/git-config#ENVIRONMENT for details on how git
+// configs are set via environment variables.
+func gitConfigEnv(gitConfig map[string]string) []string {
+	// GIT_CONFIG_COUNT specifies how many key/value env var pairs to look for.
+	res := []string{fmt.Sprintf("GIT_CONFIG_COUNT=%d", len(gitConfig))}
+
+	// TODO(olivernewman): Use maps.Keys() in go1.21.
+	keys := make([]string, 0, len(gitConfig))
+	for k := range gitConfig {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	for i, k := range keys {
+		// Each config setting is specified by setting a pair of
+		// GIT_CONFIG_KEY_<N> and GIT_CONFIG_VALUE_<N> variables.
+		res = append(res,
+			fmt.Sprintf("GIT_CONFIG_KEY_%d=%s", i, k),
+			fmt.Sprintf("GIT_CONFIG_VALUE_%d=%s", i, gitConfig[k]))
+	}
+	return res
 }
 
 // affectedFiles returns the modified files on this checkout.
