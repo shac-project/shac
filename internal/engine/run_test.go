@@ -388,6 +388,79 @@ func TestRun_SCM_Git_Upstream_Staged(t *testing.T) {
 	}
 }
 
+func TestRun_SCM_Git_Untracked(t *testing.T) {
+	t.Parallel()
+
+	data := []struct {
+		name string
+		want string
+	}{
+		{
+			"ctx-scm-affected_files.star",
+			"[//shac.star:19] \n" +
+				".gitignore: A\n" +
+				"shac.star: A\n" +
+				"staged.txt: A\n" +
+				"untracked.txt: A\n" +
+				"\n",
+		},
+		{
+			"ctx-scm-all_files.star",
+			"[//shac.star:19] \n" +
+				".gitignore: A\n" +
+				"a.txt: A\n" +
+				"shac.star: A\n" +
+				"staged.txt: A\n" +
+				"untracked.txt: A\n" +
+				"z.txt: A\n" +
+				"\n",
+		},
+	}
+	for i := range data {
+		i := i
+		t.Run(data[i].name, func(t *testing.T) {
+			t.Parallel()
+
+			// Use a separate root for each test case because we write a
+			// different `shac.star` file to the root for each test case, so
+			// they wouldn't be safe to run in parallel otherwise.
+			root := makeGit(t)
+
+			// git-ignored files should not be included.
+			writeFile(t, root, "ignored.txt", "This file should be ignored")
+			writeFile(t, root, ".gitignore", "ignored.txt\n")
+
+			// Even if one file is staged, untracked files should still be considered.
+			writeFile(t, root, "staged.txt", "This is a staged file")
+			runGit(t, root, "add", "staged.txt")
+
+			writeFile(t, root, "untracked.txt", "This is an untracked file")
+
+			// Instead of running the testdata file directly, copy it to an
+			// untracked `shac.star` file to ensure that untracked shac.star
+			// files can be discovered and run.
+			d, err := os.ReadFile(filepath.Join("testdata", "scm", data[i].name))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err = os.WriteFile(filepath.Join(root, "shac.star"), d, 0o600); err != nil {
+				t.Fatal(err)
+			}
+
+			r := reportPrint{reportNoPrint: reportNoPrint{t: t}}
+			// Don't specify `main` so it defaults to shac.star.
+			// Specify `recurse` so we use the scm to discover shac.star files.
+			o := Options{Report: &r, Root: root, Recurse: true}
+			if err = Run(context.Background(), &o); err != nil {
+				t.Fatal(err)
+			}
+			if diff := cmp.Diff(data[i].want, r.b.String()); diff != "" {
+				t.Fatalf("mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
 func TestRun_SCM_Git_Submodule(t *testing.T) {
 	t.Parallel()
 	root := makeGit(t)
@@ -438,6 +511,8 @@ func TestRun_SCM_DeletedFile(t *testing.T) {
 
 	root := makeGit(t)
 	copySCM(t, root)
+	runGit(t, root, "add", ".")
+	runGit(t, root, "commit", "-m", "Initial commit")
 
 	writeFile(t, root, "file-to-delete.txt", "This file will be deleted")
 	runGit(t, root, "add", "file-to-delete.txt")
@@ -467,6 +542,7 @@ func TestRun_SCM_DeletedFile(t *testing.T) {
 			"ctx-scm-all_files.star",
 			"[//ctx-scm-all_files.star:19] \n" +
 				"a.txt: A\n" +
+				scmStarlarkAddedFiles +
 				"z.txt: A\n" +
 				"\n",
 		},
@@ -475,11 +551,13 @@ func TestRun_SCM_DeletedFile(t *testing.T) {
 			"[//ctx-scm-all_files-include_deleted.star:26] \n" +
 				"With deleted:\n" +
 				"a.txt: A\n" +
+				scmStarlarkAddedFiles +
 				"file-to-delete.txt: D\n" +
 				"z.txt: A\n" +
 				"\n" +
 				"Without deleted:\n" +
 				"a.txt: A\n" +
+				scmStarlarkAddedFiles +
 				"z.txt: A\n" +
 				"\n"},
 	}
@@ -497,6 +575,8 @@ func TestRun_SCM_Git_Binary_File(t *testing.T) {
 	root := makeGit(t)
 
 	copySCM(t, root)
+	runGit(t, root, "add", ".")
+	runGit(t, root, "commit", "-m", "Initial commit")
 
 	// Git considers a file to be binary if it contains a null byte.
 	writeFileBytes(t, root, "a.bin", []byte{0, 1, 2, 3}, 0o600)

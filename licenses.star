@@ -65,7 +65,7 @@ def check_license_headers(ctx):
     lines = contents.splitlines()
     # Only files with shebangs are allowed to not have a license header on the
     # first line.
-    if lines[0].startswith("#!"):
+    if lines and lines[0].startswith("#!"):
       lines = lines[1:]
     if not ctx.re.match(_EXPECTED_HEADER_RE, "\n".join(lines)):
       ctx.emit.finding(

@@ -396,7 +396,17 @@ func (g *gitCheckout) affectedFiles(ctx context.Context, includeDeleted bool) ([
 	}
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	modified := []file{}
+	// Untracked files are always considered affected (as long as they're not
+	// ignored).
+	o := g.run(ctx, "ls-files", "-z", "--others", "--exclude-standard")
+	var items []string
+	if len(o) > 0 {
+		items = strings.Split(o[:len(o)-1], "\x00")
+	}
+	modified := make([]file, 0, len(items))
+	for _, path := range items {
+		modified = append(modified, &fileImpl{a: "A", path: filepath.ToSlash(path)})
+	}
 	// Each line has a variable number of NUL character, so process one at a time.
 	for o := g.run(ctx, "diff", "--name-status", "-z", "-C", g.upstream.hash); len(o) != 0; {
 		var action, path string
@@ -452,7 +462,7 @@ func (g *gitCheckout) allFiles(ctx context.Context, includeDeleted bool) ([]file
 	defer g.mu.Unlock()
 	// Paths are returned in POSIX style even on Windows.
 	// TODO(maruel): Extract more information.
-	o := g.run(ctx, "ls-files", "-z")
+	o := g.run(ctx, "ls-files", "-z", "--cached", "--others", "--exclude-standard")
 	items := strings.Split(o[:len(o)-1], "\x00")
 	all := make([]file, 0, len(items))
 	for _, path := range items {

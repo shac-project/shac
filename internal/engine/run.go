@@ -225,9 +225,6 @@ func runInner(ctx context.Context, root, tmpdir, main string, r Report, allowNet
 		// parallelism.
 		// Discover all the main files via the SCM. This enables us to not walk
 		// ignored files.
-		// TODO(olivernewman): Because we use scm to discover shac.star files,
-		// shac will ignore any unstaged shac.star files. This is
-		// counterintuitive, we should respect unstaged shac.star files.
 		files, err := scm.allFiles(ctx, false)
 		if err != nil {
 			return err
