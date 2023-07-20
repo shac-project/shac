@@ -22,27 +22,27 @@ import (
 	"go.fuchsia.dev/shac-project/shac/internal/engine"
 )
 
-type fixCmd struct {
+type fmtCmd struct {
 	commandBase
 }
 
-func (*fixCmd) Name() string {
-	return "fix"
+func (*fmtCmd) Name() string {
+	return "fmt"
 }
 
-func (*fixCmd) Description() string {
-	return "Run non-formatter checks and make suggested fixes."
+func (*fmtCmd) Description() string {
+	return "Auto-format files."
 }
 
-func (c *fixCmd) SetFlags(f *flag.FlagSet) {
+func (c *fmtCmd) SetFlags(f *flag.FlagSet) {
 	c.commandBase.SetFlags(f)
 }
 
-func (c *fixCmd) Execute(ctx context.Context, args []string) error {
+func (c *fmtCmd) Execute(ctx context.Context, args []string) error {
 	if len(args) != 0 {
 		return errors.New("unsupported arguments")
 	}
 	o := c.options()
-	o.Filter = engine.OnlyNonFormatters
+	o.Filter = engine.OnlyFormatters
 	return engine.Fix(ctx, &o)
 }

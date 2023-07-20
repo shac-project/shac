@@ -71,6 +71,21 @@ type Span struct {
 	_ struct{}
 }
 
+// CheckFilter controls which checks get run by `Run`. It returns true for
+// checks that should be run, false for checks that should be skipped.
+type CheckFilter func(registeredCheck) bool
+
+// OnlyFormatters causes only checks marked with `formatter = True` to be run.
+func OnlyFormatters(c registeredCheck) bool {
+	return c.formatter
+}
+
+// OnlyNonFormatters causes only checks *not* marked with `formatter = True` to
+// be run.
+func OnlyNonFormatters(c registeredCheck) bool {
+	return !c.formatter
+}
+
 // Level is one of "notice", "warning" or "error".
 //
 // A check is only considered failed if it emits at least one finding with
@@ -132,6 +147,8 @@ type Options struct {
 	AllFiles bool
 	// Recurse tells the engine to run all Main files found in subdirectories.
 	Recurse bool
+	// Filter controls which checks run.
+	Filter CheckFilter
 
 	// main source file to run. Defaults to shac.star. Only used in unit tests.
 	main string
@@ -201,14 +218,14 @@ func Run(ctx context.Context, o *Options) error {
 	if err != nil {
 		return err
 	}
-	err = runInner(ctx, root, tmpdir, main, o.Report, doc.AllowNetwork, doc.WritableRoot, o.Recurse, scm, packages)
+	err = runInner(ctx, root, tmpdir, main, o.Report, doc.AllowNetwork, doc.WritableRoot, o.Recurse, o.Filter, scm, packages)
 	if err2 := os.RemoveAll(tmpdir); err == nil {
 		err = err2
 	}
 	return err
 }
 
-func runInner(ctx context.Context, root, tmpdir, main string, r Report, allowNetwork, writableRoot, recurse bool, scm scmCheckout, packages map[string]fs.FS) error {
+func runInner(ctx context.Context, root, tmpdir, main string, r Report, allowNetwork, writableRoot, recurse bool, filter CheckFilter, scm scmCheckout, packages map[string]fs.FS) error {
 	sb, err := sandbox.New(tmpdir)
 	if err != nil {
 		return err
@@ -244,6 +261,7 @@ func runInner(ctx context.Context, root, tmpdir, main string, r Report, allowNet
 						r:            r,
 						allowNetwork: allowNetwork,
 						writableRoot: writableRoot,
+						filter:       filter,
 						main:         main,
 						root:         root,
 						subdir:       d,
@@ -263,6 +281,7 @@ func runInner(ctx context.Context, root, tmpdir, main string, r Report, allowNet
 				r:            r,
 				allowNetwork: allowNetwork,
 				writableRoot: writableRoot,
+				filter:       filter,
 				main:         main,
 				root:         root,
 				tmpdir:       filepath.Join(tmpdir, "0"),
@@ -350,6 +369,8 @@ type shacState struct {
 	// Checks are executed sequentially after all Starlark code is loaded and not
 	// mutated. They run checks and emit results (results and comments).
 	checks []registeredCheck
+	// filter controls which checks run. If nil, all checks will run.
+	filter CheckFilter
 
 	// Set when fail() is called. This happens only during the first phase, thus
 	// no mutex is needed.
@@ -415,6 +436,9 @@ func (s *shacState) bufferAllChecks(ctx context.Context, ch chan<- func() error)
 	args := starlark.Tuple{getCtx(path.Join(s.root, s.subdir))}
 	args.Freeze()
 	for i := range s.checks {
+		if s.filter != nil && !s.filter(s.checks[i]) {
+			continue
+		}
 		i := i
 		ch <- func() error {
 			start := time.Now()

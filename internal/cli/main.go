@@ -68,7 +68,10 @@ func Main(args []string) error {
 	ctx := context.Background()
 
 	subcommands := [...]subcommand{
+		// Ordered roughly by importance, because ordering here corresponds to
+		// the order in which subcommands will be listed in `shac help`.
 		&checkCmd{},
+		&fmtCmd{},
 		&fixCmd{},
 		&docCmd{},
 		&helpCmd{},
