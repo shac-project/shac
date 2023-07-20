@@ -22,8 +22,19 @@ def cb(ctx):
       end_line=10,
       end_col=1,
       replacements=("a", "tuple"))
-  ctx.emit.finding(level="notice", line=100, col=2, message="great code")
-  ctx.emit.finding(level="notice", line=100, col=2, end_col=3, message="nice")
+  ctx.emit.finding(
+      level="notice",
+      filepath="file.txt",
+      line=100,
+      col=2,
+      message="great code")
+  ctx.emit.finding(
+      level="notice",
+      filepath="file.txt",
+      line=100,
+      col=2,
+      end_col=3,
+      message="nice")
   ctx.emit.finding(
       level="warning",
       message="please fix",
@@ -36,12 +47,14 @@ def cb(ctx):
   ctx.emit.finding(
       level="warning",
       message="weird",
+      filepath="file.txt",
       line=1,
       end_line=10,
       replacements={"a": True, "dict": 42})
   ctx.emit.finding(
       level="warning",
       message="no span, full file",
+      filepath="file.txt",
       replacements=["this text is a replacement\nfor the entire file\n"])
 
 shac.register_check(cb)

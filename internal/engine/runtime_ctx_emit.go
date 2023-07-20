@@ -57,8 +57,6 @@ func ctxEmitFinding(ctx context.Context, s *shacState, name string, args starlar
 	if len(message) == 0 {
 		return fmt.Errorf("for parameter \"message\": got %s, want string", argmessage)
 	}
-	// TODO(olivernewman): Require filepath to be set if span and/or
-	// replacements are specified.
 	file := string(argfilepath)
 	span := Span{
 		Start: Cursor{
@@ -83,6 +81,9 @@ func ctxEmitFinding(ctx context.Context, s *shacState, name string, args starlar
 		return errors.New("for parameter \"end_col\": \"col\" must be specified")
 	}
 	if span.Start.Line > 0 {
+		if file == "" {
+			return errors.New("for parameter \"line\": \"filepath\" must be specified")
+		}
 		if span.End.Line > 0 {
 			if span.End.Line < span.Start.Line {
 				return errors.New("for parameter \"end_line\": must be greater than or equal to \"line\"")
@@ -104,6 +105,9 @@ func ctxEmitFinding(ctx context.Context, s *shacState, name string, args starlar
 	}
 	var replacements []string
 	if argreplacements != nil {
+		if file == "" {
+			return errors.New("for parameter \"replacements\": \"filepath\" must be specified")
+		}
 		if replacements = sequenceToStrings(argreplacements); replacements == nil {
 			return fmt.Errorf("for parameter \"replacements\": got %s, want sequence of str", argreplacements.Type())
 		}

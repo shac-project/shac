@@ -13,11 +13,9 @@
 # limitations under the License.
 
 def cb(ctx):
-  too_many = ["a"] * 101
   ctx.emit.finding(
       level="notice",
       message="fix it",
-      filepath="foo.txt",
-      replacements=too_many)
+      replacements=["foo"])
 
 shac.register_check(cb)

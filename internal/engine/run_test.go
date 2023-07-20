@@ -934,6 +934,11 @@ func TestTestDataFailOrThrow(t *testing.T) {
 			"  //ctx-emit-finding-level.star:16:19: in cb\n",
 		},
 		{
+			"ctx-emit-finding-line-no_file.star",
+			"ctx.emit.finding: for parameter \"line\": \"filepath\" must be specified",
+			"  //ctx-emit-finding-line-no_file.star:16:19: in cb\n",
+		},
+		{
 			"ctx-emit-finding-line.star",
 			"ctx.emit.finding: for parameter \"line\": got -1, line are 1 based",
 			"  //ctx-emit-finding-line.star:16:19: in cb\n",
@@ -952,6 +957,11 @@ func TestTestDataFailOrThrow(t *testing.T) {
 			"ctx-emit-finding-replacements-list.star",
 			"ctx.emit.finding: for parameter \"replacements\": got list, want sequence of str",
 			"  //ctx-emit-finding-replacements-list.star:16:19: in cb\n",
+		},
+		{
+			"ctx-emit-finding-replacements-no_file.star",
+			"ctx.emit.finding: for parameter \"replacements\": \"filepath\" must be specified",
+			"  //ctx-emit-finding-replacements-no_file.star:16:19: in cb\n",
 		},
 		{
 			"ctx-emit-finding-replacements-str.star",
@@ -1450,11 +1460,15 @@ func TestTestDataEmit(t *testing.T) {
 					Check:   "cb",
 					Level:   Notice,
 					Message: "great code",
+					Root:    root,
+					File:    "file.txt",
 					Span:    Span{Start: Cursor{Line: 100, Col: 2}},
 				}, {
 					Check:   "cb",
 					Level:   "notice",
 					Message: "nice",
+					Root:    root,
+					File:    "file.txt",
 					Span:    Span{Start: Cursor{Line: 100, Col: 2}, End: Cursor{Line: 100, Col: 3}},
 				},
 				{
@@ -1470,6 +1484,8 @@ func TestTestDataEmit(t *testing.T) {
 					Check:        "cb",
 					Level:        "warning",
 					Message:      "weird",
+					Root:         root,
+					File:         "file.txt",
 					Span:         Span{Start: Cursor{Line: 1}, End: Cursor{Line: 10}},
 					Replacements: []string{"a", "dict"},
 				},
@@ -1477,6 +1493,8 @@ func TestTestDataEmit(t *testing.T) {
 					Check:        "cb",
 					Level:        "warning",
 					Message:      "no span, full file",
+					Root:         root,
+					File:         "file.txt",
 					Replacements: []string{"this text is a replacement\nfor the entire file\n"},
 				},
 			},

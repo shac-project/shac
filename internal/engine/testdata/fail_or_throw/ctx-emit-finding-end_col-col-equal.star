@@ -16,6 +16,7 @@ def cb(ctx):
   ctx.emit.finding(
       level="notice",
       message="fix it",
+      filepath="foo.txt",
       line=1,
       col=2,
       end_line=1,
