@@ -236,6 +236,29 @@ func runInner(ctx context.Context, root, tmpdir, main string, r Report, allowNet
 		packages: packages,
 	}
 
+	newState := func(scm scmCheckout, subdir string, idx int) *shacState {
+		if subdir != "" {
+			normalized := subdir + "/"
+			if subdir == "." {
+				subdir = ""
+				normalized = ""
+			}
+			scm = &subdirSCM{s: scm, subdir: normalized}
+		}
+		return &shacState{
+			allowNetwork: allowNetwork,
+			env:          &env,
+			filter:       filter,
+			main:         main,
+			r:            r,
+			root:         root,
+			sandbox:      sb,
+			scm:          scm,
+			subdir:       subdir,
+			tmpdir:       filepath.Join(tmpdir, strconv.Itoa(idx)),
+			writableRoot: writableRoot,
+		}
+	}
 	var shacStates []*shacState
 	if recurse {
 		// Each found shac.star is run in its own interpreter for maximum
@@ -249,46 +272,15 @@ func runInner(ctx context.Context, root, tmpdir, main string, r Report, allowNet
 		for i, f := range files {
 			n := f.rootedpath()
 			if filepath.Base(n) == main {
-				d := strings.ReplaceAll(filepath.Dir(n), "\\", "/")
-				dd := d + "/"
-				if d == "." {
-					d = ""
-					dd = ""
-				}
-				shacStates = append(shacStates,
-					&shacState{
-						env:          &env,
-						r:            r,
-						allowNetwork: allowNetwork,
-						writableRoot: writableRoot,
-						filter:       filter,
-						main:         main,
-						root:         root,
-						subdir:       d,
-						tmpdir:       filepath.Join(tmpdir, strconv.Itoa(i)),
-						scm:          &subdirSCM{s: scm, subdir: dd},
-						sandbox:      sb,
-					})
+				subdir := strings.ReplaceAll(filepath.Dir(n), "\\", "/")
+				shacStates = append(shacStates, newState(scm, subdir, i))
 			}
 		}
 		if len(shacStates) == 0 {
 			return fmt.Errorf("no %s files found", main)
 		}
 	} else {
-		shacStates = []*shacState{
-			{
-				env:          &env,
-				r:            r,
-				allowNetwork: allowNetwork,
-				writableRoot: writableRoot,
-				filter:       filter,
-				main:         main,
-				root:         root,
-				tmpdir:       filepath.Join(tmpdir, "0"),
-				scm:          scm,
-				sandbox:      sb,
-			},
-		}
+		shacStates = []*shacState{newState(scm, "", 0)}
 	}
 
 	// Parse the starlark files. Run everything from our errgroup.
