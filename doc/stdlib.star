@@ -680,7 +680,7 @@ def print(*args, sep = " "):
 ## Methods inside the shac object.
 
 
-def _shac_check(impl, name = None):
+def _shac_check(impl, name = None, formatter = False):
   """Constructs a shac check object.
 
   Example:
@@ -698,6 +698,8 @@ def _shac_check(impl, name = None):
     impl: Starlark function that is called back to implement the check. The
       callback must accept one ctx(...) argument and return None.
     name: (optional) Name of the check. Defaults to the callback function name.
+    formatter: (optional) Whether the check is a formatter. If set to True, the
+      formatter will be run and have its results written to disk by `shac fmt`.
   """
   pass
 

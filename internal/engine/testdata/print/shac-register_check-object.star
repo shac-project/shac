@@ -15,6 +15,6 @@
 def cb(ctx):
   print("running from a check object")
 
-check = shac.check(impl=cb, name="print")
+check = shac.check(impl=cb, name="print", formatter=False)
 
 shac.register_check(check)

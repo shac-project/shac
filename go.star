@@ -39,7 +39,7 @@ def _gofmt(ctx, simplify = True):
     )
 
 
-gofmt = shac.check(_gofmt)
+gofmt = shac.check(_gofmt, formatter = True)
 
 
 def _gosec(ctx, version = "v2.15.0", level = "error"):

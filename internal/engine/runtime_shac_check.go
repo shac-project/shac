@@ -29,15 +29,17 @@ import (
 func shacCheck(ctx context.Context, s *shacState, name string, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	var argimpl *starlark.Function
 	var argname starlark.String
+	var argformatter starlark.Bool
 	if err := starlark.UnpackArgs(name, args, kwargs,
 		"impl", &argimpl,
-		"name?", &argname); err != nil {
+		"name?", &argname,
+		"formatter?", &argformatter); err != nil {
 		return nil, err
 	}
-	return newCheck(argimpl, string(argname))
+	return newCheck(argimpl, string(argname), bool(argformatter))
 }
 
-func newCheck(impl starlark.Callable, name string) (*check, error) {
+func newCheck(impl starlark.Callable, name string, formatter bool) (*check, error) {
 	if _, ok := impl.(*starlark.Builtin); ok {
 		return nil, errors.New("\"impl\" must not be a built-in function")
 	}
@@ -62,13 +64,19 @@ func newCheck(impl starlark.Callable, name string) (*check, error) {
 		}
 		name = strings.TrimPrefix(fun.Name(), "_")
 	}
-	return &check{impl: fun, name: name}, nil
+	return &check{
+		impl:      fun,
+		name:      name,
+		formatter: formatter,
+	}, nil
 }
 
 // check represents a runnable shac check as returned by shac.check().
 type check struct {
 	impl *starlark.Function
 	name string
+	// Whether the check is an auto-formatter or not.
+	formatter bool
 }
 
 var _ starlark.Value = (*check)(nil)

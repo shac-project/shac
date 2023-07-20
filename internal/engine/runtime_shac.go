@@ -58,7 +58,7 @@ func shacRegisterCheck(ctx context.Context, s *shacState, name string, args star
 	switch x := argcheck.(type) {
 	case starlark.Callable:
 		var err error
-		c, err = newCheck(x, "")
+		c, err = newCheck(x, "", false)
 		if err != nil {
 			return err
 		}
