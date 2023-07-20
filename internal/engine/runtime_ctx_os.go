@@ -19,6 +19,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"math"
 	"os"
 	"os/exec"
@@ -155,6 +156,7 @@ func ctxOsExec(ctx context.Context, s *shacState, name string, args starlark.Tup
 	var argcmd starlark.Sequence
 	var argcwd starlark.String
 	var argenv = starlark.NewDict(0)
+	var argstdin starlark.Value = starlark.None
 	var argraiseOnFailure starlark.Bool = true
 	var argallowNetwork starlark.Bool
 	var argokRetcodes starlark.Value = starlark.None
@@ -162,6 +164,7 @@ func ctxOsExec(ctx context.Context, s *shacState, name string, args starlark.Tup
 		"cmd", &argcmd,
 		"cwd?", &argcwd,
 		"env?", &argenv,
+		"stdin?", &argstdin,
 		"allow_network?", &argallowNetwork,
 		"ok_retcodes?", &argokRetcodes,
 		"raise_on_failure?", &argraiseOnFailure,
@@ -251,6 +254,17 @@ func ctxOsExec(ctx context.Context, s *shacState, name string, args starlark.Tup
 		env[string(k)] = string(v)
 	}
 
+	var stdin io.Reader
+	switch s := argstdin.(type) {
+	case starlark.String:
+		stdin = strings.NewReader(string(s))
+	case starlark.Bytes:
+		stdin = bytes.NewReader([]byte(s))
+	case starlark.NoneType:
+	default:
+		return nil, fmt.Errorf("for parameter \"stdin\": got %s, want str or bytes", argstdin.Type())
+	}
+
 	cwd := filepath.Join(s.root, s.subdir)
 	if s := string(argcwd); s != "" {
 		cwd, err = absPath(s, cwd)
@@ -334,6 +348,7 @@ func ctxOsExec(ctx context.Context, s *shacState, name string, args starlark.Tup
 
 	cmd := s.sandbox.Command(ctx, config)
 
+	cmd.Stdin = stdin
 	// TODO(olivernewman): Also handle commands that may output non-utf-8 bytes.
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr

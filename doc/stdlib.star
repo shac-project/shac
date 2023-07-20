@@ -185,6 +185,7 @@ def _ctx_os_exec(
   cmd,
   cwd = None,
   env = None,
+  stdin = None,
   allow_network = False,
   ok_retcodes = None,
   raise_on_failure = True,
@@ -230,6 +231,7 @@ def _ctx_os_exec(
       directory containing shac.star.
     env: (optional) Dictionary of environment variables to set for the
       subprocess.
+    stdin: (optional) str or bytes to pass to the subprocess as standard input.
     allow_network: (optional) Allow network access. Defaults to false.
     ok_retcodes: (optional) List of exit codes that should be considered
       successes. Any other exit code will immediately fail the check. The

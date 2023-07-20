@@ -1034,6 +1034,11 @@ func TestTestDataFailOrThrow(t *testing.T) {
 			"  //ctx-os-exec-bad_env_value.star:16:14: in cb\n",
 		},
 		{
+			"ctx-os-exec-bad_stdin_type.star",
+			"ctx.os.exec: for parameter \"stdin\": got dict, want str or bytes",
+			"  //ctx-os-exec-bad_stdin_type.star:16:14: in cb\n",
+		},
+		{
 			"ctx-os-exec-bad_type_in_args.star",
 			"ctx.os.exec: for parameter \"cmd\": got list, want sequence of str",
 			"  //ctx-os-exec-bad_type_in_args.star:16:14: in cb\n",
@@ -1573,6 +1578,15 @@ func TestTestDataPrint(t *testing.T) {
 		{
 			"ctx-os-exec-parallel.star",
 			strings.Repeat("[//ctx-os-exec-parallel.star:27] Hello, world\n", 10),
+		},
+		{
+			"ctx-os-exec-stdin.star",
+			"[//ctx-os-exec-stdin.star:30] stdout given NoneType for stdin:\n" +
+				"\n" +
+				"[//ctx-os-exec-stdin.star:30] stdout given string for stdin:\n" +
+				"hello\nfrom\nstdin\nstring\n" +
+				"[//ctx-os-exec-stdin.star:30] stdout given bytes for stdin:\n" +
+				"hello\nfrom\nstdin\nbytes\n",
 		},
 		{
 			"ctx-os-exec-success.star",

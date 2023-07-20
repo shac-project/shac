@@ -247,6 +247,7 @@ shac.register_check(cb)
 * **cmd**: Subprocess command line.
 * **cwd**: (optional) Relative path to cwd for the subprocess. Defaults to the directory containing shac.star.
 * **env**: (optional) Dictionary of environment variables to set for the subprocess.
+* **stdin**: (optional) str or bytes to pass to the subprocess as standard input.
 * **allow_network**: (optional) Allow network access. Defaults to false.
 * **ok_retcodes**: (optional) List of exit codes that should be considered successes. Any other exit code will immediately fail the check. The effective default is [0].
 * **raise_on_failure**: (optional) Whether the running check should automatically fail if the subcommand returns a non-zero exit code. Defaults to true. Cannot be false if ok_retcodes is also set.
