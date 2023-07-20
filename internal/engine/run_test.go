@@ -945,7 +945,7 @@ func TestTestDataFailOrThrow(t *testing.T) {
 		},
 		{
 			"ctx-emit-finding-message.star",
-			"ctx.emit.finding: for parameter \"message\": got \"\", want string",
+			"ctx.emit.finding: for parameter \"message\": must not be empty",
 			"  //ctx-emit-finding-message.star:16:19: in cb\n",
 		},
 		{

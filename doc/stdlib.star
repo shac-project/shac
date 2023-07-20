@@ -111,7 +111,9 @@ def _ctx_emit_finding(level, message, filepath = None, line = None, col = None, 
 
   Args:
     level: One of "notice", "warning" or "error".
-    message: Message of the finding.
+    message: Message of the finding. May be omitted for checks marked with
+      formatter=True, as long as filepath is specified, level is "error", and
+      replacements has a length of 1.
     filepath: (optional) Path to the source file to annotate.
     line: (optional) Line where the finding should start. 1 based.
     col: (optional) Column where the finding should start. 1 based.

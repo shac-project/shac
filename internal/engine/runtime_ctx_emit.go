@@ -39,7 +39,7 @@ func ctxEmitFinding(ctx context.Context, s *shacState, name string, args starlar
 	var argreplacements starlark.Sequence
 	if err := starlark.UnpackArgs(name, args, kwargs,
 		"level", &arglevel,
-		"message", &argmessage,
+		"message?", &argmessage,
 		"filepath?", &argfilepath,
 		"line?", &argline,
 		"col?", &argcol,
@@ -53,10 +53,7 @@ func ctxEmitFinding(ctx context.Context, s *shacState, name string, args starlar
 	if !level.isValid() {
 		return fmt.Errorf("for parameter \"level\": got %s, want one of %q, %q or %q", arglevel, Notice, Warning, Error)
 	}
-	message := string(argmessage)
-	if len(message) == 0 {
-		return fmt.Errorf("for parameter \"message\": got %s, want string", argmessage)
-	}
+
 	file := string(argfilepath)
 	span := Span{
 		Start: Cursor{
@@ -115,7 +112,21 @@ func ctxEmitFinding(ctx context.Context, s *shacState, name string, args starlar
 			return fmt.Errorf("for parameter \"replacements\": excessive number (%d) of replacements", len(replacements))
 		}
 	}
+
 	c := ctxCheck(ctx)
+	message := string(argmessage)
+	if len(message) == 0 {
+		if c.formatter && file != "" && level == Error && len(replacements) == 1 {
+			// If the check is a formatter, and the finding would be fixed by
+			// `shac fmt`, let users omit `message` as long as `file` is
+			// specified, since `message` will always look something like the
+			// following for formatters.
+			message = "File not formatted. Run `shac fmt` to fix."
+		} else {
+			return fmt.Errorf("for parameter \"message\": must not be empty")
+		}
+	}
+
 	if c.highestLevel == "" || level == Error || (level == Warning && c.highestLevel != Error) {
 		c.highestLevel = level
 	}
