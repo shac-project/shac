@@ -20,7 +20,6 @@ import (
 
 	flag "github.com/spf13/pflag"
 	"go.fuchsia.dev/shac-project/shac/internal/engine"
-	"go.fuchsia.dev/shac-project/shac/internal/reporting"
 )
 
 type fixCmd struct {
@@ -43,17 +42,6 @@ func (c *fixCmd) Execute(ctx context.Context, args []string) error {
 	if len(args) != 0 {
 		return errors.New("unsupported arguments")
 	}
-
-	r, err := reporting.Get(ctx)
-	if err != nil {
-		return err
-	}
 	o := c.options()
-	o.Report = r
-
-	err = engine.Run(ctx, &o)
-	if err2 := r.Close(); err == nil {
-		err = err2
-	}
-	return err
+	return engine.Fix(ctx, &o)
 }

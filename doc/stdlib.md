@@ -64,7 +64,7 @@ def cb(ctx):
 shac.register_check(cb)
 ```
 
-An finding associated with a specific file:
+A finding associated with a specific file:
 
 ```python
 def cb(ctx):
@@ -78,7 +78,7 @@ def cb(ctx):
 shac.register_check(cb)
 ```
 
-An finding associated with a specific span within a file:
+A finding associated with a specific line within a file:
 
 ```python
 def cb(ctx):
@@ -89,9 +89,31 @@ def cb(ctx):
           message="This line is superfluous",
           filepath=path,
           line=num,
-          col=1,
-          end_line=num,
-          end_col=len(line)) + 1,
+          # Suggesting an empty string as a replacement results in the line
+          # being deleted when applying the replacement.
+          replacements=[""],
+      )
+
+shac.register_check(cb)
+```
+
+A finding associated with a line and column within a file:
+
+```python
+def cb(ctx):
+  for path, meta in ctx.scm.affected_files().items():
+    for num, line in meta.new_lines():
+      idx = str.find("bad_word")
+      if idx < 0:
+        continue
+      ctx.emit.finding(
+          level="error",
+          message="Do not use bad_word",
+          filepath=path,
+          line=num,
+          start_col=idx+1,
+          end_col=idx+1+len("bad_word"),
+          replacements=["best_word", "good_word"],
       )
 
 shac.register_check(cb)
@@ -106,7 +128,7 @@ shac.register_check(cb)
 * **col**: (optional) Column where the finding should start. 1 based.
 * **end_line**: (optional) Line where the finding should end if it represents a span, inclusive. 1 based.
 * **end_col**: (optional) Column where the finding should end if it represents a span, exclusive. 1 based.
-* **replacements**: (optional) A sequence of str, representing possible replacement suggestions. The sequence can be a list or a tuple. The replacements apply to the entire file if no span is specified for the finding.
+* **replacements**: (optional) A sequence of str, representing possible replacement suggestions. The sequence can be a list or a tuple. The replacements apply to the entire file if no span is specified for the finding. Replacements that apply to entire lines should include trailing newlines, unless the line should be removed.
 
 ## ctx.emit.artifact
 

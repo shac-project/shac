@@ -39,7 +39,7 @@ Planned features/changes, in descending order by priority:
 * [x] Configuring files to exclude from shac analysis in `shac.textproto`
 * [x] Include unstaged files in analysis, including respecting unstaged
   `shac.star` files
-* [ ] Automatic fix application with handling for conflicting suggestions
+* [x] Automatic fix application with handling for conflicting suggestions
 * [ ] Provide a `.shac` cache directory that checks can write to
 * [ ] Mount checkout directory read-only
   * [x] By default

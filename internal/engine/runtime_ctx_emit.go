@@ -57,6 +57,8 @@ func ctxEmitFinding(ctx context.Context, s *shacState, name string, args starlar
 	if len(message) == 0 {
 		return fmt.Errorf("for parameter \"message\": got %s, want string", argmessage)
 	}
+	// TODO(olivernewman): Require filepath to be set if span and/or
+	// replacements are specified.
 	file := string(argfilepath)
 	span := Span{
 		Start: Cursor{
