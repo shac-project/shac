@@ -17,9 +17,9 @@
 This file will evolve as new shac functionality is being added.
 """
 
-load("//check_doc.star", "check_docs")
-load("//go.star", "gofmt", "gosec", "ineffassign", "shadow", "staticcheck")
-load("//licenses.star", "check_license_headers")
+load("//checks/check_doc.star", "check_docs")
+load("//checks/go.star", "gofmt", "gosec", "ineffassign", "shadow", "staticcheck")
+load("//checks/licenses.star", "check_license_headers")
 
 
 def _is_todo_valid(ctx, s):
