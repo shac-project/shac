@@ -469,7 +469,14 @@ func (g *gitCheckout) affectedFiles(ctx context.Context, includeDeleted bool) ([
 			}
 		}
 		if path == "" {
-			g.err = fmt.Errorf("missing trailing NUL character from git diff --name-status -z -C %s", g.upstream.hash)
+			// `git diff` output will sometimes include newline-separated
+			// non-fatal warnings at the end, e.g. if the number of renamed
+			// files in the diff exceeds the `diff.renameLimit` config var.
+			// If we encounter such a warning, we assume it's at the end of the
+			// diff output.
+			if !strings.HasPrefix(o, "warning:") {
+				g.err = fmt.Errorf("missing trailing NUL character from git diff --name-status -z -C %s", g.upstream.hash)
+			}
 			break
 		}
 		if action == "D" && !includeDeleted {
