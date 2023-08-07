@@ -28,6 +28,7 @@ import (
 	"strings"
 
 	"go.fuchsia.dev/shac-project/shac/internal/sandbox"
+	"go.fuchsia.dev/shac-project/shac/internal/slices"
 	"go.starlark.net/starlark"
 )
 
@@ -108,7 +109,7 @@ func (s *subprocess) wait() (starlark.Value, error) {
 		return nil, errors.New("process returned too much stderr")
 	}
 
-	if !contains(s.okRetcodes, retcode) && s.raiseOnFailure {
+	if !slices.Contains(s.okRetcodes, retcode) && s.raiseOnFailure {
 		var msgBuilder strings.Builder
 		msgBuilder.WriteString(fmt.Sprintf("command failed with exit code %d: %s", retcode, s.args))
 		if s.stderr.Len() > 0 {
@@ -400,13 +401,4 @@ func sequenceToInts(s starlark.Sequence) []int {
 		out = append(out, int(i64))
 	}
 	return out
-}
-
-func contains[T comparable](slice []T, target T) bool {
-	for _, item := range slice {
-		if item == target {
-			return true
-		}
-	}
-	return false
 }
