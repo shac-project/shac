@@ -37,6 +37,7 @@ Fields:
 - emit
 - io
 - os
+- platform
 - re
 - scm
 
@@ -196,13 +197,6 @@ system.
 Fields:
 
 - exec
-- name
-
-## ctx.os.name
-
-ctx.os.name contains the OS as described by GOOS. Frequent values are
-"windows", "linux" and "darwin". The full exact list can be retrieved with
-the command "go tool dist list | cut -f 1 -d / | uniq"
 
 ## ctx.os.exec
 
@@ -256,6 +250,28 @@ shac.register_check(cb)
 
 A subprocess object with a wait() method. wait() returns a
 struct(retcode=..., stdout="...", stderr="...")
+
+## ctx.platform
+
+ctx.platform exposes data about the underlying platform.
+
+Fields:
+
+- os
+- arch
+
+## ctx.platform.os
+
+ctx.platform.os contains the OS as described by GOOS. Frequent values are
+"windows", "linux" and "darwin". The full exact list can be retrieved with
+the command "go tool dist list | cut -f 1 -d / | uniq"
+
+## ctx.platform.arch
+
+ctx.platform.arch contains the CPU architecture as described by GOARCH.
+Frequent values are "amd64" and "arm64". The full exact list can be
+retrieved with the command "go tool dist list | cut -f 2 -d / | sort |
+uniq"
 
 ## ctx.re
 

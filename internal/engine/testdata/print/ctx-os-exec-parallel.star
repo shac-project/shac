@@ -13,7 +13,7 @@
 # limitations under the License.
 
 def cb(ctx):
-  if ctx.os.name == "windows":
+  if ctx.platform.os == "windows":
     cmd = ["cmd.exe", "/c", "hello_world.bat"]
   else:
     cmd = ["./hello_world.sh"]

@@ -13,7 +13,7 @@
 # limitations under the License.
 
 def cb(ctx):
-  if ctx.os.name == "windows":
+  if ctx.platform.os == "windows":
     cmd = ["cmd.exe", "/c", "env.bat"]
   else:
     cmd = ["./env.sh"]

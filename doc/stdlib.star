@@ -379,10 +379,18 @@ ctx = struct(
   # system.
   os = struct(
     exec = _ctx_os_exec,
-    # ctx.os.name contains the OS as described by GOOS. Frequent values are
+  ),
+  # ctx.platform exposes data about the underlying platform.
+  platform = struct(
+    # ctx.platform.os contains the OS as described by GOOS. Frequent values are
     # "windows", "linux" and "darwin". The full exact list can be retrieved with
     # the command "go tool dist list | cut -f 1 -d / | uniq"
-    name = "",
+    os = "",
+    # ctx.platform.arch contains the CPU architecture as described by GOARCH.
+    # Frequent values are "amd64" and "arm64". The full exact list can be
+    # retrieved with the command "go tool dist list | cut -f 2 -d / | sort |
+    # uniq"
+    arch = "",
   ),
   # ctx.re is the object that exposes the API to run regular expressions on
   # starlark strings.

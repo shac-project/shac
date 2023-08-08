@@ -36,7 +36,10 @@ func getCtx(root string) starlark.Value {
 		}),
 		"os": toValue("ctx.os", starlark.StringDict{
 			"exec": newBuiltin("ctx.os.exec", ctxOsExec),
-			"name": starlark.String(runtime.GOOS),
+		}),
+		"platform": toValue("ctx.platform", starlark.StringDict{
+			"os":   starlark.String(runtime.GOOS),
+			"arch": starlark.String(runtime.GOARCH),
 		}),
 		// Implemented in runtime_ctx_re.go
 		"re": toValue("ctx.re", starlark.StringDict{

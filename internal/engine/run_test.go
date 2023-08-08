@@ -1613,6 +1613,11 @@ func TestTestDataPrint(t *testing.T) {
 				"[//ctx-os-exec-success.star:23] stderr: hello from stderr\n",
 		},
 		{
+			"ctx-platform.star",
+			"[//ctx-platform.star:16] OS: " + runtime.GOOS + "\n" +
+				"[//ctx-platform.star:17] Arch: " + runtime.GOARCH + "\n",
+		},
+		{
 			"ctx-re-allmatches.star",
 			"[//ctx-re-allmatches.star:17] ()\n" +
 				"[//ctx-re-allmatches.star:19] (match(groups = (\"TODO(foo)\",), offset = 4), match(groups = (\"TODO(bar)\",), offset = 14))\n" +
@@ -1627,7 +1632,7 @@ func TestTestDataPrint(t *testing.T) {
 		},
 		{
 			"dir-ctx.star",
-			"[//dir-ctx.star:16] [\"emit\", \"io\", \"os\", \"re\", \"scm\"]\n",
+			"[//dir-ctx.star:16] [\"emit\", \"io\", \"os\", \"platform\", \"re\", \"scm\"]\n",
 		},
 		{
 			"dir-shac.star",

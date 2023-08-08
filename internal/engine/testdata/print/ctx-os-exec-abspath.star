@@ -13,7 +13,7 @@
 # limitations under the License.
 
 def cb(ctx):
-  ext = "bat" if ctx.os.name == "windows" else "sh"
+  ext = "bat" if ctx.platform.os == "windows" else "sh"
   print(ctx.os.exec([ctx.scm.root+"/hello_world." + ext]).wait().stdout)
 
 shac.register_check(cb)
