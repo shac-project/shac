@@ -15,14 +15,11 @@
 package engine
 
 import (
-	"archive/zip"
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"io/fs"
 	"os"
-	"path"
 	"path/filepath"
 	"runtime"
 	"sort"
@@ -36,16 +33,33 @@ import (
 
 func TestFSToDigest_Reproducible(t *testing.T) {
 	t.Parallel()
-	// Reuse a simple Go project that is in Go Proxy (https://proxy.golang.org/).
-	// This ensures the algorithm matches the expected value.
-	// Intentionally unzip to disk so we don't use funky in-memory file system
-	// for unit test, only to have it fail in practice.
-	root := t.TempDir()
+
+	// Reuse a simple Go project that is in Go Proxy
+	// (https://proxy.golang.org/).  This ensures the algorithm matches the
+	// expected value.
+	//
 	// Created with:
 	//  git clone https://github.com/maruel/ut -b v1.0.0
 	//  cd ut
-	//  zip ut_v1.0.0.zip *.go LICENSE README.md .travis.yml .git/config
-	unzip(t, root, filepath.Join("testdata", "ut_v1.0.0.zip"))
+	//  cp *.go LICENSE README.md .travis.yml .git/config ../internal/engine/testdata/ut
+	//
+	// Ideally we could use a module already included the vendor directory, but
+	// Go's vendoring process strips out test files and .git files even though
+	// they are taken into account by the mod hash computation. We need to take
+	// an alternate approach that doesn't strip out those files, so bypass the
+	// normal vendoring process.
+	srcDir := filepath.Join("testdata", "ut")
+
+	root := t.TempDir()
+
+	copyTree(t, root, srcDir, map[string]string{
+		// Git doesn't allow committing the .git directory, but .git/config
+		// needs to be considered in the hash computation, so we commit it to
+		// `config` instead of `.git/config` and then copy it into the right
+		// place.
+		"config": ".git/config",
+	})
+
 	const prefix = "github.com/maruel/ut@v1.0.0"
 	// Retrieved from an empty directory:
 	//   go mod init main
@@ -69,6 +83,33 @@ func TestFSToDigest_Reproducible(t *testing.T) {
 		t.Fatal(err)
 	} else if d != knownHash {
 		t.Errorf("expected %s, got %s", knownHash, d)
+	}
+}
+
+func copyTree(t *testing.T, dstDir, srcDir string, renamings map[string]string) {
+	err := filepath.WalkDir(srcDir, func(path string, d fs.DirEntry, err error) error {
+		if d.IsDir() || err != nil {
+			return err
+		}
+		rel, err := filepath.Rel(srcDir, path)
+		if err != nil {
+			return err
+		}
+		if newName, ok := renamings[rel]; ok {
+			rel = newName
+		}
+		dest := filepath.Join(dstDir, rel)
+		b, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		if err := os.MkdirAll(filepath.Dir(dest), 0o700); err != nil {
+			return err
+		}
+		return os.WriteFile(dest, b, 0o600)
+	})
+	if err != nil {
+		t.Fatal(err)
 	}
 }
 
@@ -194,36 +235,5 @@ func TestPackageManager(t *testing.T) {
 	sort.Strings(cmds)
 	if diff := cmp.Diff(want, cmds); diff != "" {
 		t.Fatalf("mismatch (-want +got):\n%s", diff)
-	}
-}
-
-func unzip(t *testing.T, dst, in string) {
-	r, err := zip.OpenReader(in)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, f := range r.File {
-		rc, err := f.Open()
-		if err != nil {
-			t.Fatal(err)
-		}
-		data, err := io.ReadAll(rc)
-		if err != nil {
-			t.Error(err)
-		}
-		if err = rc.Close(); err != nil {
-			t.Fatal(err)
-		}
-		if strings.Contains(f.Name, "/") {
-			if err = os.MkdirAll(filepath.Join(dst, path.Dir(f.Name)), 0o700); err != nil {
-				t.Fatal(err)
-			}
-		}
-		if err = os.WriteFile(filepath.Join(dst, f.Name), data, f.Mode()); err != nil {
-			t.Fatal(err)
-		}
-	}
-	if err := r.Close(); err != nil {
-		t.Fatal(err)
 	}
 }
