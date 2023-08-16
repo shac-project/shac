@@ -26,6 +26,9 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/mattn/go-colorable"
 	"go.fuchsia.dev/shac-project/shac/internal/engine"
+	"go.fuchsia.dev/shac-project/shac/internal/sarif"
+	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/testing/protocmp"
 )
 
 func TestGet(t *testing.T) {
@@ -368,6 +371,187 @@ func TestInteractive(t *testing.T) {
 
 	if diff := cmp.Diff(want, buf.String()); diff != "" {
 		t.Fatalf("mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestSARIF(t *testing.T) {
+	t.Parallel()
+
+	var buf bytes.Buffer
+	r := SarifReport{Out: &buf}
+	ctx := context.Background()
+	root := t.TempDir()
+
+	if err := r.EmitFinding(
+		ctx,
+		"check1",
+		engine.Error,
+		"Found an issue",
+		root,
+		"foo/bar.c",
+		engine.Span{},
+		nil,
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := r.EmitFinding(
+		ctx,
+		"check1",
+		engine.Warning,
+		"Found another issue",
+		root,
+		"foo/baz.c",
+		engine.Span{
+			Start: engine.Cursor{Line: 5, Col: 4},
+			End:   engine.Cursor{Line: 6, Col: 2},
+		},
+		[]string{"blah", "meh"},
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := r.EmitFinding(
+		ctx,
+		"check2",
+		engine.Notice,
+		"Notice from check2",
+		root,
+		"path/to/another_file.rs",
+		engine.Span{
+			Start: engine.Cursor{Line: 2, Col: 3},
+		},
+		nil,
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := r.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	var got sarif.Document
+	if err := protojson.Unmarshal(buf.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+
+	want := sarif.Document{
+		Version: sarif.Version,
+		Runs: []*sarif.Run{
+			{
+				Tool: &sarif.Tool{Driver: &sarif.ToolComponent{Name: "check1"}},
+				Results: []*sarif.Result{
+					{
+						Level: sarif.Error,
+						Message: &sarif.Message{
+							Text: "Found an issue",
+						},
+						Locations: []*sarif.Location{
+							{
+								PhysicalLocation: &sarif.PhysicalLocation{
+									ArtifactLocation: &sarif.ArtifactLocation{
+										Uri: "foo/bar.c",
+									},
+									Region: &sarif.Region{},
+								},
+							},
+						},
+					},
+					{
+						Level: sarif.Warning,
+						Message: &sarif.Message{
+							Text: "Found another issue",
+						},
+						Locations: []*sarif.Location{
+							{
+								PhysicalLocation: &sarif.PhysicalLocation{
+									ArtifactLocation: &sarif.ArtifactLocation{
+										Uri: "foo/baz.c",
+									},
+									Region: &sarif.Region{
+										StartLine:   5,
+										StartColumn: 4,
+										EndLine:     6,
+										EndColumn:   2,
+									},
+								},
+							},
+						},
+						Fixes: []*sarif.Fix{
+							{
+								ArtifactChanges: []*sarif.ArtifactChange{
+									{
+										ArtifactLocation: &sarif.ArtifactLocation{
+											Uri: "foo/baz.c",
+										},
+										Replacements: []*sarif.Replacement{
+											{
+												DeletedRegion: &sarif.Region{
+													StartLine:   5,
+													StartColumn: 4,
+													EndLine:     6,
+													EndColumn:   2,
+												},
+												InsertedContent: &sarif.ArtifactContent{
+													Text: "blah",
+												},
+											},
+										},
+									},
+								},
+							},
+							{
+								ArtifactChanges: []*sarif.ArtifactChange{
+									{
+										ArtifactLocation: &sarif.ArtifactLocation{
+											Uri: "foo/baz.c",
+										},
+										Replacements: []*sarif.Replacement{
+											{
+												DeletedRegion: &sarif.Region{
+													StartLine:   5,
+													StartColumn: 4,
+													EndLine:     6,
+													EndColumn:   2,
+												},
+												InsertedContent: &sarif.ArtifactContent{
+													Text: "meh",
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			{
+				Tool: &sarif.Tool{Driver: &sarif.ToolComponent{Name: "check2"}},
+				Results: []*sarif.Result{
+					{Level: sarif.Note,
+						Message: &sarif.Message{Text: "Notice from check2"},
+						Locations: []*sarif.Location{
+							{
+								PhysicalLocation: &sarif.PhysicalLocation{
+									ArtifactLocation: &sarif.ArtifactLocation{
+										Uri: "path/to/another_file.rs",
+									},
+									Region: &sarif.Region{
+										StartLine:   2,
+										StartColumn: 3,
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	if diff := cmp.Diff(&want, &got, protocmp.Transform()); diff != "" {
+		t.Errorf("SARIF diff (-want +got):\n%s", diff)
 	}
 }
 

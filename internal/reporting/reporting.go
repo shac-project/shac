@@ -37,8 +37,8 @@ type Report interface {
 
 // Get returns the right reporting implementation based on the current
 // environment.
-func Get(ctx context.Context) (Report, error) {
-	r := &multiReport{}
+func Get(ctx context.Context) (*MultiReport, error) {
+	r := &MultiReport{}
 
 	// On LUCI/Swarming. ResultDB!
 	if os.Getenv("LUCI_CONTEXT") != "" {

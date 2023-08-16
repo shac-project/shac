@@ -15,8 +15,10 @@
 package cli
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"os"
 
 	flag "github.com/spf13/pflag"
 	"go.fuchsia.dev/shac-project/shac/internal/engine"
@@ -25,6 +27,7 @@ import (
 
 type checkCmd struct {
 	commandBase
+	jsonOutput string
 }
 
 func (*checkCmd) Name() string {
@@ -37,6 +40,7 @@ func (*checkCmd) Description() string {
 
 func (c *checkCmd) SetFlags(f *flag.FlagSet) {
 	c.commandBase.SetFlags(f)
+	f.StringVar(&c.jsonOutput, "json-output", "", "path to write SARIF output to")
 }
 
 func (c *checkCmd) Execute(ctx context.Context, args []string) error {
@@ -44,10 +48,14 @@ func (c *checkCmd) Execute(ctx context.Context, args []string) error {
 		return errors.New("unsupported arguments")
 	}
 
+	var buf bytes.Buffer
+
 	r, err := reporting.Get(ctx)
 	if err != nil {
 		return err
 	}
+	r.Reporters = append(r.Reporters, &reporting.SarifReport{Out: &buf})
+
 	o := c.options()
 	o.Report = r
 
@@ -55,5 +63,12 @@ func (c *checkCmd) Execute(ctx context.Context, args []string) error {
 	if err2 := r.Close(); err == nil {
 		err = err2
 	}
+
+	if c.jsonOutput != "" {
+		if err2 := os.WriteFile(c.jsonOutput, buf.Bytes(), 0o600); err == nil {
+			err = err2
+		}
+	}
+
 	return err
 }

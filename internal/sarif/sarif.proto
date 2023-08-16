@@ -1,0 +1,140 @@
+// Copyright 2023 The Shac Authors
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+// Package sarif contains types that conform to the SARIF static analysis spec:
+// https://docs.oasis-open.org/sarif/sarif/v2.1.0/csprd01/sarif-v2.1.0-csprd01.html.
+//
+// Serialization must be done with `performing_proto_field_names = false` as the
+// SARIF spec requires camelCase field names.
+package sarif;
+
+option go_package = "go.fuchsia.dev/shac-project/shac/internal/sarif";
+
+// Document is the type of the top-level JSON object in SARIF output.
+//
+// https://docs.oasis-open.org/sarif/sarif/v2.1.0/csprd01/sarif-v2.1.0-csprd01.html#_Toc10540916
+message Document {
+  string version = 1;
+  repeated Run runs = 2;
+}
+
+// Run describes a single run of an analysis tool and contains the output of
+// that run.
+//
+// https://docs.oasis-open.org/sarif/sarif/v2.1.0/csprd01/sarif-v2.1.0-csprd01.html#_Toc10540922
+message Run {
+  Tool tool = 1;
+  repeated Result results = 2;
+}
+
+// Tool describes the analysis tool that was run.
+//
+// https://docs.oasis-open.org/sarif/sarif/v2.1.0/csprd01/sarif-v2.1.0-csprd01.html#_Toc10540967
+message Tool {
+  ToolComponent driver = 1;
+  repeated ToolComponent extensions = 2;
+}
+
+// ToolComponent represents a tool driver or extension.
+//
+// https://docs.oasis-open.org/sarif/sarif/v2.1.0/csprd01/sarif-v2.1.0-csprd01.html#_Toc10540971
+message ToolComponent {
+  // Name is the name of the tool component. Required.
+  string name = 1;
+  // TODO(olivernewman): Consider including other optional fields they if
+  // would be useful.
+}
+
+// Result describes a single result detected by an analysis tool.
+//
+// The "kind" field is optional and defaults to "fail".
+//
+// https://docs.oasis-open.org/sarif/sarif/v2.1.0/csprd01/sarif-v2.1.0-csprd01.html#_Toc10541076
+message Result {
+  // "note", "warning", or "error".
+  string level = 1;
+  Message message = 2;
+  // The code locations that the result applies to.
+  repeated Location locations = 3;
+  repeated Fix fixes = 4;
+}
+
+// Message is a user-facing message for the result.
+//
+// https://docs.oasis-open.org/sarif/sarif/v2.1.0/csprd01/sarif-v2.1.0-csprd01.html#_Toc10540897
+message Message {
+  string text = 1;
+}
+
+// https://docs.oasis-open.org/sarif/sarif/v2.1.0/csprd01/sarif-v2.1.0-csprd01.html#_Toc10541108
+message Location {
+  PhysicalLocation physical_location = 1;
+}
+
+// PhysicalLocation references the location where a result was detected.
+//
+// https://docs.oasis-open.org/sarif/sarif/v2.1.0/csprd01/sarif-v2.1.0-csprd01.html#_Toc10541116
+message PhysicalLocation {
+  ArtifactLocation artifact_location = 1;
+  Region region = 2;
+}
+
+// https://docs.oasis-open.org/sarif/sarif/v2.1.0/csprd01/sarif-v2.1.0-csprd01.html#_Toc10541319
+message Fix {
+  Message description = 1;
+  repeated ArtifactChange artifact_changes = 2;
+}
+
+// https://docs.oasis-open.org/sarif/sarif/v2.1.0/csprd01/sarif-v2.1.0-csprd01.html#_Toc10541323
+message ArtifactChange {
+  ArtifactLocation artifact_location = 1;
+  repeated Replacement replacements = 2;
+}
+
+// https://docs.oasis-open.org/sarif/sarif/v2.1.0/csprd01/sarif-v2.1.0-csprd01.html#_Toc10540865
+message ArtifactLocation {
+  // URI is the relative path to the referenced file, e.g. "foo/bar/baz.c".
+  string uri = 1;
+}
+
+// Replacement indicates the replacement of a region of a file.
+//
+// https://docs.oasis-open.org/sarif/sarif/v2.1.0/csprd01/sarif-v2.1.0-csprd01.html#_Toc10541327
+message Replacement {
+  Region deleted_region = 1;
+  ArtifactContent inserted_content = 2;
+}
+
+// Region represents a continuous segment of a file.
+//
+// https://docs.oasis-open.org/sarif/sarif/v2.1.0/csprd01/sarif-v2.1.0-csprd01.html#_Toc10541123
+message Region {
+  // 1-based.
+  int32 start_line = 1;
+  // 1-based.
+  int32 start_column = 2;
+  // 1-based, inclusive.
+  int32 end_line = 3;
+  // 1-based, exclusive.
+  int32 end_column = 4;
+}
+
+// ArtifactContent represents contents of a file to insert or replace.
+//
+// https://docs.oasis-open.org/sarif/sarif/v2.1.0/csprd01/sarif-v2.1.0-csprd01.html#_Toc10540860
+message ArtifactContent {
+  string text = 1;
+}
