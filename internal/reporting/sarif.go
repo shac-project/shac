@@ -26,8 +26,11 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 )
 
+// SarifReport converts findings into SARIF JSON output.
 type SarifReport struct {
-	Out            io.Writer
+	// SARIF output gets written here when Close() is called.
+	Out io.Writer
+
 	mu             sync.Mutex
 	resultsByCheck map[string][]*sarif.Result
 }
@@ -69,6 +72,7 @@ func (sr *SarifReport) EmitFinding(ctx context.Context, check string, level engi
 		// converts the output of such an analysis tool to the SARIF format
 		// SHOULD synthesize ruleId from other information available in the
 		// analysis tool's output."
+		// https://docs.oasis-open.org/sarif/sarif/v2.1.0/os/sarif-v2.1.0-os.html#_Toc34317643
 		Level:   levelMap[level],
 		Message: &sarif.Message{Text: message},
 		Locations: []*sarif.Location{
@@ -93,6 +97,8 @@ func (sr *SarifReport) EmitFinding(ctx context.Context, check string, level engi
 }
 
 func (sr *SarifReport) EmitArtifact(ctx context.Context, root, check, file string, content []byte) error {
+	// TODO(olivernewman): Emit artifacts via the `artifacts` SARIF property:
+	// https://docs.oasis-open.org/sarif/sarif/v2.1.0/os/sarif-v2.1.0-os.html#_Toc34317499
 	return nil
 }
 
