@@ -37,9 +37,9 @@ type Mount struct {
 	// Dest is the optional location to mount in the nsjail. If omitted, it will
 	// be assumed to be the same as Path.
 	Dest string
-	// Writeable controls whether the mount is writeable by processes within the
+	// Writable controls whether the mount is writable by processes within the
 	// nsjail.
-	Writeable bool
+	Writable bool
 }
 
 // Config represents the configuration for a sandboxed subprocess.
@@ -112,14 +112,14 @@ func (s nsjailSandbox) Command(ctx context.Context, config *Config) *exec.Cmd {
 		args = append(args, "--env", fmt.Sprintf("%s=%s", k, v))
 	}
 	// nsjail is strict about ordering of --bindmount flags. If /a and /a/b are
-	// both to be mounted (/a might be read-only while /a/b is writeable), then
+	// both to be mounted (/a might be read-only while /a/b is writable), then
 	// /a must precede /a/b in the arguments.
 	sort.Slice(config.Mounts, func(i, j int) bool {
 		return config.Mounts[i].Path < config.Mounts[j].Path
 	})
 	for _, mnt := range config.Mounts {
 		flag := "--bindmount_ro"
-		if mnt.Writeable {
+		if mnt.Writable {
 			flag = "--bindmount"
 		}
 		val := mnt.Path

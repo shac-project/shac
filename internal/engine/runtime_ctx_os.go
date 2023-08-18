@@ -305,9 +305,9 @@ func ctxOsExec(ctx context.Context, s *shacState, name string, args starlark.Tup
 	if runtime.GOOS != "windows" {
 		config.Mounts = []sandbox.Mount{
 			// TODO(olivernewman): Mount the checkout read-only unconditionally.
-			{Path: s.root, Writeable: s.writableRoot},
+			{Path: s.root, Writable: s.writableRoot},
 			// OS-provided utilities.
-			{Path: "/dev/null", Writeable: true},
+			{Path: "/dev/null", Writable: true},
 			{Path: "/dev/urandom"},
 			{Path: "/dev/zero"},
 			// DNS configs.
@@ -325,7 +325,7 @@ func ctxOsExec(ctx context.Context, s *shacState, name string, args starlark.Tup
 			// Make the parent directory of tempDir available, since it is the root
 			// of all ctx.os.tempdir() calls, which can be used as scratch pads for
 			// this executable.
-			{Path: filepath.Dir(tempDir), Writeable: true},
+			{Path: filepath.Dir(tempDir), Writable: true},
 		}
 
 		// TODO(olivernewman): This is necessary because checks for shac itself
