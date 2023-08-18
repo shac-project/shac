@@ -14,7 +14,7 @@
 
 module go.fuchsia.dev/shac-project/shac
 
-go 1.20
+go 1.21
 
 require (
 	github.com/go-git/go-git v4.7.0+incompatible

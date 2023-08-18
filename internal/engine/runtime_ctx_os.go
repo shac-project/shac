@@ -25,10 +25,10 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 
 	"go.fuchsia.dev/shac-project/shac/internal/sandbox"
-	"go.fuchsia.dev/shac-project/shac/internal/slices"
 	"go.starlark.net/starlark"
 )
 

@@ -20,12 +20,11 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
 	"time"
-
-	"go.fuchsia.dev/shac-project/shac/internal/slices"
 )
 
 // Fix loads a main shac.star file from a root directory and runs checks defined
@@ -45,13 +44,13 @@ func Fix(ctx context.Context, o *Options) error {
 		findingsByFile[f.file] = append(findingsByFile[f.file], f)
 	}
 
-	// TODO(olivernewman): Use `maps.Keys()` in go1.21.
 	orderedFiles := make([]string, 0, len(findingsByFile))
 	for f := range findingsByFile {
 		orderedFiles = append(orderedFiles, f)
 	}
 	// Sort for determinism.
 	sort.Strings(orderedFiles)
+
 	for _, f := range orderedFiles {
 		findings := findingsByFile[f]
 		path := filepath.Join(o.Root, f)

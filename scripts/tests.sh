@@ -33,7 +33,7 @@ if ! command -v "go" > /dev/null; then
   export GOROOT="$CIPD_ROOT/go"
   echo "- Installing Go from CIPD..."
   cipd init -force "$GOROOT"
-  cipd install -log-level error -root "$GOROOT" 'infra/3pp/tools/go/${platform}' version:2@1.20.7
+  cipd install -log-level error -root "$GOROOT" 'infra/3pp/tools/go/${platform}' version:2@1.21.0.chromium1
   export PATH="$GOROOT/bin:$PATH"
   echo ""
 fi

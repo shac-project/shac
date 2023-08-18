@@ -402,7 +402,6 @@ func gitConfigEnv(gitConfig map[string]string) []string {
 	// GIT_CONFIG_COUNT specifies how many key/value env var pairs to look for.
 	res := []string{fmt.Sprintf("GIT_CONFIG_COUNT=%d", len(gitConfig))}
 
-	// TODO(olivernewman): Use maps.Keys() in go1.21.
 	keys := make([]string, 0, len(gitConfig))
 	for k := range gitConfig {
 		keys = append(keys, k)
