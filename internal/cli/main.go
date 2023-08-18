@@ -74,6 +74,7 @@ func Main(args []string) error {
 		&fmtCmd{},
 		&fixCmd{},
 		&docCmd{},
+		&versionCmd{},
 		&helpCmd{},
 	}
 	a := app{}

@@ -24,10 +24,10 @@ import (
 )
 
 var (
-	// version is the current tool version.
+	// Version is the current tool version.
 	//
 	// TODO(maruel): Add proper version, preferably from git tag.
-	version = [...]int{0, 0, 1}
+	Version = [...]int{0, 1, 0}
 )
 
 // getShac returns the global shac object.
@@ -39,7 +39,7 @@ func getShac() starlark.StringDict {
 		"commit_hash":    starlark.String(getCommitHash()),
 		"register_check": newBuiltinNone("shac.register_check", shacRegisterCheck),
 		"version": starlark.Tuple{
-			starlark.MakeInt(version[0]), starlark.MakeInt(version[1]), starlark.MakeInt(version[2]),
+			starlark.MakeInt(Version[0]), starlark.MakeInt(Version[1]), starlark.MakeInt(Version[2]),
 		},
 	}
 }

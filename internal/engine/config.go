@@ -27,14 +27,14 @@ import (
 func (doc *Document) Validate() error {
 	if doc.MinShacVersion != "" {
 		v := parseVersion(doc.MinShacVersion)
-		if v == nil || len(v) > len(version) {
+		if v == nil || len(v) > len(Version) {
 			return errors.New("min_shac_version is invalid")
 		}
 		for i := range v {
-			if v[i] > version[i] {
-				return fmt.Errorf("min_shac_version specifies unsupported version %q, running %d.%d.%d", doc.MinShacVersion, version[0], version[1], version[2])
+			if v[i] > Version[i] {
+				return fmt.Errorf("min_shac_version specifies unsupported version %q, running %d.%d.%d", doc.MinShacVersion, Version[0], Version[1], Version[2])
 			}
-			if v[i] < version[i] {
+			if v[i] < Version[i] {
 				break
 			}
 		}

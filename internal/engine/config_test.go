@@ -16,6 +16,7 @@ package engine
 
 import (
 	"errors"
+	"fmt"
 	"strconv"
 	"testing"
 
@@ -252,7 +253,14 @@ func TestDocument_Validate(t *testing.T) {
 		},
 		{
 			"min_shac_version: \"1000\"\n",
-			"min_shac_version specifies unsupported version \"1000\", running 0.0.1",
+			func() string {
+				return fmt.Sprintf(
+					"min_shac_version specifies unsupported version \"1000\", running %d.%d.%d",
+					Version[0],
+					Version[1],
+					Version[2],
+				)
+			}(),
 		},
 		{
 			"min_shac_version: \"1.2.c\"\n",

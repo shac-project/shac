@@ -1543,7 +1543,7 @@ func TestTestDataEmit(t *testing.T) {
 func TestTestDataPrint(t *testing.T) {
 	t.Parallel()
 	p, got := enumDir(t, "print")
-	v := fmt.Sprintf("(%d, %d, %d)", version[0], version[1], version[2])
+	v := fmt.Sprintf("(%d, %d, %d)", Version[0], Version[1], Version[2])
 	data := []struct {
 		name string
 		want string
