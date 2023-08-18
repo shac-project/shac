@@ -21,6 +21,9 @@ def _go_env(ctx):
     "CGO_ENABLED": "0",
     "GOCACHE": ctx.io.tempdir() + "/gocache",
     "GOPACKAGESDRIVER": "off",
+    # Explicitly set GOROOT to prevent warnings about GOROOT and GOPATH being
+    # equal when they're both empty.
+    "GOROOT": ctx.os.exec(["go", "env", "GOROOT"]).wait().stdout.strip(),
   }
 
 shac.register_check(cb)
