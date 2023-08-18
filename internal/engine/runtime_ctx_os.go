@@ -28,6 +28,7 @@ import (
 	"slices"
 	"strings"
 
+	"go.fuchsia.dev/shac-project/shac/internal/execsupport"
 	"go.fuchsia.dev/shac-project/shac/internal/sandbox"
 	"go.starlark.net/starlark"
 )
@@ -354,10 +355,7 @@ func ctxOsExec(ctx context.Context, s *shacState, name string, args starlark.Tup
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr
 
-	// Serialize start given the issue described at sandbox.Mu.
-	sandbox.Mu.RLock()
-	err = cmd.Start()
-	sandbox.Mu.RUnlock()
+	err = execsupport.Start(cmd)
 	if err != nil {
 		return nil, err
 	}
