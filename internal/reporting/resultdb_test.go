@@ -17,6 +17,7 @@ package reporting
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -90,6 +91,13 @@ func TestResultDBReporter(t *testing.T) {
 		ctx, "failing-check", startTime.Add(5*time.Second), 2*time.Second, engine.Error, nil)
 	r.CheckCompleted(
 		ctx, "crashing-check", startTime.Add(10*time.Second), 3*time.Second, engine.Nothing, fmt.Errorf("some error"))
+	r.CheckCompleted(
+		ctx,
+		"large-error-crashing-check",
+		startTime.Add(15*time.Second),
+		4*time.Second,
+		engine.Nothing,
+		errors.New(strings.Repeat("a", resultDBMaxFailureReasonLength+1)))
 
 	if err := r.Close(); err != nil {
 		t.Fatal(err)
@@ -117,6 +125,15 @@ func TestResultDBReporter(t *testing.T) {
 					StartTime:     timestamppb.New(startTime.Add(10 * time.Second)),
 					Duration:      durationpb.New(3 * time.Second),
 					FailureReason: &resultpb.FailureReason{PrimaryErrorMessage: "some error"},
+				},
+				{
+					TestId:    "shac/large-error-crashing-check",
+					Status:    resultpb.TestStatus_CRASH,
+					StartTime: timestamppb.New(startTime.Add(15 * time.Second)),
+					Duration:  durationpb.New(4 * time.Second),
+					FailureReason: &resultpb.FailureReason{
+						PrimaryErrorMessage: strings.Repeat("a", resultDBMaxFailureReasonLength-15) + "... (truncated)",
+					},
 				},
 			},
 		},

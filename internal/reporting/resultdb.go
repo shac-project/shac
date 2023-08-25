@@ -36,7 +36,11 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-const resultSinkMaxBatchSize = 500
+const (
+	resultSinkMaxBatchSize = 500
+	// https://source.chromium.org/chromium/infra/infra/+/main:go/src/go.chromium.org/luci/resultdb/pbutil/test_result.go;l=41;drc=1eaf63ee80de3e7de3139800ebe7d0d5497a42e2
+	resultDBMaxFailureReasonLength = 1024
+)
 
 type luci struct {
 	doneChecks chan *sinkpb.TestResult
@@ -148,7 +152,13 @@ func (l *luci) CheckCompleted(ctx context.Context, check string, start time.Time
 	r.Duration = durationpb.New(d)
 	if err != nil {
 		r.Status = resultpb.TestStatus_CRASH
-		r.FailureReason = &resultpb.FailureReason{PrimaryErrorMessage: err.Error()}
+		msg := err.Error()
+		truncationNotice := "... (truncated)"
+		if len(msg) > resultDBMaxFailureReasonLength {
+			msg = msg[:resultDBMaxFailureReasonLength-len(truncationNotice)]
+			msg = msg + truncationNotice
+		}
+		r.FailureReason = &resultpb.FailureReason{PrimaryErrorMessage: msg}
 	} else if level == engine.Error {
 		r.Status = resultpb.TestStatus_FAIL
 	} else {
