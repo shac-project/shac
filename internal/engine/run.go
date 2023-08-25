@@ -510,6 +510,9 @@ func (c *registeredCheck) call(ctx context.Context, env *starlarkEnv, args starl
 		if errors.As(err, &evalErr) {
 			return &evalError{evalErr}
 		}
+		// The vast majority of errors should be caught by the above checks, if
+		// we hit this point there's likely a bug in shac or in starlark-go.
+		return err
 	} else if r != starlark.None {
 		return fmt.Errorf("check %q returned an object of type %s, expected None", c.name, r.Type())
 	}
