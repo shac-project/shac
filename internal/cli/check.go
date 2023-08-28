@@ -17,7 +17,6 @@ package cli
 import (
 	"bytes"
 	"context"
-	"errors"
 	"os"
 
 	flag "github.com/spf13/pflag"
@@ -43,11 +42,7 @@ func (c *checkCmd) SetFlags(f *flag.FlagSet) {
 	f.StringVar(&c.jsonOutput, "json-output", "", "path to write SARIF output to")
 }
 
-func (c *checkCmd) Execute(ctx context.Context, args []string) error {
-	if len(args) != 0 {
-		return errors.New("unsupported arguments")
-	}
-
+func (c *checkCmd) Execute(ctx context.Context, files []string) error {
 	var buf bytes.Buffer
 
 	r, err := reporting.Get(ctx)
@@ -56,7 +51,10 @@ func (c *checkCmd) Execute(ctx context.Context, args []string) error {
 	}
 	r.Reporters = append(r.Reporters, &reporting.SarifReport{Out: &buf})
 
-	o := c.options()
+	o, err := c.options(files)
+	if err != nil {
+		return err
+	}
 	o.Report = r
 
 	err = engine.Run(ctx, &o)

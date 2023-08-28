@@ -143,6 +143,8 @@ type Options struct {
 	Report Report
 	// Root directory. Defaults to the current working directory.
 	Root string
+	// Files lists specific files to analyze.
+	Files []string
 	// AllFiles tells to consider all files as affected.
 	AllFiles bool
 	// Recurse tells the engine to run all Main files found in subdirectories.
@@ -204,6 +206,7 @@ func Run(ctx context.Context, o *Options) error {
 	}
 	scm = &cachingSCM{
 		scm: &filteredSCM{
+			files:   o.Files,
 			matcher: gitignore.NewMatcher(patterns),
 			scm:     scm,
 		},

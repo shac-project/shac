@@ -116,6 +116,73 @@ func TestRun_Fail(t *testing.T) {
 	}
 }
 
+func TestRun_SpecificFiles(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	writeFile(t, root, "shac.textproto", prototext.Format(&Document{
+		Ignore: []string{
+			"*.py",
+		},
+	}))
+
+	writeFile(t, root, "python.py", "a python file")
+	writeFile(t, root, "rust.rs", "a rust file")
+
+	copySCM(t, root)
+
+	data := []struct {
+		name  string
+		want  string
+		files []string
+	}{
+		{
+			"ctx-scm-affected_files.star",
+			"[//ctx-scm-affected_files.star:19] \n" +
+				scmStarlarkFiles("") +
+				"rust.rs: \n" +
+				"shac.textproto: \n" +
+				"\n",
+			nil,
+		},
+		{
+			"ctx-scm-all_files.star",
+			"[//ctx-scm-all_files.star:19] \n" +
+				scmStarlarkFiles("") +
+				"rust.rs: \n" +
+				"shac.textproto: \n" +
+				"\n",
+			nil,
+		},
+	}
+	for i := range data {
+		i := i
+		t.Run(data[i].name, func(t *testing.T) {
+			t.Parallel()
+			testStarlarkPrint(t, root, data[i].name, false, data[i].want)
+		})
+	}
+
+	t.Run("empty ignore field", func(t *testing.T) {
+		t.Parallel()
+		root := t.TempDir()
+		writeFile(t, root, "shac.textproto", prototext.Format(&Document{
+			Ignore: []string{
+				"*.foo",
+				"",
+			},
+		}))
+
+		r := reportPrint{reportNoPrint: reportNoPrint{t: t}}
+		o := Options{Report: &r, Root: root, AllFiles: false, main: "shac.star"}
+		err := Run(context.Background(), &o)
+		if err == nil {
+			t.Fatal("Expected empty ignore field to be rejected")
+		} else if !errors.Is(err, errEmptyIgnore) {
+			t.Fatalf("Expected error %q, got %q", errEmptyIgnore, err)
+		}
+	})
+}
+
 func TestRun_Ignore(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
@@ -207,11 +274,7 @@ func TestRun_SCM_Raw(t *testing.T) {
 		t.Parallel()
 		want := "[//ctx-scm-affected_files.star:19] \n" +
 			"a.txt: \n" +
-			"ctx-scm-affected_files-include_deleted.star: \n" +
-			"ctx-scm-affected_files-new_lines.star: \n" +
-			"ctx-scm-affected_files.star: \n" +
-			"ctx-scm-all_files-include_deleted.star: \n" +
-			"ctx-scm-all_files.star: \n" +
+			scmStarlarkFiles("") +
 			"\n"
 		testStarlarkPrint(t, root, "ctx-scm-affected_files.star", false, want)
 	})
@@ -225,22 +288,21 @@ func TestRun_SCM_Raw(t *testing.T) {
 		t.Parallel()
 		want := "[//ctx-scm-all_files.star:19] \n" +
 			"a.txt: \n" +
-			"ctx-scm-affected_files-include_deleted.star: \n" +
-			"ctx-scm-affected_files-new_lines.star: \n" +
-			"ctx-scm-affected_files.star: \n" +
-			"ctx-scm-all_files-include_deleted.star: \n" +
-			"ctx-scm-all_files.star: \n" +
+			scmStarlarkFiles("") +
 			"\n"
 		testStarlarkPrint(t, root, "ctx-scm-all_files.star", false, want)
 	})
 }
 
-const scmStarlarkAddedFiles = "" +
-	"ctx-scm-affected_files-include_deleted.star: A\n" +
-	"ctx-scm-affected_files-new_lines.star: A\n" +
-	"ctx-scm-affected_files.star: A\n" +
-	"ctx-scm-all_files-include_deleted.star: A\n" +
-	"ctx-scm-all_files.star: A\n"
+func scmStarlarkFiles(action string) string {
+	return fmt.Sprintf("" +
+		"ctx-scm-affected_files-include_deleted.star: " + action + "\n" +
+		"ctx-scm-affected_files-new_lines.star: " + action + "\n" +
+		"ctx-scm-affected_files.star: " + action + "\n" +
+		"ctx-scm-all_files-include_deleted.star: " + action + "\n" +
+		"ctx-scm-all_files.star: " + action + "\n",
+	)
+}
 
 func TestRun_SCM_Git_NoUpstream_Pristine(t *testing.T) {
 	// No upstream branch set, pristine checkout.
@@ -259,7 +321,7 @@ func TestRun_SCM_Git_NoUpstream_Pristine(t *testing.T) {
 			"ctx-scm-affected_files.star",
 			false,
 			"[//ctx-scm-affected_files.star:19] \n" +
-				scmStarlarkAddedFiles +
+				scmStarlarkFiles("A") +
 				"\n",
 		},
 		{
@@ -267,7 +329,7 @@ func TestRun_SCM_Git_NoUpstream_Pristine(t *testing.T) {
 			true,
 			"[//ctx-scm-affected_files.star:19] \n" +
 				"a.txt: A\n" +
-				scmStarlarkAddedFiles +
+				scmStarlarkFiles("A") +
 				"z.txt: A\n" +
 				"\n",
 		},
@@ -276,7 +338,7 @@ func TestRun_SCM_Git_NoUpstream_Pristine(t *testing.T) {
 			false,
 			"[//ctx-scm-all_files.star:19] \n" +
 				"a.txt: A\n" +
-				scmStarlarkAddedFiles +
+				scmStarlarkFiles("A") +
 				"z.txt: A\n" +
 				"\n",
 		},
@@ -310,7 +372,7 @@ func TestRun_SCM_Git_NoUpstream_Staged(t *testing.T) {
 			"ctx-scm-affected_files.star",
 			false,
 			"[//ctx-scm-affected_files.star:19] \n" +
-				scmStarlarkAddedFiles +
+				scmStarlarkFiles("A") +
 				"\n",
 		},
 		{
@@ -330,7 +392,7 @@ func TestRun_SCM_Git_NoUpstream_Staged(t *testing.T) {
 			false,
 			"[//ctx-scm-all_files.star:19] \n" +
 				"a.txt: A\n" +
-				scmStarlarkAddedFiles +
+				scmStarlarkFiles("A") +
 				"z.txt: A\n" +
 				"\n",
 		},
@@ -366,7 +428,7 @@ func TestRun_SCM_Git_Upstream_Staged(t *testing.T) {
 			"ctx-scm-affected_files.star",
 			"[//ctx-scm-affected_files.star:19] \n" +
 				"a.txt: R\n" +
-				scmStarlarkAddedFiles +
+				scmStarlarkFiles("A") +
 				"z.txt: A\n" +
 				"\n",
 		},
@@ -374,7 +436,7 @@ func TestRun_SCM_Git_Upstream_Staged(t *testing.T) {
 			"ctx-scm-all_files.star",
 			"[//ctx-scm-all_files.star:19] \n" +
 				"a.txt: A\n" +
-				scmStarlarkAddedFiles +
+				scmStarlarkFiles("A") +
 				"z.txt: A\n" +
 				"\n",
 		},
@@ -484,7 +546,7 @@ func TestRun_SCM_Git_Submodule(t *testing.T) {
 			"ctx-scm-affected_files.star",
 			"[//ctx-scm-affected_files.star:19] \n" +
 				".gitmodules: A\n" +
-				scmStarlarkAddedFiles +
+				scmStarlarkFiles("A") +
 				"\n",
 		},
 		{
@@ -492,7 +554,7 @@ func TestRun_SCM_Git_Submodule(t *testing.T) {
 			"[//ctx-scm-all_files.star:19] \n" +
 				".gitmodules: A\n" +
 				"a.txt: A\n" +
-				scmStarlarkAddedFiles +
+				scmStarlarkFiles("A") +
 				"z.txt: A\n" +
 				"\n",
 		},
@@ -542,7 +604,7 @@ func TestRun_SCM_DeletedFile(t *testing.T) {
 			"ctx-scm-all_files.star",
 			"[//ctx-scm-all_files.star:19] \n" +
 				"a.txt: A\n" +
-				scmStarlarkAddedFiles +
+				scmStarlarkFiles("A") +
 				"z.txt: A\n" +
 				"\n",
 		},
@@ -551,13 +613,13 @@ func TestRun_SCM_DeletedFile(t *testing.T) {
 			"[//ctx-scm-all_files-include_deleted.star:26] \n" +
 				"With deleted:\n" +
 				"a.txt: A\n" +
-				scmStarlarkAddedFiles +
+				scmStarlarkFiles("A") +
 				"file-to-delete.txt: D\n" +
 				"z.txt: A\n" +
 				"\n" +
 				"Without deleted:\n" +
 				"a.txt: A\n" +
-				scmStarlarkAddedFiles +
+				scmStarlarkFiles("A") +
 				"z.txt: A\n" +
 				"\n"},
 	}

@@ -15,6 +15,8 @@
 package cli
 
 import (
+	"errors"
+
 	flag "github.com/spf13/pflag"
 	"go.fuchsia.dev/shac-project/shac/internal/engine"
 )
@@ -31,10 +33,14 @@ func (c *commandBase) SetFlags(f *flag.FlagSet) {
 	f.BoolVar(&c.noRecurse, "no-recurse", false, "do not look for shac.star files recursively")
 }
 
-func (c *commandBase) options() engine.Options {
+func (c *commandBase) options(files []string) (engine.Options, error) {
+	if c.allFiles && len(files) > 0 {
+		return engine.Options{}, errors.New("--all cannot be set together with positional file arguments")
+	}
 	return engine.Options{
 		Root:     c.root,
 		AllFiles: c.allFiles,
+		Files:    files,
 		Recurse:  !c.noRecurse,
-	}
+	}, nil
 }

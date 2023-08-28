@@ -16,7 +16,6 @@ package cli
 
 import (
 	"context"
-	"errors"
 
 	flag "github.com/spf13/pflag"
 	"go.fuchsia.dev/shac-project/shac/internal/engine"
@@ -38,11 +37,11 @@ func (c *fixCmd) SetFlags(f *flag.FlagSet) {
 	c.commandBase.SetFlags(f)
 }
 
-func (c *fixCmd) Execute(ctx context.Context, args []string) error {
-	if len(args) != 0 {
-		return errors.New("unsupported arguments")
+func (c *fixCmd) Execute(ctx context.Context, files []string) error {
+	o, err := c.options(files)
+	if err != nil {
+		return err
 	}
-	o := c.options()
 	o.Filter = engine.OnlyNonFormatters
 	return engine.Fix(ctx, &o)
 }

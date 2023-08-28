@@ -129,11 +129,20 @@ type scmCheckout interface {
 }
 
 type filteredSCM struct {
+	// files lists specific files that should be force-included.
+	files   []string
 	matcher gitignore.Matcher
 	scm     scmCheckout
 }
 
 func (f *filteredSCM) affectedFiles(ctx context.Context, includeDeleted bool) ([]file, error) {
+	if len(f.files) > 0 {
+		var res []file
+		for _, path := range f.files {
+			res = append(res, &fileImpl{path: filepath.ToSlash(path)})
+		}
+		return res, nil
+	}
 	files, err := f.scm.affectedFiles(ctx, includeDeleted)
 	return f.filter(files), err
 }
