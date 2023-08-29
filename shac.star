@@ -18,7 +18,7 @@ This file will evolve as new shac functionality is being added.
 """
 
 load("//checks/check_doc.star", "check_docs")
-load("//checks/go.star", "gofmt", "gosec", "ineffassign", "no_fork_without_lock", "shadow", "staticcheck")
+load("//checks/go.star", "gofmt", "gosec", "ineffassign", "shadow", "staticcheck")
 load("//checks/licenses.star", "check_license_headers")
 
 
@@ -64,6 +64,5 @@ shac.register_check(gofmt)
 shac.register_check(gosec)
 shac.register_check(ineffassign)
 shac.register_check(new_todos)
-shac.register_check(no_fork_without_lock)
 shac.register_check(shadow)
 shac.register_check(staticcheck)

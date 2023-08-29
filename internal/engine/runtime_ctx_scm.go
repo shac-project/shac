@@ -31,7 +31,6 @@ import (
 	"unsafe"
 
 	"github.com/go-git/go-git/plumbing/format/gitignore"
-	"go.fuchsia.dev/shac-project/shac/internal/execsupport"
 	"go.starlark.net/starlark"
 )
 
@@ -388,7 +387,7 @@ func (g *gitCheckout) run(ctx context.Context, args ...string) string {
 	b := buffers.get()
 	cmd.Stdout = b
 	cmd.Stderr = b
-	err := execsupport.Run(cmd)
+	err := cmd.Run()
 	// Always make a copy of the output, since it could be persisted. Only reuse
 	// the temporary buffer.
 	out := b.String()

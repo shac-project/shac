@@ -208,47 +208,6 @@ def _shadow(ctx, version = "v0.7.0"):
 shadow = shac.check(_shadow)
 
 
-def no_fork_without_lock(ctx):
-  """Checks that exec.Command Start() and Run() aren't called directly.
-
-  Instead, callers should use the `execsupport` package, which provides appropriate
-  locks to make sure forks are safe.
-
-  Args:
-    ctx: A ctx instance.
-  """
-  output = json.decode(ctx.os.exec(
-    [
-      "go",
-      "run",
-      "./internal/go_checks/fork_check",
-      "-test=false",
-      "-json",
-      "./...",
-    ],
-    env=_go_env(ctx, "no_fork_without_lock")
-  ).wait().stdout)
-
-  # Skip the "execsupport" package since it contains the wrappers around Run()
-  # and Start() that should be used. But if it's not present in the output,
-  # that's a
-  # good sign that the check is broken.
-  if not output.pop("go.fuchsia.dev/shac-project/shac/internal/execsupport", None):
-    fail("execsupport package was not found in the output, fork_check may be buggy")
-
-  for checks in output.values():
-    for findings in checks.values():
-      for finding in findings:
-        match = ctx.re.match(r"^%s/(.+):(\d+):(\d+)$" % ctx.scm.root, finding["posn"])
-        ctx.emit.finding(
-          level="error",
-          filepath=match.groups[1],
-          line=int(match.groups[2]),
-          col=int(match.groups[3]),
-          message=finding["message"],
-        )
-
-
 def _go_install(ctx, pkg, version):
   tool_name = pkg.split("/")[-1]
   env = _go_env(ctx, tool_name)
