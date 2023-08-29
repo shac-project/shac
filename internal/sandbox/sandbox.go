@@ -24,6 +24,7 @@ import (
 	"runtime"
 	"sort"
 	"strings"
+	"syscall"
 
 	"go.fuchsia.dev/shac-project/shac/internal/execsupport"
 )
@@ -66,9 +67,22 @@ func New(tempDir string) (Sandbox, error) {
 		execsupport.Mu.Lock()
 		defer execsupport.Mu.Unlock()
 		nsjailPath := filepath.Join(tempDir, "nsjail")
+		// O_CLOEXEC prevents subprocesses from inheriting the open FD. This
+		// doesn't happen in production, but shac tests run many shac instances
+		// in parallel in the same subprocess and it causes issues if those
+		// subprocesses do forks that inherit the open FD.
+		flag := os.O_WRONLY | os.O_CREATE | syscall.O_CLOEXEC
 		// Executable permissions are ok.
 		//#nosec CWE-276
-		if err := os.WriteFile(nsjailPath, nsjailExecutableBytes, 0o700); err != nil {
+		f, err := os.OpenFile(nsjailPath, flag, 0o700)
+		if err != nil {
+			return nil, err
+		}
+		_, err = f.Write(nsjailExecutableBytes)
+		if err2 := f.Close(); err == nil {
+			err = err2
+		}
+		if err != nil {
 			return nil, err
 		}
 		return nsjailSandbox{nsjailPath: nsjailPath}, nil
