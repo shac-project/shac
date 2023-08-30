@@ -1284,6 +1284,11 @@ func TestTestDataFailOrThrow(t *testing.T) {
 			"  //load-recurse.star:15:1: in <toplevel>\n",
 		},
 		{
+			"load-register_check.star",
+			"cannot load ./fail-check.star: shac.register_check: cannot be called from a loaded file",
+			"  //load-register_check.star:16:1: in <toplevel>\n",
+		},
+		{
 			"shac-immutable.star",
 			"can't assign to .key field of struct",
 			"  //shac-immutable.star:16:5: in <toplevel>\n",

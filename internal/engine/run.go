@@ -234,9 +234,10 @@ func runInner(ctx context.Context, root, tmpdir, main string, r Report, allowNet
 		return err
 	}
 	env := starlarkEnv{
-		globals:  getPredeclared(),
-		sources:  map[string]*loadedSource{},
-		packages: packages,
+		execedFileGlobals: getPredeclared(true),
+		loadedFileGlobals: getPredeclared(false),
+		sources:           map[string]*loadedSource{},
+		packages:          packages,
 	}
 
 	newState := func(scm scmCheckout, subdir string, idx int) *shacState {

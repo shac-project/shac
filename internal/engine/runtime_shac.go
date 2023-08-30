@@ -33,8 +33,8 @@ var (
 // getShac returns the global shac object.
 //
 // Make sure to update //doc/stdlib.star whenever this function is modified.
-func getShac() starlark.StringDict {
-	return starlark.StringDict{
+func getShac(execed bool) starlark.StringDict {
+	ret := starlark.StringDict{
 		"check":          newBuiltin("shac.check", shacCheck),
 		"commit_hash":    starlark.String(getCommitHash()),
 		"register_check": newBuiltinNone("shac.register_check", shacRegisterCheck),
@@ -42,6 +42,21 @@ func getShac() starlark.StringDict {
 			starlark.MakeInt(Version[0]), starlark.MakeInt(Version[1]), starlark.MakeInt(Version[2]),
 		},
 	}
+	if !execed {
+		// Disallow loaded files from calling `shac.register_check`. Only the
+		// top-level shac.star file can call `shac.register_check`; outside
+		// shac.star, `shac.register_check` cannot be called at the top level,
+		// only in functions that are loaded and called by shac.star.
+		//
+		// This prevents libraries from forcibly registering checks for all
+		// users, and forces users to be somewhat explicit about which checks
+		// are registered.
+		ret["register_check"] = newBuiltinNone("shac.register_check",
+			func(ctx context.Context, s *shacState, name string, args starlark.Tuple, kwargs []starlark.Tuple) error {
+				return fmt.Errorf("cannot be called from a loaded file")
+			})
+	}
+	return ret
 }
 
 // shacRegisterCheck implements native function shac.register_check().

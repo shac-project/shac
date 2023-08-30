@@ -108,9 +108,12 @@ type loadedSource struct {
 // files in parallel.
 type starlarkEnv struct {
 	// Immutable.
-	// globals is available to all load() statements. They must be frozen via
-	// Freeze().
-	globals starlark.StringDict
+	// execedFileGlobals is available to the top-level Starlark file. They must be frozen
+	// via Freeze().
+	execedFileGlobals starlark.StringDict
+	// loadedFileGlobals is available to any loaded Starlark files. They must be
+	// frozen via Freeze().
+	loadedFileGlobals starlark.StringDict
 	// packages are all the available packages. It must include __main__.
 	packages map[string]fs.FS
 
@@ -145,14 +148,14 @@ func (s *starlarkEnv) load(ctx context.Context, sk sourceKey, pi printImpl) (sta
 		if err != nil {
 			return nil, err
 		}
-		return s.loadInner(ctx, th, skn, pi)
+		return s.loadInner(ctx, th, skn, pi, false)
 	}
 	t.SetLocal("shac.top", sk)
 	t.SetLocal("shac.pkg", sk)
-	return s.loadInner(ctx, t, sk, pi)
+	return s.loadInner(ctx, t, sk, pi, true)
 }
 
-func (s *starlarkEnv) loadInner(ctx context.Context, th *starlark.Thread, sk sourceKey, pi printImpl) (starlark.StringDict, error) {
+func (s *starlarkEnv) loadInner(ctx context.Context, th *starlark.Thread, sk sourceKey, pi printImpl, execed bool) (starlark.StringDict, error) {
 	key := sk.String()
 	s.mu.Lock()
 	ss, ok := s.sources[key]
@@ -194,7 +197,11 @@ func (s *starlarkEnv) loadInner(ctx context.Context, th *starlark.Thread, sk sou
 				oldsk := th.Local("shac.pkg").(sourceKey)
 				th.SetLocal("shac.pkg", sk)
 				fp := syntax.FilePortion{Content: d, FirstLine: 1, FirstCol: 1}
-				ss.globals, ss.err = starlark.ExecFile(th, sk.String(), fp, s.globals)
+				globals := s.execedFileGlobals
+				if !execed {
+					globals = s.loadedFileGlobals
+				}
+				ss.globals, ss.err = starlark.ExecFile(th, sk.String(), fp, globals)
 				th.SetLocal("shac.pkg", oldsk)
 				var errl resolve.ErrorList
 				if errors.As(ss.err, &errl) {

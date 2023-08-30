@@ -31,9 +31,9 @@ import (
 // The upstream starlark interpreter includes all the symbols described at
 // https://github.com/google/starlark-go/blob/HEAD/doc/spec.md#built-in-constants-and-functions
 // See https://pkg.go.dev/go.starlark.net/starlark#Universe for the default list.
-func getPredeclared() starlark.StringDict {
+func getPredeclared(execed bool) starlark.StringDict {
 	return starlark.StringDict{
-		"shac": toValue("shac", getShac()),
+		"shac": toValue("shac", getShac(execed)),
 
 		// Add https://bazel.build/rules/lib/json so it feels more natural to bazel
 		// users.
