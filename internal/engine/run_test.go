@@ -1665,6 +1665,10 @@ func TestTestDataPrint(t *testing.T) {
 			strings.Repeat("[//ctx-os-exec-parallel.star:27] Hello, world\n", 10),
 		},
 		{
+			"ctx-os-exec-relpath.star",
+			"[//ctx-os-exec-relpath.star:17] Hello from a nested file\n\n",
+		},
+		{
 			"ctx-os-exec-stdin.star",
 			"[//ctx-os-exec-stdin.star:30] stdout given NoneType for stdin:\n" +
 				"\n" +

@@ -286,13 +286,24 @@ func ctxOsExec(ctx context.Context, s *shacState, name string, args starlark.Tup
 		exeParts[0] = s.root
 		fullCmd[0] = strings.Join(exeParts, string(os.PathSeparator))
 	} else {
-		// nsjail doesn't do $PATH-based resolution of the command it's given, so it
-		// must either be an absolute or relative path. Do this resolution
-		// unconditionally for consistency across platforms even though it's not
-		// necessary when not using nsjail.
-		fullCmd[0], err = exec.LookPath(fullCmd[0])
-		if err != nil && !errors.Is(err, exec.ErrDot) {
-			return nil, err
+		// nsjail doesn't do $PATH-based resolution of the command it's
+		// given, so it must either be an absolute or relative path. Do this
+		// resolution unconditionally for consistency across platforms even
+		// though it's not necessary when not using nsjail.
+		if strings.Contains(fullCmd[0], "/") && !filepath.IsAbs(fullCmd[0]) {
+			// Make the path absolute if it's relative and contains slashes.
+			// We can't use exec.LookPath in this case because it tries to
+			// evaluate the path relative to the cwd, but we want to evaluate it
+			// relative to the shac.star file being evaluated.
+			//
+			// filepath.Join ignores empty elements, so s.subdir can be included
+			// unconditionally.
+			fullCmd[0] = filepath.Join(s.root, s.subdir, fullCmd[0])
+		} else {
+			fullCmd[0], err = exec.LookPath(fullCmd[0])
+			if err != nil && !errors.Is(err, exec.ErrDot) {
+				return nil, err
+			}
 		}
 	}
 
