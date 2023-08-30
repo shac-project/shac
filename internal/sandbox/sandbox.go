@@ -25,6 +25,8 @@ import (
 	"sort"
 	"strings"
 	"syscall"
+
+	"go.fuchsia.dev/shac-project/shac/internal/execsupport"
 )
 
 //go:generate go run download_nsjail.go
@@ -62,6 +64,8 @@ type Sandbox interface {
 // New constructs a platform-appropriate sandbox.
 func New(tempDir string) (Sandbox, error) {
 	if runtime.GOOS == "linux" && (runtime.GOARCH == "amd64" || runtime.GOARCH == "arm64") {
+		execsupport.Mu.Lock()
+		defer execsupport.Mu.Unlock()
 		nsjailPath := filepath.Join(tempDir, "nsjail")
 		// O_CLOEXEC prevents subprocesses from inheriting the open FD. This
 		// doesn't happen in production, but shac tests run many shac instances
