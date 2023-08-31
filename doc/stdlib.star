@@ -743,11 +743,6 @@ def _shac_register_check(check):
     shac.register_check(cb, fail_often)
     ```
 
-    register_check cannot be called while a file is being imported by `load()`.
-    It can only be called from the top-level execution path of the main
-    shac.star file, either directly or by importing a function that calls
-    register_check from another file.
-
   Args:
     check: `shac.check()` object or Starlark function that is called back to
       implement the check.
