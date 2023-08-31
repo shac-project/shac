@@ -300,8 +300,12 @@ func ctxOsExec(ctx context.Context, s *shacState, name string, args starlark.Tup
 			// unconditionally.
 			fullCmd[0] = filepath.Join(s.root, s.subdir, fullCmd[0])
 		} else {
+			// If the first element of the command is a single path element like
+			// "foo" or "foo.sh", use $PATH to evaluate it. Local executables in
+			// the root of the repository must use the "./foo.sh" form or
+			// absolute paths.
 			fullCmd[0], err = exec.LookPath(fullCmd[0])
-			if err != nil && !errors.Is(err, exec.ErrDot) {
+			if err != nil {
 				return nil, err
 			}
 		}
