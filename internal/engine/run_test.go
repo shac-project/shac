@@ -1661,7 +1661,13 @@ func TestTestDataPrint(t *testing.T) {
 		},
 		{
 			"ctx-os-exec-relpath.star",
-			"[//ctx-os-exec-relpath.star:17] Hello from a nested file\n\n",
+			func() string {
+				// TODO(maruel): Decide if we want to do CRLF translation automatically.
+				if runtime.GOOS == "windows" {
+					return "[//ctx-os-exec-relpath.star:17] Hello from a nested file\r\n\n"
+				}
+				return "[//ctx-os-exec-relpath.star:17] Hello from a nested file\n\n"
+			}(),
 		},
 		{
 			"ctx-os-exec-stdin.star",
