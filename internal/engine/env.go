@@ -161,17 +161,24 @@ func (e *starlarkEnv) loadInner(th *starlark.Thread, sk sourceKey) (starlark.Str
 
 		e.mu.Unlock()
 		if source.th == th {
-			// This source is currently being loaded by this very thread,
-			// meaning we encountered a dependency cycle.
-			return nil, fmt.Errorf("%s was loaded in a cycle dependency graph", sk.String())
+			// `loadInner` will not be called concurrently with the same
+			// Starlark thread, so if the current thread already has a lock on
+			// this source it means there's a dependency cycle that would cause
+			// a deadlock.
+			if !source.mu.TryLock() {
+				return nil, fmt.Errorf("%s was loaded in a cycle dependency graph", sk.String())
+			}
+		} else {
+			// The source may be concurrently processed by another starlark
+			// thread that's traversing the dependency graph of a separate
+			// shac.star file, wait for the processing to complete by taking the
+			// lock.
+			//
+			// This block is hard to cover since it's a race condition. We'd
+			// have to inject a builtin that would hang the starlark execution
+			// to force concurrency.
+			source.mu.Lock()
 		}
-		// The following lines are hard to cover since it's a race condition.
-		// We'd have to inject a builtin that would hang the starlark execution
-		// to force concurrency.
-
-		// The source may be concurrently processed by another starlark thread,
-		// wait for the processing to complete by taking the lock.
-		source.mu.Lock()
 		defer source.mu.Unlock()
 		return source.globals, source.err
 	}

@@ -1752,6 +1752,11 @@ func TestTestDataPrint(t *testing.T) {
 			"[//dir-shac.star:15] [\"check\", \"commit_hash\", \"register_check\", \"version\"]\n",
 		},
 		{
+			"load-diamond_dependency.star",
+			"[//load-diamond_dependency.star:18] i am a constant\n" +
+				"[//load-diamond_dependency.star:19] i am a constant #2\n",
+		},
+		{
 			"print-shac-version.star",
 			"[//print-shac-version.star:15] " + v + "\n",
 		},
