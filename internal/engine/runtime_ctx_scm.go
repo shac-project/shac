@@ -16,6 +16,7 @@ package engine
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -24,6 +25,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -49,7 +51,10 @@ type commitRef struct {
 }
 
 type file interface {
+	// rootedpath is the path relative to the project root.
 	rootedpath() string
+	// relpath is the path relative to the directory of the shac.star file being
+	// executed.
 	relpath() string
 	action() string
 	getMetadata() starlark.Value
@@ -112,11 +117,11 @@ func (f *fileImpl) getMetadata() starlark.Value {
 // fileSubdirImpl is one tracked file reported as a subdirectory.
 type fileSubdirImpl struct {
 	file
-	path string
+	rel string
 }
 
 func (f *fileSubdirImpl) relpath() string {
-	return f.path
+	return f.rel
 }
 
 // scmCheckout is the generic interface for version controlled sources.
@@ -149,7 +154,28 @@ func (f *filteredSCM) affectedFiles(ctx context.Context, includeDeleted bool) ([
 
 func (f *filteredSCM) allFiles(ctx context.Context, includeDeleted bool) ([]file, error) {
 	files, err := f.scm.allFiles(ctx, includeDeleted)
-	return f.filter(files), err
+	if err != nil {
+		return nil, err
+	}
+
+	files = f.filter(files)
+
+	// Force-include explicitly listed files, making sure to preserve sortedness
+	// and uniqueness of the return values.
+	if len(f.files) > 0 {
+		for _, path := range f.files {
+			files = append(files, &fileImpl{path: path})
+		}
+		slices.SortFunc(files, func(a, b file) int {
+			return cmp.Compare(a.rootedpath(), b.rootedpath())
+		})
+		// Remove duplicates.
+		slices.CompactFunc(files, func(a, b file) bool {
+			return a.rootedpath() == b.rootedpath()
+		})
+	}
+
+	return files, nil
 }
 
 func (f *filteredSCM) newLines(ctx context.Context, fi file) (starlark.Value, error) {
@@ -207,7 +233,7 @@ func (s *subdirSCM) filterFiles(files []file) []file {
 	l := len(s.subdir)
 	for _, f := range files {
 		if r := f.rootedpath(); strings.HasPrefix(r, s.subdir) {
-			out = append(out, &fileSubdirImpl{file: f, path: r[l:]})
+			out = append(out, &fileSubdirImpl{file: f, rel: r[l:]})
 		}
 	}
 	return out

@@ -348,8 +348,8 @@ type shacState struct {
 	// root is the root for the root shac.star that was executed. Native path
 	// style.
 	root string
-	// subdir is the directory into which this shac.star is located. Only set
-	// when Options.Recurse is set to true. POSIX path style.
+	// subdir is the relative directory in which this shac.star is located.
+	// Only set when Options.Recurse is set to true. POSIX path style.
 	subdir string
 	tmpdir string
 	// scm is a filtered view of runState.scm.
