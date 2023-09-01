@@ -280,35 +280,28 @@ func ctxOsExec(ctx context.Context, s *shacState, name string, args starlark.Tup
 		return nil, fmt.Errorf("for parameter \"cmd\": got %s, want sequence of str", argcmd.Type())
 	}
 
-	exeParts := strings.Split(fullCmd[0], string(os.PathSeparator))
-	if exeParts[0] == "." {
-		// exec.Command doesn't evaluate ".", so convert to an absolute path.
-		exeParts[0] = s.root
-		fullCmd[0] = strings.Join(exeParts, string(os.PathSeparator))
-	} else {
-		// nsjail doesn't do $PATH-based resolution of the command it's
-		// given, so it must either be an absolute or relative path. Do this
-		// resolution unconditionally for consistency across platforms even
-		// though it's not necessary when not using nsjail.
-		if strings.Contains(fullCmd[0], "/") && !filepath.IsAbs(fullCmd[0]) {
-			// Make the path absolute if it's relative and contains slashes.
-			// We can't use exec.LookPath in this case because it tries to
-			// evaluate the path relative to the cwd, but we want to evaluate it
-			// relative to the shac.star file being evaluated.
-			//
-			// filepath.Join ignores empty elements, so s.subdir can be included
-			// unconditionally.
-			fullCmd[0] = filepath.Join(s.root, s.subdir, fullCmd[0])
-		} else {
-			// If the first element of the command is a single path element like
-			// "foo" or "foo.sh", use $PATH to evaluate it. Local executables in
-			// the root of the repository must use the "./foo.sh" form or
-			// absolute paths.
-			fullCmd[0], err = exec.LookPath(fullCmd[0])
+	// nsjail doesn't do $PATH-based resolution of the command it's given. Do
+	// this resolution unconditionally for consistency across platforms even
+	// though it's not necessary when not using nsjail. This also ensures that
+	// relative file paths are interpreted relative to the root directory,
+	// rather than the directory from which shac is run.
+	if !filepath.IsAbs(fullCmd[0]) {
+		absPath := filepath.Join(s.root, s.subdir, fullCmd[0])
+		if _, err = os.Stat(absPath); err != nil {
+			// exec.LookPath() doesn't do $PATH-based lookup for paths
+			// containing slashes, so no point in trying it if the file doesn't
+			// exist.
+			if !errors.Is(err, os.ErrNotExist) || strings.Contains(fullCmd[0], "/") {
+				return nil, err
+			}
+			// If the path doesn't exist in the root, fall back to a $PATH
+			// lookup.
+			absPath, err = exec.LookPath(fullCmd[0])
 			if err != nil {
 				return nil, err
 			}
 		}
+		fullCmd[0] = absPath
 	}
 
 	config := &sandbox.Config{
