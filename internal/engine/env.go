@@ -123,7 +123,7 @@ type starlarkEnv struct {
 // thread returns a new starlark thread.
 //
 // load() statement is not allowed.
-func (s *starlarkEnv) thread(ctx context.Context, name string, pi printImpl) *starlark.Thread {
+func (e *starlarkEnv) thread(ctx context.Context, name string, pi printImpl) *starlark.Thread {
 	t := &starlark.Thread{Name: name, Print: pi}
 	t.SetLocal("shac.context", ctx)
 	return t
@@ -137,76 +137,76 @@ func getContext(t *starlark.Thread) context.Context {
 // load loads a starlark source file. It is safe to call it concurrently.
 //
 // A thread will be implicitly created.
-func (s *starlarkEnv) load(ctx context.Context, sk sourceKey, pi printImpl) (starlark.StringDict, error) {
+func (e *starlarkEnv) load(ctx context.Context, sk sourceKey, pi printImpl) (starlark.StringDict, error) {
 	// We are the root thread. Start a thread implicitly.
-	t := s.thread(ctx, sk.String(), pi)
+	t := e.thread(ctx, sk.String(), pi)
 	t.Load = func(th *starlark.Thread, str string) (starlark.StringDict, error) {
 		skn, err := parseSourceKey(th.Local("shac.pkg").(sourceKey), str)
 		if err != nil {
 			return nil, err
 		}
-		return s.loadInner(ctx, th, skn, pi)
+		return e.loadInner(th, skn)
 	}
 	t.SetLocal("shac.top", sk)
 	t.SetLocal("shac.pkg", sk)
-	return s.loadInner(ctx, t, sk, pi)
+	return e.loadInner(t, sk)
 }
 
-func (s *starlarkEnv) loadInner(ctx context.Context, th *starlark.Thread, sk sourceKey, pi printImpl) (starlark.StringDict, error) {
+func (e *starlarkEnv) loadInner(th *starlark.Thread, sk sourceKey) (starlark.StringDict, error) {
 	key := sk.String()
-	s.mu.Lock()
-	ss, ok := s.sources[key]
-	if !ok {
-		ss = &loadedSource{th: th, err: fmt.Errorf("load(%q) failed: panic while loading", sk)}
-		// We are the "master" of this file, since we will be loading it. Make sure
-		// others won't load it.
-		ss.mu.Lock()
-		s.sources[key] = ss
-		// It's a new file that wasn't load'ed yet. ss.mu is still held which will
-		// block concurrent loading.
-		defer ss.mu.Unlock()
-	}
-	s.mu.Unlock()
+	e.mu.Lock()
+	if source, ok := e.sources[key]; ok {
+		// source has already been loaded or is in the process of being loaded
+		// by another thread.
 
-	if ok {
-		if ss.th == th {
-			// This source was loaded by this very thread.
+		e.mu.Unlock()
+		if source.th == th {
+			// This source is currently being loaded by this very thread,
+			// meaning we encountered a dependency cycle.
 			return nil, fmt.Errorf("%s was loaded in a cycle dependency graph", sk.String())
 		}
-		// These lines are hard to cover since it's a race condition. We'd have to
-		// inject a builtin that would hang the starlark execution to force
-		// concurrency.
+		// The following lines are hard to cover since it's a race condition.
+		// We'd have to inject a builtin that would hang the starlark execution
+		// to force concurrency.
+
 		// The source may be concurrently processed by another starlark thread,
 		// wait for the processing to complete by taking the lock.
-		ss.mu.Lock()
-		g := ss.globals
-		err := ss.err
-		ss.mu.Unlock()
-		return g, err
+		source.mu.Lock()
+		defer source.mu.Unlock()
+		return source.globals, source.err
 	}
+
+	source := &loadedSource{th: th, err: fmt.Errorf("load(%q) failed: panic while loading", sk)}
+	// We are the "master" of this file, since we will be loading it. Make sure
+	// others won't load it.
+	source.mu.Lock()
+	e.sources[key] = source
+	e.mu.Unlock()
+	defer source.mu.Unlock()
 
 	// It's a new file that wasn't load'ed yet. ss.mu is still held which will
 	// block concurrent loading.
-	if pkg := s.packages[sk.pkg]; pkg != nil {
+	if pkg := e.packages[sk.pkg]; pkg != nil {
 		if f, err := pkg.Open(sk.relpath); err == nil {
 			var d []byte
 			if d, err = io.ReadAll(f); err == nil {
 				oldsk := th.Local("shac.pkg").(sourceKey)
 				th.SetLocal("shac.pkg", sk)
 				fp := syntax.FilePortion{Content: d, FirstLine: 1, FirstCol: 1}
-				ss.globals, ss.err = starlark.ExecFile(th, sk.String(), fp, s.globals)
+				source.globals, source.err = starlark.ExecFile(th, sk.String(), fp, e.globals)
 				th.SetLocal("shac.pkg", oldsk)
 				var errl resolve.ErrorList
-				if errors.As(ss.err, &errl) {
+				if errors.As(source.err, &errl) {
 					// Unwrap the error, only keep the first one.
-					ss.err = errl[0]
+					source.err = errl[0]
 				}
 				var errre resolve.Error
-				if errors.As(ss.err, &errre) {
-					// Synthesize a BacktracableError since it's nicer for the user.
-					// Sadly we can't get the function context even if the error is
-					// within a function implementation, so hardcode "<toplevel>".
-					ss.err = &failure{
+				if errors.As(source.err, &errre) {
+					// Synthesize a BacktraceableError since it's nicer for the
+					// user. Sadly we can't get the function context even if the
+					// error is within a function implementation, so hardcode
+					// "<toplevel>".
+					source.err = &failure{
 						Message: errre.Msg,
 						Stack: starlark.CallStack{
 							starlark.CallFrame{
@@ -217,19 +217,19 @@ func (s *starlarkEnv) loadInner(ctx context.Context, th *starlark.Thread, sk sou
 					}
 				}
 			} else {
-				ss.err = err
+				source.err = err
 			}
-			if err = f.Close(); ss.err == nil {
-				ss.err = err
+			if err = f.Close(); source.err == nil {
+				source.err = err
 			}
 		} else if errors.Is(err, fs.ErrNotExist) {
 			// Hide the underlying error for determinism.
-			ss.err = errors.New("file not found")
+			source.err = errors.New("file not found")
 		} else {
-			ss.err = err
+			source.err = err
 		}
 	} else {
-		ss.err = errors.New("package not found")
+		source.err = errors.New("package not found")
 	}
-	return ss.globals, ss.err
+	return source.globals, source.err
 }
