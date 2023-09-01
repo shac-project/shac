@@ -120,6 +120,15 @@ func TestRun_SpecificFiles(t *testing.T) {
 	// Not parallelized because it calls os.Chdir.
 
 	root := t.TempDir()
+
+	// Evaluate symlinks so that tests work on Mac, where t.TempDir() returns
+	// path under /var, but /var is symlinked to /private/var and os.Getwd()
+	// returns the path with symlinks resolved.
+	root, err := filepath.EvalSymlinks(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	writeFile(t, root, "shac.textproto", prototext.Format(&Document{
 		Ignore: []string{
 			// Specifying files on the command line should override ignores.
