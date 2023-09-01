@@ -117,10 +117,12 @@ func TestRun_Fail(t *testing.T) {
 }
 
 func TestRun_SpecificFiles(t *testing.T) {
-	t.Parallel()
+	// Not parallelized because it calls os.Chdir.
+
 	root := t.TempDir()
 	writeFile(t, root, "shac.textproto", prototext.Format(&Document{
 		Ignore: []string{
+			// Specifying files on the command line should override ignores.
 			"*.py",
 		},
 	}))
@@ -131,54 +133,84 @@ func TestRun_SpecificFiles(t *testing.T) {
 	copySCM(t, root)
 
 	data := []struct {
-		name  string
-		want  string
-		files []string
+		name         string
+		starlarkFile string
+		want         string
+		files        []string
+		workDir      string
 	}{
 		{
-			"ctx-scm-affected_files.star",
-			"[//ctx-scm-affected_files.star:19] \n" +
+			name:         "affected files (no files specified)",
+			starlarkFile: "ctx-scm-affected_files.star",
+			want: "[//ctx-scm-affected_files.star:19] \n" +
 				scmStarlarkFiles("") +
 				"rust.rs: \n" +
 				"shac.textproto: \n" +
 				"\n",
-			nil,
+			files:   nil,
+			workDir: root,
 		},
 		{
-			"ctx-scm-all_files.star",
-			"[//ctx-scm-all_files.star:19] \n" +
+			name:         "affected files (relative path specified)",
+			starlarkFile: "ctx-scm-affected_files.star",
+			want: "[//ctx-scm-affected_files.star:19] \n" +
+				"python.py: \n" +
+				"rust.rs: \n" +
+				"\n",
+			files:   []string{"python.py", "rust.rs"},
+			workDir: root,
+		},
+		{
+			name:         "affected files (absolute path specified)",
+			starlarkFile: "ctx-scm-affected_files.star",
+			want: "[//ctx-scm-affected_files.star:19] \n" +
+				"python.py: \n" +
+				"rust.rs: \n" +
+				"\n",
+			files: []string{filepath.Join(root, "python.py"), filepath.Join(root, "rust.rs")},
+			// Absolute paths should work even outside the root.
+			workDir: t.TempDir(),
+		},
+		{
+			name:         "all files",
+			starlarkFile: "ctx-scm-all_files.star",
+			want: "[//ctx-scm-all_files.star:19] \n" +
 				scmStarlarkFiles("") +
+				"python.py: \n" +
 				"rust.rs: \n" +
 				"shac.textproto: \n" +
 				"\n",
-			nil,
+			files:   []string{"python.py", "rust.rs"},
+			workDir: root,
 		},
 	}
 	for i := range data {
 		i := i
 		t.Run(data[i].name, func(t *testing.T) {
-			t.Parallel()
-			testStarlarkPrint(t, root, data[i].name, false, data[i].want)
+			originalWd, err := os.Getwd()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Chdir(data[i].workDir); err != nil {
+				t.Fatal(err)
+			}
+			testStarlarkPrint(t, root, data[i].starlarkFile, false, data[i].want, data[i].files...)
+			if err := os.Chdir(originalWd); err != nil {
+				t.Fatal(err)
+			}
 		})
 	}
 
-	t.Run("empty ignore field", func(t *testing.T) {
-		t.Parallel()
-		root := t.TempDir()
-		writeFile(t, root, "shac.textproto", prototext.Format(&Document{
-			Ignore: []string{
-				"*.foo",
-				"",
-			},
-		}))
-
+	t.Run("path outside root rejected", func(t *testing.T) {
 		r := reportPrint{reportNoPrint: reportNoPrint{t: t}}
-		o := Options{Report: &r, Root: root, AllFiles: false, main: "shac.star"}
+		files := []string{filepath.Join(t.TempDir(), "outside-root.txt")}
+		o := Options{Report: &r, Root: root, main: "shac.star", Files: files}
 		err := Run(context.Background(), &o)
+		wantErr := fmt.Sprintf("cannot analyze file outside root: %s", files[0])
 		if err == nil {
-			t.Fatal("Expected empty ignore field to be rejected")
-		} else if !errors.Is(err, errEmptyIgnore) {
-			t.Fatalf("Expected error %q, got %q", errEmptyIgnore, err)
+			t.Fatal("Expected file outside root to be rejected")
+		} else if err.Error() != wantErr {
+			t.Fatalf("Expected error %q, got %q", wantErr, err)
 		}
 	})
 }
@@ -1800,9 +1832,9 @@ func TestRun_FilesystemSandbox(t *testing.T) {
 // Utilities
 
 // testStarlarkPrint test a starlark file that calls print().
-func testStarlarkPrint(t testing.TB, root, name string, all bool, want string) {
+func testStarlarkPrint(t testing.TB, root, name string, all bool, want string, files ...string) {
 	r := reportPrint{reportNoPrint: reportNoPrint{t: t}}
-	o := Options{Report: &r, Root: root, AllFiles: all, main: name}
+	o := Options{Report: &r, Root: root, AllFiles: all, main: name, Files: files}
 	if err := Run(context.Background(), &o); err != nil {
 		t.Helper()
 		t.Fatal(err)

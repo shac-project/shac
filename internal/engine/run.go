@@ -204,9 +204,40 @@ func Run(ctx context.Context, o *Options) error {
 		}
 		patterns = append(patterns, gitignore.ParsePattern(p, nil))
 	}
+
+	files := o.Files
+	if len(files) > 0 {
+		var cwd string
+		cwd, err = os.Getwd()
+		if err != nil {
+			return err
+		}
+		// Make all file paths relative to the project root.
+		var newFiles []string
+		for _, orig := range files {
+			f := orig
+			if !filepath.IsAbs(f) {
+				// Relative paths are interpreted relative to the cwd, rather
+				// than relative to the root.
+				f = filepath.Join(cwd, f)
+			}
+			var rel string
+			rel, err = filepath.Rel(root, f)
+			if err != nil {
+				return err
+			}
+			// Validates that the path is within the root directory (i.e.
+			// doesn't start with "..").
+			if !filepath.IsLocal(rel) {
+				return fmt.Errorf("cannot analyze file outside root: %s", orig)
+			}
+			newFiles = append(newFiles, rel)
+		}
+		files = newFiles
+	}
 	scm = &cachingSCM{
 		scm: &filteredSCM{
-			files:   o.Files,
+			files:   files,
 			matcher: gitignore.NewMatcher(patterns),
 			scm:     scm,
 		},
