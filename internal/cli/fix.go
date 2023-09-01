@@ -23,6 +23,7 @@ import (
 
 type fixCmd struct {
 	commandBase
+	quiet bool
 }
 
 func (*fixCmd) Name() string {
@@ -35,6 +36,9 @@ func (*fixCmd) Description() string {
 
 func (c *fixCmd) SetFlags(f *flag.FlagSet) {
 	c.commandBase.SetFlags(f)
+	// TODO(olivernewman): Move the --quiet flag into cmdBase and make it apply
+	// to the `check` command as well.
+	f.BoolVar(&c.quiet, "quiet", false, "Disable non-error output")
 }
 
 func (c *fixCmd) Execute(ctx context.Context, files []string) error {
@@ -43,5 +47,5 @@ func (c *fixCmd) Execute(ctx context.Context, files []string) error {
 		return err
 	}
 	o.Filter = engine.OnlyNonFormatters
-	return engine.Fix(ctx, &o)
+	return engine.Fix(ctx, &o, c.quiet)
 }

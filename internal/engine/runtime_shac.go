@@ -27,7 +27,7 @@ var (
 	// Version is the current tool version.
 	//
 	// TODO(maruel): Add proper version, preferably from git tag.
-	Version = [...]int{0, 1, 1}
+	Version = [...]int{0, 1, 2}
 )
 
 // getShac returns the global shac object.

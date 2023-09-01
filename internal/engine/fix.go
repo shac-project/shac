@@ -29,8 +29,8 @@ import (
 
 // Fix loads a main shac.star file from a root directory and runs checks defined
 // in it, then applies suggested fixes to files on disk.
-func Fix(ctx context.Context, o *Options) error {
-	fc := findingCollector{countsByCheck: map[string]int{}}
+func Fix(ctx context.Context, o *Options, quiet bool) error {
+	fc := findingCollector{countsByCheck: map[string]int{}, quiet: quiet}
 	if o.Report != nil {
 		return fmt.Errorf("cannot overwrite reporter")
 	}
@@ -62,7 +62,9 @@ func Fix(ctx context.Context, o *Options) error {
 		if numFixed != 1 {
 			noun += "s"
 		}
-		fmt.Fprintf(os.Stderr, "Fixed %d %s in %s\n", numFixed, noun, f)
+		if !quiet {
+			fmt.Fprintf(os.Stderr, "Fixed %d %s in %s\n", numFixed, noun, f)
+		}
 	}
 	return nil
 }
@@ -169,6 +171,7 @@ type findingCollector struct {
 	mu            sync.Mutex
 	findings      []findingToFix
 	countsByCheck map[string]int
+	quiet         bool
 }
 
 var _ Report = (*findingCollector)(nil)
@@ -203,18 +206,24 @@ func (c *findingCollector) CheckCompleted(ctx context.Context, check string, sta
 	// TODO(olivernewman): Make this output colorful and more consistent with
 	// the output of `shac check`.
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "- %s: %s\n", check, err)
+		c.logf("- %s: %s", check, err)
 	} else if count == 0 {
-		fmt.Fprintf(os.Stderr, "- %s (all good!)\n", check)
+		c.logf("- %s (all good!)", check)
 	} else {
 		noun := "finding"
 		if count > 1 {
 			noun += "s"
 		}
-		fmt.Fprintf(os.Stderr, "- %s (%d %s to fix)\n", check, count, noun)
+		c.logf("- %s (%d %s to fix)", check, count, noun)
 	}
 }
 
 func (c *findingCollector) Print(ctx context.Context, check, file string, line int, message string) {
-	fmt.Fprintf(os.Stderr, "[%s:%d] %s\n", file, line, message)
+	c.logf("[%s:%d] %s", file, line, message)
+}
+
+func (c *findingCollector) logf(s string, a ...any) {
+	if !c.quiet {
+		fmt.Fprintf(os.Stderr, s+"\n", a...)
+	}
 }

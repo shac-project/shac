@@ -117,7 +117,7 @@ func TestFix(t *testing.T) {
 				main:   data[i].name,
 				config: "../config/valid.textproto",
 			}
-			if err := Fix(context.Background(), &o); err != nil {
+			if err := Fix(context.Background(), &o, true); err != nil {
 				t.Fatal(err)
 			}
 			got := strings.Split(readFile(t, filepath.Join(root, "file.txt")), "\n")
