@@ -251,7 +251,7 @@ func resultSinkCtx() (*resultSinkContext, error) {
 	}
 	// We are clearly running inside a LUCI_CONTEXT luciexe environment but rdb
 	// stream was not started. Hard fail since it means we need to fix the recipe.
-	if ctx.ResultDB.CurrentInvocation.Name != "" && (ctx.ResultSink.AuthToken == "" || ctx.ResultSink.ResultSinkAddr == "") {
+	if ctx.ResultDB.CurrentInvocation.Name == "" || ctx.ResultSink.AuthToken == "" || ctx.ResultSink.ResultSinkAddr == "" {
 		return nil, fmt.Errorf("resultdb is enabled but not resultsink for invocation %s. Make sure shac is run under \"rdb stream\"", ctx.ResultDB.CurrentInvocation.Name)
 	}
 	return &ctx.ResultSink, nil
