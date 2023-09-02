@@ -183,6 +183,21 @@ def _ctx_io_tempdir():
   pass
 
 
+def _ctx_io_tempfile(content, name):
+  """Returns a new temporary file.
+
+  Args:
+    content: String or bytes to populate the file with.
+    name: (optional) The basename to give the file. May contain path
+      separators, in which case the file will be nested accordingly. Will be
+      chosen randomly if not specified.
+
+  Returns:
+    Absolute path to the created file.
+  """
+  pass
+
+
 def _ctx_os_exec(
   cmd,
   cwd = None,
@@ -374,6 +389,7 @@ ctx = struct(
   io = struct(
     read_file = _ctx_io_read_file,
     tempdir = _ctx_io_tempdir,
+    tempfile = _ctx_io_tempfile,
   ),
   # ctx.os is the object that exposes the API to interact with the operating
   # system.

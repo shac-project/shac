@@ -13,6 +13,9 @@
 # limitations under the License.
 
 def cb(ctx):
-  ctx.io.read_file("/dev/null")
+  first = ctx.io.tempfile("first\nfile\ncontents\n")
+  second = ctx.io.tempfile(b"contents\nof\nsecond\nfile\n", name="dir/second.txt")
+  print(ctx.io.read_file(first))
+  print(ctx.io.read_file(second))
 
 shac.register_check(cb)

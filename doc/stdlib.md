@@ -157,6 +157,7 @@ Fields:
 
 - read_file
 - tempdir
+- tempfile
 
 ## ctx.io.read_file
 
@@ -188,6 +189,19 @@ Content of the file as bytes.
 
 Returns a new temporary directory.
 
+
+## ctx.io.tempfile
+
+Returns a new temporary file.
+
+### Arguments
+
+* **content**: String or bytes to populate the file with.
+* **name**: (optional) The basename to give the file. May contain path separators, in which case the file will be nested accordingly. Will be chosen randomly if not specified.
+
+### Returns
+
+Absolute path to the created file.
 
 ## ctx.os
 

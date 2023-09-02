@@ -46,9 +46,13 @@ func ctxIoReadFile(ctx context.Context, s *shacState, name string, args starlark
 	if !ok {
 		return nil, fmt.Errorf("for parameter \"size\": %s is an invalid size", argsize)
 	}
-	dst, err := absPath(string(argfilepath), filepath.Join(s.root, s.subdir))
-	if err != nil {
-		return nil, fmt.Errorf("for parameter \"filepath\": %s %w", argfilepath, err)
+	dst := string(argfilepath)
+	if !filepath.IsAbs(dst) {
+		var err error
+		dst, err = absPath(dst, filepath.Join(s.root, s.subdir))
+		if err != nil {
+			return nil, fmt.Errorf("for parameter \"filepath\": %s %w", argfilepath, err)
+		}
 	}
 	b, err := readFileImpl(dst, size)
 	if err != nil {
@@ -72,6 +76,48 @@ func ctxIoTempdir(ctx context.Context, s *shacState, name string, args starlark.
 	}
 	t, err := s.newTempDir()
 	return starlark.String(t), err
+}
+
+// ctxIoTempfile implements native function ctx.io.tempfile().
+//
+// Make sure to update //doc/stdlib.star whenever this function is modified.
+func ctxIoTempfile(ctx context.Context, s *shacState, name string, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+	var argcontent starlark.Value
+	var argname starlark.String = "00001"
+	if err := starlark.UnpackArgs(name, args, kwargs,
+		"content", &argcontent,
+		"name?", &argname,
+	); err != nil {
+		return nil, err
+	}
+	var content []byte
+	switch v := argcontent.(type) {
+	case starlark.Bytes:
+		content = unsafeByteSlice(string(v))
+	case starlark.String:
+		content = unsafeByteSlice(string(v))
+	default:
+		return nil, fmt.Errorf("for parameter \"content\": got %s, want str or bytes", argcontent.Type())
+	}
+
+	// TODO(olivernewman): Consider not creating a new dir for every temp file.
+	dir, err := s.newTempDir()
+	if err != nil {
+		return nil, err
+	}
+	if filepath.IsAbs(string(argname)) {
+		return nil, fmt.Errorf("for parameter \"name\": absolute paths are not allowed")
+	}
+
+	path := filepath.Join(dir, string(argname))
+	if err = os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return nil, err
+	}
+
+	if err = os.WriteFile(path, content, 0o600); err != nil {
+		return nil, err
+	}
+	return starlark.String(path), err
 }
 
 // Support functions.

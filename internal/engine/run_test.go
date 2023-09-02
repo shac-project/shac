@@ -1082,11 +1082,6 @@ func TestTestDataFailOrThrow(t *testing.T) {
 			"  //ctx-immutable.star:17:6: in cb\n",
 		},
 		{
-			"ctx-io-read_file-abs.star",
-			"ctx.io.read_file: for parameter \"filepath\": \"/dev/null\" do not use absolute path",
-			"  //ctx-io-read_file-abs.star:16:19: in cb\n",
-		},
-		{
 			"ctx-io-read_file-dir.star",
 			"ctx.io.read_file: for parameter \"filepath\": \".\" is a directory",
 			"  //ctx-io-read_file-dir.star:16:19: in cb\n",
@@ -1671,6 +1666,11 @@ func TestTestDataPrint(t *testing.T) {
 					"[//ctx-io-tempdir.star:17] /0/1\n" +
 					"[//ctx-io-tempdir.star:18] /0/2\n"
 			}(),
+		},
+		{
+			"ctx-io-tempfile.star",
+			"[//ctx-io-tempfile.star:18] first\nfile\ncontents\n\n" +
+				"[//ctx-io-tempfile.star:19] contents\nof\nsecond\nfile\n\n",
 		},
 		{
 			"ctx-os-exec-10Mib.star",
