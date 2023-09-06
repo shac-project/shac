@@ -88,7 +88,7 @@ func TestFSToDigest_Reproducible(t *testing.T) {
 
 func copyTree(t *testing.T, dstDir, srcDir string, renamings map[string]string) {
 	err := filepath.WalkDir(srcDir, func(path string, d fs.DirEntry, err error) error {
-		if d.IsDir() || err != nil {
+		if err != nil || d.IsDir() {
 			return err
 		}
 		rel, err := filepath.Rel(srcDir, path)
