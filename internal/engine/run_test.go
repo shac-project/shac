@@ -211,21 +211,6 @@ func TestRun_SpecificFiles(t *testing.T) {
 		})
 	}
 
-	t.Run("path outside root rejected", func(t *testing.T) {
-		t.Parallel()
-
-		r := reportPrint{reportNoPrint: reportNoPrint{t: t}}
-		files := []string{filepath.Join(t.TempDir(), "outside-root.txt")}
-		o := Options{Report: &r, Root: root, main: "shac.star", Files: files}
-		err := Run(context.Background(), &o)
-		wantErr := fmt.Sprintf("cannot analyze file outside root: %s", files[0])
-		if err == nil {
-			t.Fatal("Expected file outside root to be rejected")
-		} else if err.Error() != wantErr {
-			t.Fatalf("Expected error %q, got %q", wantErr, err)
-		}
-	})
-
 	// When recursion is enabled and specific files are listed, all shac.star
 	// files on disk that could apply to those files should still be loaded even
 	// if those shac.star files are not in the listed files.
@@ -233,10 +218,15 @@ func TestRun_SpecificFiles(t *testing.T) {
 		t.Parallel()
 
 		root := t.TempDir()
+
 		files := []string{
-			filepath.Join(root, "root.py"),
-			filepath.Join(root, "dir1", "dir2", "nested.py"),
+			"root.py",
+			filepath.Join("dir1", "dir2", "nested.py"),
 		}
+		for _, f := range files {
+			writeFile(t, root, f, "")
+		}
+
 		writeFile(t, root, "shac.star",
 			`shac.register_check(
 				shac.check(
@@ -260,7 +250,11 @@ func TestRun_SpecificFiles(t *testing.T) {
 			)`)
 
 		r := reportPrint{reportNoPrint: reportNoPrint{t: t}}
-		o := Options{Report: &r, Root: root, Files: files, Recurse: true}
+		var absFiles []string
+		for _, f := range files {
+			absFiles = append(absFiles, filepath.Join(root, f))
+		}
+		o := Options{Report: &r, Root: root, Files: absFiles, Recurse: true}
 
 		if err := Run(context.Background(), &o); err != nil {
 			t.Fatal(err)
@@ -281,6 +275,54 @@ func TestRun_SpecificFiles(t *testing.T) {
 			t.Fatalf("mismatch (-want +got):\n%s", diff)
 		}
 	})
+}
+
+func TestRun_SpecificFiles_Fail(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	subdir := filepath.Join(root, "dir")
+	if err := os.Mkdir(subdir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	dirOutsideRoot := t.TempDir()
+
+	data := []struct {
+		name    string
+		files   []string
+		wantErr string
+	}{
+		{
+			name:    "path outside root",
+			files:   []string{filepath.Join(dirOutsideRoot, "outside-root.txt")},
+			wantErr: fmt.Sprintf("cannot analyze file outside root: %s", filepath.Join(dirOutsideRoot, "outside-root.txt")),
+		},
+		{
+			name:    "directory",
+			files:   []string{subdir},
+			wantErr: fmt.Sprintf("is a directory: %s", subdir),
+		},
+		{
+			name:    "nonexistent file",
+			files:   []string{filepath.Join(root, "nonexistent.txt")},
+			wantErr: fmt.Sprintf("no such file: %s", filepath.Join(root, "nonexistent.txt")),
+		},
+	}
+
+	for i := range data {
+		i := i
+		t.Run(data[i].name, func(t *testing.T) {
+			t.Parallel()
+			r := reportPrint{reportNoPrint: reportNoPrint{t: t}}
+			o := Options{Report: &r, Root: root, main: "shac.star", Files: data[i].files}
+			err := Run(context.Background(), &o)
+			if err == nil {
+				t.Fatalf("Expected error: %q", data[i].wantErr)
+			} else if err.Error() != data[i].wantErr {
+				t.Fatalf("Expected error %q, got %q", data[i].wantErr, err)
+			}
+		})
+	}
 }
 
 func TestRun_Ignore(t *testing.T) {

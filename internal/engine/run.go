@@ -267,6 +267,21 @@ func normalizeFiles(files []string, root string) ([]file, error) {
 		if !filepath.IsLocal(rel) {
 			return nil, fmt.Errorf("cannot analyze file outside root: %s", orig)
 		}
+		fi, err := os.Stat(f)
+		if err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				// Make the error message more concise and use the original
+				// user-specified path rather than the normalized absolute path.
+				return nil, fmt.Errorf("no such file: %s", orig)
+			}
+			return nil, err
+		}
+		// TODO(olivernewman): Support analyzing directories. This will require
+		// doing a filesystem traversal that respects the scm, so `shac check .`
+		// still ignores git-ignored files.
+		if fi.IsDir() {
+			return nil, fmt.Errorf("is a directory: %s", orig)
+		}
 		relativized = append(relativized, rel)
 	}
 
