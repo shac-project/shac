@@ -19,14 +19,88 @@ features](https://pkg.go.dev/go.starlark.net/resolve#pkg-variables) are enabled:
 
 ## Table of contents
 
+- [shac](#shac)
 - [ctx](#ctx)
 - [dir](#dir)
 - [fail](#fail)
 - [json](#json)
 - [load](#load)
 - [print](#print)
-- [shac](#shac)
 - [struct](#struct)
+
+## shac
+
+shac is the global available at runtime when loading your starlark code.
+
+Fields:
+
+- check
+- commit_hash
+- register_check
+- version
+
+## shac.commit_hash
+
+The git hash of shac.git where shac was built.
+
+## shac.version
+
+The semver version number of shac.
+
+## shac.check
+
+Constructs a shac check object.
+
+### Example
+
+```python
+def cb(ctx):
+  fail("implement me")
+
+
+fail_often = shac.check(cb, name="fail_often")
+
+shac.register_check(fail_often)
+```
+
+### Arguments
+
+* **impl**: Starlark function that is called back to implement the check. The callback must accept one ctx(...) argument and return None.
+* **name**: (optional) Name of the check. Defaults to the callback function name.
+* **formatter**: (optional) Whether the check is a formatter. If set to True, the formatter will be run and have its results written to disk by `shac fmt`.
+
+## shac.register_check
+
+Registers a shac check.
+
+It must be called at least once for the starlark file to be a valid check
+file. Each callback will be run in parallel. Each check must have a different
+name.
+
+### Example
+
+```python
+def cb(ctx):
+  fail("implement me")
+
+fail_often = shac.check(cb, name="fail_often")
+
+shac.register_check(fail_often)
+```
+
+register_check also accepts a bare function for convenience when registering
+simple checks. The callback function name will be used as the check name.
+
+```python
+def fail_often(ctx):
+  fail("implement me")
+
+shac.register_check(cb, fail_often)
+```
+
+### Arguments
+
+* **check**: `shac.check()` object or Starlark function that is called back to implement the check.
 
 ## ctx
 
@@ -691,80 +765,6 @@ print("shac", "is", "great")
 
 * **\*args**: Arguments to print out.
 * **sep**: (optional) Separator between the items in args. Defaults to " ".
-
-## shac
-
-shac is the global available at runtime when loading your starlark code.
-
-Fields:
-
-- check
-- commit_hash
-- register_check
-- version
-
-## shac.commit_hash
-
-The git hash of shac.git where shac was built.
-
-## shac.version
-
-The semver version number of shac.
-
-## shac.check
-
-Constructs a shac check object.
-
-### Example
-
-```python
-def cb(ctx):
-  fail("implement me")
-
-
-fail_often = shac.check(cb, name="fail_often")
-
-shac.register_check(fail_often)
-```
-
-### Arguments
-
-* **impl**: Starlark function that is called back to implement the check. The callback must accept one ctx(...) argument and return None.
-* **name**: (optional) Name of the check. Defaults to the callback function name.
-* **formatter**: (optional) Whether the check is a formatter. If set to True, the formatter will be run and have its results written to disk by `shac fmt`.
-
-## shac.register_check
-
-Registers a shac check.
-
-It must be called at least once for the starlark file to be a valid check
-file. Each callback will be run in parallel. Each check must have a different
-name.
-
-### Example
-
-```python
-def cb(ctx):
-  fail("implement me")
-
-fail_often = shac.check(cb, name="fail_often")
-
-shac.register_check(fail_often)
-```
-
-register_check also accepts a bare function for convenience when registering
-simple checks. The callback function name will be used as the check name.
-
-```python
-def fail_often(ctx):
-  fail("implement me")
-
-shac.register_check(cb, fail_often)
-```
-
-### Arguments
-
-* **check**: `shac.check()` object or Starlark function that is called back to implement the check.
 
 ## struct
 
