@@ -26,6 +26,7 @@ import (
 	"path"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -193,54 +194,34 @@ func Run(ctx context.Context, o *Options) error {
 	if err = doc.Validate(); err != nil {
 		return err
 	}
-	scm, err := getSCM(ctx, root, o.AllFiles)
-	if err != nil {
-		return err
-	}
-	var patterns []gitignore.Pattern
-	for _, p := range doc.Ignore {
-		if p == "" {
-			return errEmptyIgnore
-		}
-		patterns = append(patterns, gitignore.ParsePattern(p, nil))
-	}
 
-	files := o.Files
-	if len(files) > 0 {
-		var cwd string
-		cwd, err = os.Getwd()
+	var scm scmCheckout
+	if len(o.Files) > 0 {
+		var files []file
+		files, err = normalizeFiles(o.Files, root)
 		if err != nil {
 			return err
 		}
-		// Make all file paths relative to the project root.
-		var newFiles []string
-		for _, orig := range files {
-			f := orig
-			if !filepath.IsAbs(f) {
-				// Relative paths are interpreted relative to the cwd, rather
-				// than relative to the root.
-				f = filepath.Join(cwd, f)
-			}
-			var rel string
-			rel, err = filepath.Rel(root, f)
-			if err != nil {
-				return err
-			}
-			// Validates that the path is within the root directory (i.e.
-			// doesn't start with "..").
-			if !filepath.IsLocal(rel) {
-				return fmt.Errorf("cannot analyze file outside root: %s", orig)
-			}
-			newFiles = append(newFiles, rel)
+		scm = &specifiedFilesOnly{files: files, root: root}
+	} else {
+		scm, err = getSCM(ctx, root, o.AllFiles)
+		if err != nil {
+			return err
 		}
-		files = newFiles
-	}
-	scm = &cachingSCM{
-		scm: &filteredSCM{
-			files:   files,
-			matcher: gitignore.NewMatcher(patterns),
-			scm:     scm,
-		},
+		if len(doc.Ignore) > 0 {
+			var patterns []gitignore.Pattern
+			for _, p := range doc.Ignore {
+				if p == "" {
+					return errEmptyIgnore
+				}
+				patterns = append(patterns, gitignore.ParsePattern(p, nil))
+			}
+			scm = &filteredSCM{
+				matcher: gitignore.NewMatcher(patterns),
+				scm:     scm,
+			}
+		}
+		scm = &cachingSCM{scm: scm}
 	}
 
 	tmpdir, err := os.MkdirTemp("", "shac")
@@ -257,6 +238,46 @@ func Run(ctx context.Context, o *Options) error {
 		err = err2
 	}
 	return err
+}
+
+// normalizeFiles makes all the file paths relative to the project root, sorts,
+// and removes duplicates.
+//
+// Input paths may be absolute or relative. If relative, they are assumed to be
+// relative to the current working directory.
+func normalizeFiles(files []string, root string) ([]file, error) {
+	var cwd string
+	cwd, err := os.Getwd()
+	if err != nil {
+		return nil, err
+	}
+	var relativized []string
+	for _, orig := range files {
+		f := orig
+		if !filepath.IsAbs(f) {
+			f = filepath.Join(cwd, f)
+		}
+		var rel string
+		rel, err = filepath.Rel(root, f)
+		if err != nil {
+			return nil, err
+		}
+		// Validates that the path is within the root directory (i.e.
+		// doesn't start with "..").
+		if !filepath.IsLocal(rel) {
+			return nil, fmt.Errorf("cannot analyze file outside root: %s", orig)
+		}
+		relativized = append(relativized, rel)
+	}
+
+	slices.Sort(relativized)
+	slices.Compact(relativized)
+
+	var res []file
+	for _, f := range relativized {
+		res = append(res, &fileImpl{path: filepath.ToSlash(f)})
+	}
+	return res, nil
 }
 
 func runInner(ctx context.Context, root, tmpdir, main string, r Report, allowNetwork, writableRoot, recurse bool, filter CheckFilter, scm scmCheckout, packages map[string]fs.FS) error {
@@ -299,19 +320,38 @@ func runInner(ctx context.Context, root, tmpdir, main string, r Report, allowNet
 		// parallelism.
 		// Discover all the main files via the SCM. This enables us to not walk
 		// ignored files.
-		files, err := scm.allFiles(ctx, false)
-		if err != nil {
-			return err
-		}
-		for i, f := range files {
-			n := f.rootedpath()
-			if filepath.Base(n) == main {
-				subdir := strings.ReplaceAll(filepath.Dir(n), "\\", "/")
-				shacStates = append(shacStates, newState(scm, subdir, i))
+		var subdirs []string
+		// If the scm provides a method to return the directories containing
+		// shac.star files, use that instead of calling `allFiles`, which may
+		// not return all shac.star files that should be considered, e.g.
+		// because files were specified on the command line.
+		//
+		// This is also an optimization to avoid doing a `git ls-files` just to
+		// discover shac.star files when files to analyze are specified on the
+		// command line, since `git ls-files` is slow on large repositories.
+		if v, ok := scm.(overridesShacFileDirs); ok {
+			subdirs, err = v.shacFileDirs(main)
+			if err != nil {
+				return err
+			}
+		} else {
+			files, err := scm.allFiles(ctx, false)
+			if err != nil {
+				return err
+			}
+			for _, f := range files {
+				n := f.rootedpath()
+				if filepath.Base(n) == main {
+					subdir := strings.ReplaceAll(filepath.Dir(n), "\\", "/")
+					subdirs = append(subdirs, subdir)
+				}
 			}
 		}
-		if len(shacStates) == 0 {
+		if len(subdirs) == 0 {
 			return fmt.Errorf("no %s files found", main)
+		}
+		for i, s := range subdirs {
+			shacStates = append(shacStates, newState(scm, s, i))
 		}
 	} else {
 		shacStates = []*shacState{newState(scm, "", 0)}

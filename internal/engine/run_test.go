@@ -26,6 +26,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -184,10 +185,8 @@ func TestRun_SpecificFiles(t *testing.T) {
 			name:         "all files",
 			starlarkFile: "ctx-scm-all_files.star",
 			want: "[//ctx-scm-all_files.star:19] \n" +
-				scmStarlarkFiles("") +
 				"python.py: \n" +
 				"rust.rs: \n" +
-				"shac.textproto: \n" +
 				"\n",
 			files:   []string{"python.py", "rust.rs"},
 			workDir: root,
@@ -203,14 +202,18 @@ func TestRun_SpecificFiles(t *testing.T) {
 			if err := os.Chdir(data[i].workDir); err != nil {
 				t.Fatal(err)
 			}
+			defer func() {
+				if err := os.Chdir(originalWd); err != nil {
+					t.Fatal(err)
+				}
+			}()
 			testStarlarkPrint(t, root, data[i].starlarkFile, false, data[i].want, data[i].files...)
-			if err := os.Chdir(originalWd); err != nil {
-				t.Fatal(err)
-			}
 		})
 	}
 
 	t.Run("path outside root rejected", func(t *testing.T) {
+		t.Parallel()
+
 		r := reportPrint{reportNoPrint: reportNoPrint{t: t}}
 		files := []string{filepath.Join(t.TempDir(), "outside-root.txt")}
 		o := Options{Report: &r, Root: root, main: "shac.star", Files: files}
@@ -220,6 +223,62 @@ func TestRun_SpecificFiles(t *testing.T) {
 			t.Fatal("Expected file outside root to be rejected")
 		} else if err.Error() != wantErr {
 			t.Fatalf("Expected error %q, got %q", wantErr, err)
+		}
+	})
+
+	// When recursion is enabled and specific files are listed, all shac.star
+	// files on disk that could apply to those files should still be loaded even
+	// if those shac.star files are not in the listed files.
+	t.Run("recursive shac.star files discovered", func(t *testing.T) {
+		t.Parallel()
+
+		root := t.TempDir()
+		files := []string{
+			filepath.Join(root, "root.py"),
+			filepath.Join(root, "dir1", "dir2", "nested.py"),
+		}
+		writeFile(t, root, "shac.star",
+			`shac.register_check(
+				shac.check(
+					lambda ctx: print("hi from root"),
+					name="root_check",
+				)
+			)`)
+		writeFile(t, root, "dir1/shac.star",
+			`shac.register_check(
+				shac.check(
+					lambda ctx: print("hi from dir1"),
+					name="dir1_check",
+				)
+			)`)
+		writeFile(t, root, "dir1/dir2/shac.star",
+			`shac.register_check(
+				shac.check(
+					lambda ctx: print("hi from dir1/dir2"),
+					name="dir2_check",
+				)
+			)`)
+
+		r := reportPrint{reportNoPrint: reportNoPrint{t: t}}
+		o := Options{Report: &r, Root: root, Files: files, Recurse: true}
+
+		if err := Run(context.Background(), &o); err != nil {
+			t.Fatal(err)
+		}
+
+		// The output comes from multiple checks that run in a nondeterministic
+		// order, so the ordering of the output lines may vary.
+		gotLines := strings.Split(strings.Trim(r.b.String(), "\n"), "\n")
+		slices.Sort(gotLines)
+
+		wantLines := []string{
+			"[//dir1/dir2/shac.star:3] hi from dir1/dir2",
+			"[//dir1/shac.star:3] hi from dir1",
+			"[//shac.star:3] hi from root",
+		}
+
+		if diff := cmp.Diff(wantLines, gotLines); diff != "" {
+			t.Fatalf("mismatch (-want +got):\n%s", diff)
 		}
 	})
 }

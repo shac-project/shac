@@ -16,7 +16,6 @@ package engine
 
 import (
 	"bytes"
-	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -24,8 +23,8 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
-	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -134,48 +133,18 @@ type scmCheckout interface {
 }
 
 type filteredSCM struct {
-	// files lists specific files that should be force-included.
-	files   []string
 	matcher gitignore.Matcher
 	scm     scmCheckout
 }
 
 func (f *filteredSCM) affectedFiles(ctx context.Context, includeDeleted bool) ([]file, error) {
-	if len(f.files) > 0 {
-		var res []file
-		for _, path := range f.files {
-			res = append(res, &fileImpl{path: filepath.ToSlash(path)})
-		}
-		return res, nil
-	}
 	files, err := f.scm.affectedFiles(ctx, includeDeleted)
 	return f.filter(files), err
 }
 
 func (f *filteredSCM) allFiles(ctx context.Context, includeDeleted bool) ([]file, error) {
 	files, err := f.scm.allFiles(ctx, includeDeleted)
-	if err != nil {
-		return nil, err
-	}
-
-	files = f.filter(files)
-
-	// Force-include explicitly listed files, making sure to preserve sortedness
-	// and uniqueness of the return values.
-	if len(f.files) > 0 {
-		for _, path := range f.files {
-			files = append(files, &fileImpl{path: path})
-		}
-		slices.SortFunc(files, func(a, b file) int {
-			return cmp.Compare(a.rootedpath(), b.rootedpath())
-		})
-		// Remove duplicates.
-		slices.CompactFunc(files, func(a, b file) bool {
-			return a.rootedpath() == b.rootedpath()
-		})
-	}
-
-	return files, nil
+	return f.filter(files), err
 }
 
 func (f *filteredSCM) newLines(ctx context.Context, fi file) (starlark.Value, error) {
@@ -198,6 +167,71 @@ func (f *filteredSCM) filter(files []file) []file {
 		}
 	}
 	return files[:len(files)-offset]
+}
+
+// overridesShacFileDirs may be implemented by scm implementations that wish to
+// override the mechanism whereby shac.star files are discovered. Normally, only
+// shac.star files that are included in the files returned by the scm's
+// allFiles() method will be considered, but in some cases we want to have the
+// scm contain a smaller set of files but still consider shac.star files that
+// aren't in the scm.
+type overridesShacFileDirs interface {
+	scmCheckout
+	// shacFileDirs returns the relative paths to directories that contain a
+	// shac starlark file with the given basename.
+	shacFileDirs(basename string) ([]string, error)
+}
+
+// specifiedFilesOnly is an scm that returns only a specified set of files.
+type specifiedFilesOnly struct {
+	files []file
+	root  string
+}
+
+var _ overridesShacFileDirs = (*specifiedFilesOnly)(nil)
+
+func (s *specifiedFilesOnly) affectedFiles(ctx context.Context, includeDeleted bool) ([]file, error) {
+	return s.files, nil
+}
+
+func (s *specifiedFilesOnly) allFiles(ctx context.Context, includeDeleted bool) ([]file, error) {
+	return s.files, nil
+}
+
+func (s *specifiedFilesOnly) newLines(ctx context.Context, f file) (starlark.Value, error) {
+	// TODO(olivernewman): Use the actual scm to get the real affected lines if
+	// the file is tracked.
+	return newLinesWhole(s.root, f.rootedpath())
+}
+
+// shacFileDirs returns all directories containing shac.star files that apply to
+// any of the listed files; i.e. every ancestor directory of one of the listed
+// files that contains a shac.star file.
+func (s *specifiedFilesOnly) shacFileDirs(basename string) ([]string, error) {
+	dirs := map[string]struct{}{}
+	for _, f := range s.files {
+		for cur := path.Dir(f.rootedpath()); ; cur = path.Dir(cur) {
+			dirs[cur] = struct{}{}
+			if cur == "." {
+				break
+			}
+		}
+	}
+	var res []string
+	for dir := range dirs {
+		// TODO(olivernewman): Check whether the shac.star file exists according
+		// to the scm, rather than just checking whether it exists on disk, but
+		// only if it's possible to do so without doing a full listing of all
+		// files in the scm.
+		_, err := os.Stat(filepath.Join(s.root, filepath.FromSlash(dir), basename))
+		if errors.Is(err, os.ErrNotExist) {
+			continue
+		} else if err != nil {
+			return nil, err
+		}
+		res = append(res, dir)
+	}
+	return res, nil
 }
 
 // subdirSCM is a scmCheckout that only reports files from a subdirectory.
