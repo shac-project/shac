@@ -245,7 +245,7 @@ func Run(ctx context.Context, o *Options) error {
 
 	tmpdir, err := os.MkdirTemp("", "shac")
 	if err != nil {
-		return nil
+		return err
 	}
 	pkgMgr := PackageManager{Root: tmpdir}
 	packages, err := pkgMgr.RetrievePackages(ctx, root, &doc)
