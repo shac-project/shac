@@ -27,6 +27,7 @@ import (
 	"strings"
 	"sync"
 
+	"golang.org/x/mod/module"
 	"golang.org/x/mod/sumdb/dirhash"
 	"golang.org/x/sync/errgroup"
 )
@@ -72,79 +73,109 @@ func FSToDigest(f fs.FS, prefix string) (string, error) {
 
 // PackageManager manages dependencies, both fetching and verifying the hashes.
 type PackageManager struct {
+	// Root is the location where dependencies are fetched.
+	//
+	// It is valid for this path to be a scratch space.
 	Root string
-
-	mu    sync.Mutex
-	index int
 }
 
 // RetrievePackages retrieve all the packages in parallel, up to 8 threads.
 func (p *PackageManager) RetrievePackages(ctx context.Context, root string, doc *Document) (map[string]fs.FS, error) {
+	if !filepath.IsAbs(p.Root) {
+		return nil, fmt.Errorf("path %s is not absolute", p.Root)
+	}
+	if err := isDir(p.Root); err != nil {
+		return nil, err
+	}
+	if !filepath.IsAbs(root) {
+		return nil, fmt.Errorf("path %s is not absolute", root)
+	}
+	if err := isDir(root); err != nil {
+		return nil, err
+	}
 	mu := sync.Mutex{}
 	packages := map[string]fs.FS{"__main__": os.DirFS(root)}
-	eg, ctx := errgroup.WithContext(ctx)
-	eg.SetLimit(8)
+	var depslists [][]*Dependency
 	if doc.Requirements != nil {
-		for _, deps := range [...][]*Dependency{doc.Requirements.Direct, doc.Requirements.Indirect} {
-			for _, d := range deps {
-				d := d
-				eg.Go(func() error {
-					f, err := p.pkg(ctx, d.Url, d.Version, doc.Sum.Digest(d.Url, d.Version))
-					if err != nil {
-						return fmt.Errorf("%s couldn't be fetched: %w", d.Url, err)
-					}
-					mu.Lock()
-					packages[d.Url] = f
-					if d.Alias != "" {
-						packages[d.Alias] = f
-					}
-					mu.Unlock()
-					return nil
-				})
-			}
+		depslists = [][]*Dependency{doc.Requirements.Direct, doc.Requirements.Indirect}
+	}
+
+	eg, ctx := errgroup.WithContext(ctx)
+	eg.SetLimit(pkgConcurrency)
+	for _, deps := range depslists {
+		for _, d := range deps {
+			d := d
+			eg.Go(func() error {
+				f, err := p.ensureGitPkg(ctx, d.Url, d.Version, doc.Sum.Digest(d.Url, d.Version))
+				if err != nil {
+					return fmt.Errorf("%s couldn't be fetched: %w", d.Url, err)
+				}
+				mu.Lock()
+				packages[d.Url] = f
+				if d.Alias != "" {
+					packages[d.Alias] = f
+				}
+				mu.Unlock()
+				return nil
+			})
 		}
 	}
 	err := eg.Wait()
 	return packages, err
 }
 
-// pkg returns a fs.FS for the dependency.
-func (p *PackageManager) pkg(ctx context.Context, urlOrig, version string, digest string) (fs.FS, error) {
-	p.mu.Lock()
-	i := p.index
-	p.index++
-	p.mu.Unlock()
-
-	url, err := cleanURL(urlOrig)
+// ensureGitPkg returns a fs.FS for the dependency, assuming a git remote.
+//
+// It is invalid to retrieve the same dependency at multiple versions during a
+// single session.
+func (p *PackageManager) ensureGitPkg(ctx context.Context, url, version string, digest string) (fs.FS, error) {
+	fullURL, err := cleanURL(url)
 	if err != nil {
 		return nil, err
 	}
-	subdir := fmt.Sprintf("dep%d", i)
-	if err := gitCommand(ctx, p.Root, "clone", url, subdir); err != nil {
-		return nil, err
-	}
-	d := filepath.Join(p.Root, subdir)
+
+	depdir := filepath.Join(p.Root, url)
 	if ok, _ := regexp.MatchString("^refs/changes/\\d{1,2}/\\d{1,11}/\\d{1,3}$", version); ok {
 		// Explicitly enable support using a pending Gerrit CL.
-		if err := gitCommand(ctx, d, "fetch", url, version); err != nil {
+		if err = gitCommand(ctx, depdir, "fetch", fullURL, version); err != nil {
 			return nil, err
 		}
 		version = "FETCH_HEAD"
 	} else if ok, _ := regexp.MatchString("^pull/\\d+/head$", version); ok {
 		// Explicitly enable support using a pending GitHub PR.
-		if err := gitCommand(ctx, d, "fetch", url, version); err != nil {
+		if err = gitCommand(ctx, depdir, "fetch", fullURL, version); err != nil {
 			return nil, err
 		}
 		version = "FETCH_HEAD"
-	}
-	if err := gitCommand(ctx, d, "checkout", version); err != nil {
-		return nil, err
+	} else {
+		// Use a format similar to Go modules cache.
+		v := ""
+		if v, err = module.EscapeVersion(version); err != nil {
+			return nil, err
+		}
+		depdir += "@" + v
 	}
 
+	parentdir := filepath.Dir(depdir)
+	if err = os.MkdirAll(parentdir, 0o777); err != nil {
+		return nil, err
+	}
+	if err = gitCommand(ctx, parentdir, "clone", fullURL, filepath.Base(depdir)); err != nil {
+		return nil, err
+	}
+	if err = gitCommand(ctx, depdir, "checkout", version); err != nil {
+		return nil, err
+	}
+	return p.verifyDir(depdir, url, version, digest)
+}
+
+// verifyDir returns a fs.FS that maps to path `d`, after having confirmed
+// that the content matches the expected digest, if set.
+func (p *PackageManager) verifyDir(d, url, version, digest string) (fs.FS, error) {
 	f := os.DirFS(d)
 	// Verify the hash.
 	if digest != "" {
-		got, err := FSToDigest(f, urlOrig+"@"+version)
+		got, err := FSToDigest(f, url+"@"+version)
 		if err != nil {
 			return nil, fmt.Errorf("hashing failed: %w", err)
 		}
@@ -169,5 +200,21 @@ func gitReal(ctx context.Context, d string, args ...string) error {
 	return nil
 }
 
+// isDir returns an error if the path is not a directory.
+func isDir(d string) error {
+	s, err := os.Stat(d)
+	if errors.Is(err, fs.ErrNotExist) {
+		return fmt.Errorf("path %s is missing", d)
+	}
+	if err != nil {
+		return err
+	}
+	if !s.IsDir() {
+		return fmt.Errorf("path %s is not a directory", d)
+	}
+	return nil
+}
+
 // Overridden in unit testing.
 var gitCommand = gitReal
+var pkgConcurrency = 8

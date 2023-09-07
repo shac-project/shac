@@ -22,9 +22,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"sort"
 	"strings"
-	"sync"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -133,36 +131,31 @@ func TestFSToDigest_Fail(t *testing.T) {
 }
 
 func TestPackageManager(t *testing.T) {
-	t.Parallel()
+	// Do not run in parallel since it's modifying globals.
 	root := t.TempDir()
-	mu := sync.Mutex{}
 	var cmds []string
-	old := gitCommand
+	if pkgConcurrency != 8 {
+		t.Fatal("expected 8")
+	}
+	oldPkgConcurrency := pkgConcurrency
+	oldGitCommand := gitCommand
 	t.Cleanup(func() {
-		gitCommand = old
+		pkgConcurrency = oldPkgConcurrency
+		gitCommand = oldGitCommand
 	})
+	pkgConcurrency = 1
 	gitCommand = func(ctx context.Context, d string, args ...string) error {
 		if !strings.HasPrefix(d, root) {
 			t.Errorf("%s doesn't have prefix %s", d, root)
 		}
-		if d != root {
-			if err := os.Mkdir(d, 0o700); err != nil && errors.Is(err, fs.ErrNotExist) {
+		if len(args) >= 2 && args[0] == "clone" {
+			// Kind of a hack to create the directory on git clone when mocking.
+			if err := os.Mkdir(filepath.Join(d, args[2]), 0o700); err != nil && errors.Is(err, fs.ErrNotExist) {
 				t.Error(err)
 			}
 		}
-		// Simplify expectations, otherwise the output is non-deterministic.
-		for i := range args {
-			if strings.HasPrefix(args[i], "dep") {
-				args[i] = "dep"
-			}
-		}
-		d = d[len(root):]
-		if d != "" {
-			d = d[:len(d)-1]
-		}
-		mu.Lock()
-		cmds = append(cmds, fmt.Sprintf("%s %s", d, strings.Join(args, " ")))
-		mu.Unlock()
+		s := fmt.Sprintf("%s %s", strings.ReplaceAll(d[len(root):], "\\", "/"), strings.Join(args, " "))
+		cmds = append(cmds, s)
 		return nil
 	}
 	p := PackageManager{Root: root}
@@ -221,19 +214,37 @@ func TestPackageManager(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	// There's a race condition in which of the dependency will be assigned dep0.
 	want := []string{
-		" clone https://example.com/bar dep",
-		" clone https://example.com/gerrit dep",
-		" clone https://github.com/shac-project/shac dep",
-		string(os.PathSeparator) + "dep checkout FETCH_HEAD",
-		string(os.PathSeparator) + "dep checkout FETCH_HEAD",
-		string(os.PathSeparator) + "dep checkout version",
-		string(os.PathSeparator) + "dep fetch https://example.com/gerrit refs/changes/45/12345/12",
-		string(os.PathSeparator) + "dep fetch https://github.com/shac-project/shac pull/1/head",
+		"/example.com clone https://example.com/bar bar@version",
+		"/example.com/bar@version checkout version",
+		"/github.com/shac-project/shac fetch https://github.com/shac-project/shac pull/1/head",
+		"/github.com/shac-project clone https://github.com/shac-project/shac shac",
+		"/github.com/shac-project/shac checkout FETCH_HEAD",
+		"/example.com/gerrit fetch https://example.com/gerrit refs/changes/45/12345/12",
+		"/example.com clone https://example.com/gerrit gerrit",
+		"/example.com/gerrit checkout FETCH_HEAD",
 	}
-	sort.Strings(cmds)
 	if diff := cmp.Diff(want, cmds); diff != "" {
 		t.Fatalf("mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestPackageManager_Err(t *testing.T) {
+	doc := Document{}
+	d := t.TempDir()
+	p := PackageManager{Root: "foo"}
+	if _, err := p.RetrievePackages(context.Background(), d, &doc); err == nil {
+		t.Fatal("expected error; path is not absolute")
+	}
+	p = PackageManager{Root: filepath.Join(d, "non_existent")}
+	if _, err := p.RetrievePackages(context.Background(), d, &doc); err == nil {
+		t.Fatal("expected error")
+	}
+	p = PackageManager{Root: d}
+	if _, err := p.RetrievePackages(context.Background(), "foo", &doc); err == nil {
+		t.Fatal("expected error; path is not absolute")
+	}
+	if _, err := p.RetrievePackages(context.Background(), filepath.Join(d, "non_existent"), &doc); err == nil {
+		t.Fatal("expected error")
 	}
 }
