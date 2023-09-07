@@ -17,6 +17,7 @@ package engine
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"testing"
@@ -56,6 +57,50 @@ func TestDoc(t *testing.T) {
 	}
 }
 
+func TestDoc_Error(t *testing.T) {
+	t.Parallel()
+	data := []struct {
+		path string
+		err  string
+	}{
+		{
+			"file",
+			"invalid source file name, expecting .star suffix",
+		},
+		{
+			"@remote//file.star",
+			"todo: implement @module",
+		},
+		{
+			"/non_existent.star",
+			func() string {
+				if runtime.GOOS == "windows" {
+					p, err := filepath.Abs("/non_existent.star")
+					if err != nil {
+						t.Fatal(err)
+					}
+					return "file " + p + " not found"
+				}
+				return "file /non_existent.star not found"
+			}(),
+		},
+	}
+	for i, line := range data {
+		line := line
+		t.Run(strconv.Itoa(i), func(t *testing.T) {
+			t.Parallel()
+			d, err := Doc(line.path)
+			if err == nil {
+				t.Fatalf("expected error, got: %s", d)
+			}
+			got := err.Error()
+			if diff := cmp.Diff(line.err, got); diff != "" {
+				t.Fatalf("mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
 func TestDocTemplate(t *testing.T) {
 	t.Parallel()
 	data := []struct {
@@ -88,6 +133,7 @@ func TestDocTemplate(t *testing.T) {
 		line := line
 		t.Run(strconv.Itoa(i), func(t *testing.T) {
 			t.Parallel()
+			// This test case cannot call load() because "main.star" is not an absolute path.
 			got, err := genDoc(t.TempDir(), "main.star", line.in, false)
 			if err != nil {
 				t.Fatal(err)
@@ -96,6 +142,66 @@ func TestDocTemplate(t *testing.T) {
 				t.Fatalf("mismatch (-want +got):\n%s", diff)
 			}
 		})
+	}
+}
+
+func TestDocTemplate_Testdata_Err(t *testing.T) {
+	t.Parallel()
+	data := []struct {
+		path string
+		err  string
+	}{
+		{
+			"testdata/docgen/err/missing_local/test.star",
+			`template: main:115:13: executing "main" at <Symbol "testdata/docgen/err/missing_local/test.star" "fn">: error calling Symbol: in testdata/docgen/err/missing_local/test.star: in //non_existent.star: file not found`,
+		},
+		{
+			"testdata/docgen/err/missing_pkg/test.star",
+			`template: main:115:13: executing "main" at <Symbol "testdata/docgen/err/missing_pkg/test.star" "fn">: error calling Symbol: in testdata/docgen/err/missing_pkg/test.star: in @remote//non_existent.star: package remote not found`,
+		},
+		{
+			"testdata/docgen/err/textproto_is_dir/test.star",
+			func() string {
+				if runtime.GOOS == "windows" {
+					return "read testdata\\docgen\\err\\textproto_is_dir\\shac.textproto: Incorrect function."
+				}
+				return "read testdata/docgen/err/textproto_is_dir/shac.textproto: is a directory"
+			}(),
+		},
+	}
+	for i, line := range data {
+		line := line
+		t.Run(strconv.Itoa(i), func(t *testing.T) {
+			in, err := os.ReadFile(line.path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			d, err := genDoc(filepath.Dir(line.path), line.path, string(in), false)
+			if err == nil {
+				t.Fatalf("expected error, got: %s", d)
+			}
+			got := err.Error()
+			if diff := cmp.Diff(line.err, got); diff != "" {
+				t.Fatalf("mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestDocTemplateLoad_Load_Local(t *testing.T) {
+	t.Parallel()
+	f := "testdata/docgen/load_local/test.star"
+	in, err := os.ReadFile(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := genDoc(filepath.Dir(f), f, string(in), false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "# testdata/docgen/load_local/test.star\n\n## Table of contents\n\n- [fn](#fn)\n- [sym](#sym)\n\n## fn\n\nDo stuff.\n\n\n## sym\n\n\n\nFields:\n\n- fn\n\n## sym.fn\n\nDo stuff.\n\n"
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Fatalf("mismatch (-want +got):\n%s", diff)
 	}
 }
 

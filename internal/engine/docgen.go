@@ -59,6 +59,9 @@ func Doc(src string) (string, error) {
 		}
 		b, err := os.ReadFile(src)
 		if err != nil {
+			if errors.Is(err, fs.ErrNotExist) {
+				return "", fmt.Errorf("file %s not found", src)
+			}
 			return "", err
 		}
 		content = string(b)
@@ -90,6 +93,7 @@ func genDoc(tmpdir, src, content string, isStdlib bool) (string, error) {
 		}
 	}
 	// Load packages to get the exported symbols.
+	// TODO(maruel): Persist cache.
 	pkgMgr := PackageManager{Root: tmpdir}
 	var packages map[string]fs.FS
 	root := filepath.Dir(src)
@@ -100,12 +104,17 @@ func genDoc(tmpdir, src, content string, isStdlib bool) (string, error) {
 			if err = prototext.Unmarshal(b, &doc); err != nil {
 				return "", err
 			}
-			// TODO(maruel): Only fetch the direct ones!
+			if err = doc.Validate(); err != nil {
+				return "", err
+			}
 			if packages, err = pkgMgr.RetrievePackages(context.Background(), root, &doc); err != nil {
 				return "", err
 			}
 		} else if !errors.Is(err, fs.ErrNotExist) {
 			return "", err
+		} else {
+			// Still allow local access even if no shac.textproto is present.
+			packages = map[string]fs.FS{"__main__": os.DirFS(root)}
 		}
 	}
 	d := m.Doc()
@@ -184,7 +193,14 @@ func getStarlark(packages map[string]fs.FS, m string) (string, error) {
 	} else if strings.HasPrefix(m, "//") {
 		relpath = m[2:]
 	}
-	d, err := packages[pkg].Open(relpath)
+	ref := packages[pkg]
+	if ref == nil {
+		return "", fmt.Errorf("package %s not found", pkg)
+	}
+	d, err := ref.Open(relpath)
+	if errors.Is(err, fs.ErrNotExist) {
+		return "", errors.New("file not found")
+	}
 	if err != nil {
 		return "", err
 	}
