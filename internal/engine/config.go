@@ -19,6 +19,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"path"
 	"regexp"
 	"strings"
 )
@@ -112,6 +113,9 @@ func (doc *Document) Validate() error {
 		// Make sure the path exists. We currently allow paths outside the root,
 		// since it's useful for local testing. This will fail to load them
 		// elsewhere.
+		if path.Clean(doc.VendorPath) != doc.VendorPath {
+			return fmt.Errorf("vendor_path %s is not clean", doc.VendorPath)
+		}
 		return errors.New("vendor_path is not yet supported")
 	}
 	return nil

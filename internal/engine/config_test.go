@@ -271,6 +271,10 @@ func TestDocument_Validate(t *testing.T) {
 			"min_shac_version is invalid",
 		},
 		{
+			"vendor_path: \"foo/../bar\"\n",
+			"vendor_path foo/../bar is not clean",
+		},
+		{
 			"vendor_path: \"foo\"\n",
 			"vendor_path is not yet supported",
 		},
