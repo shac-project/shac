@@ -12,16 +12,21 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# TODO(olivernewman): Build github.com/protocolbuffers/txtpbfmt into shac and
-# enforce formatting of shac.textproto files in all repos that use shac.
-
-min_shac_version: "0.1.0"
+min_shac_version: "0.0.0"
 allow_network: False
-ignore: "/vendor/"
-# Vendored code for test data only.
-ignore: "/internal/engine/testdata/ut/"
-ignore: "/internal/engine/testdata/vendored/"
-# TODO(olivernewman): Make root non-writable once we can use caches and
-# pass-throughs to avoid having checks install tools and do Go builds within the
-# checkout directory.
-writable_root: true
+vendor_path: "vendor"
+requirements {
+  direct {
+    url: "example.com/foo"
+    version: "unspecified"
+  }
+}
+sum {
+  known {
+    url: "example.com/foo"
+    seen {
+      version: "unspecified"
+      digest: "h1:mMeUDgNiVbXSAAycH71G2ZqOgTMRe5ujBGSSymGUlj0="
+    }
+  }
+}

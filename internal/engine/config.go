@@ -116,7 +116,6 @@ func (doc *Document) Validate() error {
 		if path.Clean(doc.VendorPath) != doc.VendorPath {
 			return fmt.Errorf("vendor_path %s is not clean", doc.VendorPath)
 		}
-		return errors.New("vendor_path is not yet supported")
 	}
 	return nil
 }

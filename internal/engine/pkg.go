@@ -100,6 +100,30 @@ func (p *PackageManager) RetrievePackages(ctx context.Context, root string, doc 
 		depslists = [][]*Dependency{doc.Requirements.Direct, doc.Requirements.Indirect}
 	}
 
+	if doc.VendorPath != "" {
+		// Use the vendored versions.
+		vendorRoot := filepath.Join(root, doc.VendorPath)
+		for _, deps := range depslists {
+			// Do it serially for now, decided if parallelism helps performance later.
+			for _, d := range deps {
+				// url is believed to be vetted at this point.
+				dir := filepath.Join(vendorRoot, d.Url)
+				if err := isDir(dir); err != nil {
+					return packages, fmt.Errorf("vendored %w", err)
+				}
+				f, err := p.verifyDir(dir, d.Url, d.Version, doc.Sum.Digest(d.Url, d.Version))
+				if err != nil {
+					return packages, fmt.Errorf("%s couldn't be fetched: %w", d.Url, err)
+				}
+				packages[d.Url] = f
+				if d.Alias != "" {
+					packages[d.Alias] = f
+				}
+			}
+		}
+		return packages, nil
+	}
+
 	eg, ctx := errgroup.WithContext(ctx)
 	eg.SetLimit(pkgConcurrency)
 	for _, deps := range depslists {

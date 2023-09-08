@@ -1944,6 +1944,10 @@ func TestRun_FilesystemSandbox(t *testing.T) {
 	testStarlarkPrint(t, root, "ctx-os-exec-filesystem_sandbox.star", false, want)
 }
 
+func TestRun_Vendored(t *testing.T) {
+	testStarlarkPrint(t, "testdata/vendored", "shac.star", false, "[//shac.star:17] True\n")
+}
+
 // Utilities
 
 // testStarlarkPrint test a starlark file that calls print().

@@ -252,6 +252,10 @@ func TestDocument_Validate(t *testing.T) {
 			"",
 		},
 		{
+			"vendor_path: \"foo\"\n",
+			"",
+		},
+		{
 			"min_shac_version: \"1000\"\n",
 			func() string {
 				return fmt.Sprintf(
@@ -273,10 +277,6 @@ func TestDocument_Validate(t *testing.T) {
 		{
 			"vendor_path: \"foo/../bar\"\n",
 			"vendor_path foo/../bar is not clean",
-		},
-		{
-			"vendor_path: \"foo\"\n",
-			"vendor_path is not yet supported",
 		},
 		{
 			"requirements {\n" +
