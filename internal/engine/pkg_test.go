@@ -131,34 +131,27 @@ func TestFSToDigest_Fail(t *testing.T) {
 }
 
 func TestPackageManager(t *testing.T) {
-	// Do not run in parallel since it's modifying globals.
+	t.Parallel()
 	root := t.TempDir()
 	var cmds []string
-	if pkgConcurrency != 8 {
-		t.Fatal("expected 8")
-	}
-	oldPkgConcurrency := pkgConcurrency
-	oldGitCommand := gitCommand
-	t.Cleanup(func() {
-		pkgConcurrency = oldPkgConcurrency
-		gitCommand = oldGitCommand
-	})
-	pkgConcurrency = 1
-	gitCommand = func(ctx context.Context, d string, args ...string) error {
-		if !strings.HasPrefix(d, root) {
-			t.Errorf("%s doesn't have prefix %s", d, root)
-		}
-		if len(args) >= 2 && args[0] == "clone" {
-			// Kind of a hack to create the directory on git clone when mocking.
-			if err := os.Mkdir(filepath.Join(d, args[2]), 0o700); err != nil && errors.Is(err, fs.ErrNotExist) {
-				t.Error(err)
+	p := PackageManager{
+		root: root,
+		gitCommand: func(ctx context.Context, d string, args ...string) error {
+			if !strings.HasPrefix(d, root) {
+				t.Errorf("%s doesn't have prefix %s", d, root)
 			}
-		}
-		s := fmt.Sprintf("%s %s", strings.ReplaceAll(d[len(root):], "\\", "/"), strings.Join(args, " "))
-		cmds = append(cmds, s)
-		return nil
+			if len(args) >= 2 && args[0] == "clone" {
+				// Kind of a hack to create the directory on git clone when mocking.
+				if err := os.Mkdir(filepath.Join(d, args[2]), 0o700); err != nil && errors.Is(err, fs.ErrNotExist) {
+					t.Error(err)
+				}
+			}
+			s := fmt.Sprintf("%s %s", strings.ReplaceAll(d[len(root):], "\\", "/"), strings.Join(args, " "))
+			cmds = append(cmds, s)
+			return nil
+		},
+		pkgConcurrency: 1,
 	}
-	p := PackageManager{Root: root}
 	doc := Document{
 		Requirements: &Requirements{
 			Direct: []*Dependency{
@@ -232,15 +225,15 @@ func TestPackageManager(t *testing.T) {
 func TestPackageManager_Err(t *testing.T) {
 	doc := Document{}
 	d := t.TempDir()
-	p := PackageManager{Root: "foo"}
+	p := NewPackageManager("foo")
 	if _, err := p.RetrievePackages(context.Background(), d, &doc); err == nil {
 		t.Fatal("expected error; path is not absolute")
 	}
-	p = PackageManager{Root: filepath.Join(d, "non_existent")}
+	p = NewPackageManager(filepath.Join(d, "non_existent"))
 	if _, err := p.RetrievePackages(context.Background(), d, &doc); err == nil {
 		t.Fatal("expected error")
 	}
-	p = PackageManager{Root: d}
+	p = NewPackageManager(d)
 	if _, err := p.RetrievePackages(context.Background(), "foo", &doc); err == nil {
 		t.Fatal("expected error; path is not absolute")
 	}

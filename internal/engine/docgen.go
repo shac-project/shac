@@ -93,8 +93,7 @@ func genDoc(tmpdir, src, content string, isStdlib bool) (string, error) {
 		}
 	}
 	// Load packages to get the exported symbols.
-	// TODO(maruel): Persist cache.
-	pkgMgr := PackageManager{Root: tmpdir}
+	pkgMgr := NewPackageManager(tmpdir)
 	var packages map[string]fs.FS
 	root := filepath.Dir(src)
 	if !isStdlib {

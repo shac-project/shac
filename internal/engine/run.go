@@ -228,7 +228,7 @@ func Run(ctx context.Context, o *Options) error {
 	if err != nil {
 		return err
 	}
-	pkgMgr := PackageManager{Root: tmpdir}
+	pkgMgr := NewPackageManager(tmpdir)
 	packages, err := pkgMgr.RetrievePackages(ctx, root, &doc)
 	if err != nil {
 		return err

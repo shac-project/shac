@@ -71,20 +71,32 @@ func FSToDigest(f fs.FS, prefix string) (string, error) {
 	})
 }
 
+// NewPackageManager returns an initialized PackageManager.
+func NewPackageManager(tmp string) *PackageManager {
+	return &PackageManager{
+		root: tmp,
+		// Overridden in unit testing.
+		gitCommand:     gitReal,
+		pkgConcurrency: 8,
+	}
+}
+
 // PackageManager manages dependencies, both fetching and verifying the hashes.
 type PackageManager struct {
-	// Root is the location where dependencies are fetched.
+	// root is the location where dependencies are fetched.
 	//
 	// It is valid for this path to be a scratch space.
-	Root string
+	root           string
+	gitCommand     func(ctx context.Context, d string, args ...string) error
+	pkgConcurrency int
 }
 
 // RetrievePackages retrieve all the packages in parallel, up to 8 threads.
 func (p *PackageManager) RetrievePackages(ctx context.Context, root string, doc *Document) (map[string]fs.FS, error) {
-	if !filepath.IsAbs(p.Root) {
-		return nil, fmt.Errorf("path %s is not absolute", p.Root)
+	if !filepath.IsAbs(p.root) {
+		return nil, fmt.Errorf("path %s is not absolute", p.root)
 	}
-	if err := isDir(p.Root); err != nil {
+	if err := isDir(p.root); err != nil {
 		return nil, err
 	}
 	if !filepath.IsAbs(root) {
@@ -125,7 +137,7 @@ func (p *PackageManager) RetrievePackages(ctx context.Context, root string, doc 
 	}
 
 	eg, ctx := errgroup.WithContext(ctx)
-	eg.SetLimit(pkgConcurrency)
+	eg.SetLimit(p.pkgConcurrency)
 	for _, deps := range depslists {
 		for _, d := range deps {
 			d := d
@@ -158,16 +170,16 @@ func (p *PackageManager) ensureGitPkg(ctx context.Context, url, version string, 
 		return nil, err
 	}
 
-	depdir := filepath.Join(p.Root, url)
+	depdir := filepath.Join(p.root, url)
 	if ok, _ := regexp.MatchString("^refs/changes/\\d{1,2}/\\d{1,11}/\\d{1,3}$", version); ok {
 		// Explicitly enable support using a pending Gerrit CL.
-		if err = gitCommand(ctx, depdir, "fetch", fullURL, version); err != nil {
+		if err = p.gitCommand(ctx, depdir, "fetch", fullURL, version); err != nil {
 			return nil, err
 		}
 		version = "FETCH_HEAD"
 	} else if ok, _ := regexp.MatchString("^pull/\\d+/head$", version); ok {
 		// Explicitly enable support using a pending GitHub PR.
-		if err = gitCommand(ctx, depdir, "fetch", fullURL, version); err != nil {
+		if err = p.gitCommand(ctx, depdir, "fetch", fullURL, version); err != nil {
 			return nil, err
 		}
 		version = "FETCH_HEAD"
@@ -184,10 +196,10 @@ func (p *PackageManager) ensureGitPkg(ctx context.Context, url, version string, 
 	if err = os.MkdirAll(parentdir, 0o777); err != nil {
 		return nil, err
 	}
-	if err = gitCommand(ctx, parentdir, "clone", fullURL, filepath.Base(depdir)); err != nil {
+	if err = p.gitCommand(ctx, parentdir, "clone", fullURL, filepath.Base(depdir)); err != nil {
 		return nil, err
 	}
-	if err = gitCommand(ctx, depdir, "checkout", version); err != nil {
+	if err = p.gitCommand(ctx, depdir, "checkout", version); err != nil {
 		return nil, err
 	}
 	return p.verifyDir(depdir, url, version, digest)
@@ -238,7 +250,3 @@ func isDir(d string) error {
 	}
 	return nil
 }
-
-// Overridden in unit testing.
-var gitCommand = gitReal
-var pkgConcurrency = 8
