@@ -13,12 +13,12 @@
 # limitations under the License.
 
 def cb(ctx):
-  res = ctx.os.exec([ctx.scm.root + "/sandbox_read.sh"], raise_on_failure = False).wait()
-  print("sandbox_read.sh retcode: %d" % res.retcode)
-  print(res.stderr)
+    res = ctx.os.exec([ctx.scm.root + "/sandbox_read.sh"], raise_on_failure = False).wait()
+    print("sandbox_read.sh retcode: %d" % res.retcode)
+    print(res.stderr)
 
-  res = ctx.os.exec([ctx.scm.root + "/sandbox_write.sh"], raise_on_failure = False).wait()
-  print("sandbox_write.sh retcode: %d" % res.retcode)
-  print(res.stderr)
+    res = ctx.os.exec([ctx.scm.root + "/sandbox_write.sh"], raise_on_failure = False).wait()
+    print("sandbox_write.sh retcode: %d" % res.retcode)
+    print(res.stderr)
 
 shac.register_check(cb)

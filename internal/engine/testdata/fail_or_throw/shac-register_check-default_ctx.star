@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-def cb(ctx=None):
-  pass
+def cb(ctx = None):
+    pass
 
 shac.register_check(cb)

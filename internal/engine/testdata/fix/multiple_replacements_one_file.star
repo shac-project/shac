@@ -13,30 +13,34 @@
 # limitations under the License.
 
 def cb(ctx):
-  ctx.emit.finding(
-      level="error",
-      filepath="file.txt",
-      message="line 1 replacement",
-      line=1,
-      replacements=["<REPL1>\n"])
-  ctx.emit.finding(
-      level="error",
-      filepath="file.txt",
-      message="another line 1 replacement",
-      line=1,
-      replacements=["IGNORED"])
-  ctx.emit.finding(
-      level="error",
-      filepath="file.txt",
-      message="lines 3-4 replacement",
-      line=3,
-      end_line=4,
-      replacements=["<REPL2>\n"])
-  ctx.emit.finding(
-      level="error",
-      filepath="file.txt",
-      message="line 4 replacement",
-      line=4,
-      replacements=["IGNORED"])
+    ctx.emit.finding(
+        level = "error",
+        filepath = "file.txt",
+        message = "line 1 replacement",
+        line = 1,
+        replacements = ["<REPL1>\n"],
+    )
+    ctx.emit.finding(
+        level = "error",
+        filepath = "file.txt",
+        message = "another line 1 replacement",
+        line = 1,
+        replacements = ["IGNORED"],
+    )
+    ctx.emit.finding(
+        level = "error",
+        filepath = "file.txt",
+        message = "lines 3-4 replacement",
+        line = 3,
+        end_line = 4,
+        replacements = ["<REPL2>\n"],
+    )
+    ctx.emit.finding(
+        level = "error",
+        filepath = "file.txt",
+        message = "line 4 replacement",
+        line = 4,
+        replacements = ["IGNORED"],
+    )
 
 shac.register_check(cb)

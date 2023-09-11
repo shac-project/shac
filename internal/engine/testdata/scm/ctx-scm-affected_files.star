@@ -13,9 +13,9 @@
 # limitations under the License.
 
 def cb(ctx):
-  out = "\n"
-  for path, meta in ctx.scm.affected_files().items():
-    out += path + ": " + meta.action + "\n"
-  print(out)
+    out = "\n"
+    for path, meta in ctx.scm.affected_files().items():
+        out += path + ": " + meta.action + "\n"
+    print(out)
 
 shac.register_check(cb)

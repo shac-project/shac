@@ -13,5 +13,5 @@
 # limitations under the License.
 
 def fn():
-  """Do stuff."""
-  pass
+    """Do stuff."""
+    pass

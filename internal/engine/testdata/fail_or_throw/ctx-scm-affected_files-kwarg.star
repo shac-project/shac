@@ -13,6 +13,6 @@
 # limitations under the License.
 
 def cb(ctx):
-  ctx.scm.affected_files(unexpected=True)
+    ctx.scm.affected_files(unexpected = True)
 
 shac.register_check(cb)

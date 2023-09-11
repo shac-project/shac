@@ -13,13 +13,13 @@
 # limitations under the License.
 
 def cb(ctx):
-  res = ctx.os.exec(
-    ["./http_get.sh", "{{.ServerURL}}"],
-    allow_network=("{{.AllowNetwork}}" == "true"),
-    raise_on_failure=False,
-  ).wait()
-  if res.retcode:
-    print("Exit code: %d" % res.retcode)
-  print(res.stdout)
+    res = ctx.os.exec(
+        ["./http_get.sh", "{{.ServerURL}}"],
+        allow_network = ("{{.AllowNetwork}}" == "true"),
+        raise_on_failure = False,
+    ).wait()
+    if res.retcode:
+        print("Exit code: %d" % res.retcode)
+    print(res.stdout)
 
 shac.register_check(cb)

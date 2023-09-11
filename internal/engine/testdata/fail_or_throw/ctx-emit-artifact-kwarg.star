@@ -13,6 +13,6 @@
 # limitations under the License.
 
 def cb(ctx):
-  ctx.emit.artifact(foo="")
+    ctx.emit.artifact(foo = "")
 
 shac.register_check(cb)

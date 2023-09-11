@@ -13,12 +13,13 @@
 # limitations under the License.
 
 def cb(ctx):
-  ctx.emit.finding(
-      level="error",
-      filepath="file.txt",
-      message="Error, but multiple options",
-      line=1,
-      # Multiple replacements do not trigger fixes.
-      replacements=["IGNORED", "OTHER_IGNORED"])
+    ctx.emit.finding(
+        level = "error",
+        filepath = "file.txt",
+        message = "Error, but multiple options",
+        line = 1,
+        # Multiple replacements do not trigger fixes.
+        replacements = ["IGNORED", "OTHER_IGNORED"],
+    )
 
 shac.register_check(cb)

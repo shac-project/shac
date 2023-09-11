@@ -13,10 +13,10 @@
 # limitations under the License.
 
 def cb(ctx):
-  pass
+    pass
 
 def cb2(ctx):
-  pass
+    pass
 
 shac.register_check(cb)
-shac.register_check(shac.check(cb2, name="cb"))
+shac.register_check(shac.check(cb2, name = "cb"))

@@ -13,6 +13,6 @@
 # limitations under the License.
 
 def cb(ctx):
-  print("running")
+    print("running")
 
 shac.register_check(cb)

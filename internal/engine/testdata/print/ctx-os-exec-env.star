@@ -13,14 +13,14 @@
 # limitations under the License.
 
 def cb(ctx):
-  if ctx.platform.os == "windows":
-    cmd = ["cmd.exe", "/c", "env.bat"]
-  else:
-    cmd = ["./env.sh"]
-  res = ctx.os.exec(
-    cmd,
-    env = {"FOO": "foo-value", "BAR": "bar-value"},
-  ).wait()
-  print(res.stdout.strip())
+    if ctx.platform.os == "windows":
+        cmd = ["cmd.exe", "/c", "env.bat"]
+    else:
+        cmd = ["./env.sh"]
+    res = ctx.os.exec(
+        cmd,
+        env = {"FOO": "foo-value", "BAR": "bar-value"},
+    ).wait()
+    print(res.stdout.strip())
 
 shac.register_check(cb)

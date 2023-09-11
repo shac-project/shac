@@ -13,10 +13,10 @@
 # limitations under the License.
 
 def cb(ctx):
-  print("running")
+    print("running")
 
 def reg():
-  for i in range(100):
-    shac.register_check(shac.check(cb, name="cb%d" % i))
+    for i in range(100):
+        shac.register_check(shac.check(cb, name = "cb%d" % i))
 
 reg()

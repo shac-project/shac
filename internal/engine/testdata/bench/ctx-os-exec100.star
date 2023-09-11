@@ -13,18 +13,19 @@
 # limitations under the License.
 
 def cb(ctx):
-  if ctx.platform.os == "windows":
-    cmd = ["cmd.exe", "/c", "stdio.bat"]
-  else:
-    cmd = ["./stdio.sh"]
-  res = ctx.os.exec(cmd).wait()
-  # Emit everything as a single statement. Since each check run in parallel,
-  # each of the print statement can be interleaved by other checks running
-  # concurrently.
-  print("retcode: %d\nstdout: %s\nstderr: %s" % (res.retcode, res.stdout.strip(), res.stderr.strip()))
+    if ctx.platform.os == "windows":
+        cmd = ["cmd.exe", "/c", "stdio.bat"]
+    else:
+        cmd = ["./stdio.sh"]
+    res = ctx.os.exec(cmd).wait()
+
+    # Emit everything as a single statement. Since each check run in parallel,
+    # each of the print statement can be interleaved by other checks running
+    # concurrently.
+    print("retcode: %d\nstdout: %s\nstderr: %s" % (res.retcode, res.stdout.strip(), res.stderr.strip()))
 
 def reg():
-  for i in range(100):
-    shac.register_check(shac.check(cb, name="cb%d" % i))
+    for i in range(100):
+        shac.register_check(shac.check(cb, name = "cb%d" % i))
 
 reg()

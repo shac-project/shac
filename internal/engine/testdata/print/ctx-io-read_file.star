@@ -13,7 +13,7 @@
 # limitations under the License.
 
 def cb(ctx):
-  d = json.decode(str(ctx.io.read_file("content.json")))
-  print(d)
+    d = json.decode(str(ctx.io.read_file("content.json")))
+    print(d)
 
 shac.register_check(cb)

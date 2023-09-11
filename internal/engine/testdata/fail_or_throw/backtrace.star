@@ -13,9 +13,9 @@
 # limitations under the License.
 
 def fn2():
-  fail("inner")
+    fail("inner")
 
 def fn1():
-  fn2()
+    fn2()
 
 fn1()

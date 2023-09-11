@@ -13,11 +13,13 @@
 # limitations under the License.
 
 def cb(ctx):
-  # No match.
-  print(ctx.re.allmatches("something", "else"))
-  # Both matches.
-  print(ctx.re.allmatches("TODO\\([^)]+\\)", "foo TODO(foo) TODO(bar)"))
-  # Two capture groups.
-  print(ctx.re.allmatches("a(.)(.)", "ancient"))
+    # No match.
+    print(ctx.re.allmatches("something", "else"))
+
+    # Both matches.
+    print(ctx.re.allmatches("TODO\\([^)]+\\)", "foo TODO(foo) TODO(bar)"))
+
+    # Two capture groups.
+    print(ctx.re.allmatches("a(.)(.)", "ancient"))
 
 shac.register_check(cb)

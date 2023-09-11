@@ -12,4 +12,4 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-load("//non_existent.star", fn = "fn")
+load("//non_existent.star", "fn")

@@ -13,8 +13,8 @@
 # limitations under the License.
 
 def cb(ctx):
-  print(ctx.io.tempdir()[-4:])
-  print(ctx.io.tempdir()[-4:])
-  print(ctx.io.tempdir()[-4:])
+    print(ctx.io.tempdir()[-4:])
+    print(ctx.io.tempdir()[-4:])
+    print(ctx.io.tempdir()[-4:])
 
 shac.register_check(cb)

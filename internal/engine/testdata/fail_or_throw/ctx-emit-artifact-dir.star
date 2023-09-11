@@ -13,6 +13,6 @@
 # limitations under the License.
 
 def cb(ctx):
-  ctx.emit.artifact(filepath=".")
+    ctx.emit.artifact(filepath = ".")
 
 shac.register_check(cb)

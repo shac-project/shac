@@ -13,17 +13,18 @@
 # limitations under the License.
 
 def cb(ctx):
-  out = ""
-  # Only print the first file, but still load the data for the other files.
-  for i, (path, metadata) in enumerate(ctx.scm.affected_files().items()):
-    new_lines = metadata.new_lines()
-    if not i:
-      # Only print the first line.
-      num, line = new_lines[0]
-      print(path + "\n" + str(num) + ": " + line)
+    out = ""
+
+    # Only print the first file, but still load the data for the other files.
+    for i, (path, metadata) in enumerate(ctx.scm.affected_files().items()):
+        new_lines = metadata.new_lines()
+        if not i:
+            # Only print the first line.
+            num, line = new_lines[0]
+            print(path + "\n" + str(num) + ": " + line)
 
 def reg():
-  for i in range(100):
-    shac.register_check(shac.check(cb, name="cb%d" % i))
+    for i in range(100):
+        shac.register_check(shac.check(cb, name = "cb%d" % i))
 
 reg()

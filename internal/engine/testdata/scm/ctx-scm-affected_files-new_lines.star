@@ -13,23 +13,25 @@
 # limitations under the License.
 
 def cb(ctx):
-  out = ""
-  # Only print the first file.
-  # Note: This is not super efficient as for large delta, the whole list would
-  # be serialized to only then take the first element of the list.
-  affected_files = ctx.scm.affected_files().items()
-  if not affected_files:
-    print("no affected files")
-    return
-  path, meta = affected_files[0]
-  out += path + "\n"
-  # Only print the first line.
-  new_lines = meta.new_lines()
-  if new_lines:
-    num, line = new_lines[0]
-    out += str(num) + ": " + line
-    print(out)
-  else:
-    print("no new lines")
+    out = ""
+
+    # Only print the first file.
+    # Note: This is not super efficient as for large delta, the whole list would
+    # be serialized to only then take the first element of the list.
+    affected_files = ctx.scm.affected_files().items()
+    if not affected_files:
+        print("no affected files")
+        return
+    path, meta = affected_files[0]
+    out += path + "\n"
+
+    # Only print the first line.
+    new_lines = meta.new_lines()
+    if new_lines:
+        num, line = new_lines[0]
+        out += str(num) + ": " + line
+        print(out)
+    else:
+        print("no new lines")
 
 shac.register_check(cb)

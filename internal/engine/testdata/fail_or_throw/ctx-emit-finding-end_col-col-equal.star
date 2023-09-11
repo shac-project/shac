@@ -13,13 +13,14 @@
 # limitations under the License.
 
 def cb(ctx):
-  ctx.emit.finding(
-      level="notice",
-      message="fix it",
-      filepath="foo.txt",
-      line=1,
-      col=2,
-      end_line=1,
-      end_col=2)
+    ctx.emit.finding(
+        level = "notice",
+        message = "fix it",
+        filepath = "foo.txt",
+        line = 1,
+        col = 2,
+        end_line = 1,
+        end_col = 2,
+    )
 
 shac.register_check(cb)

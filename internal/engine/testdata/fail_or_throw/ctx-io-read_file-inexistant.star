@@ -13,6 +13,6 @@
 # limitations under the License.
 
 def cb(ctx):
-  ctx.io.read_file("inexistant")
+    ctx.io.read_file("inexistant")
 
 shac.register_check(cb)

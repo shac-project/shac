@@ -420,7 +420,7 @@ func TestRun_Ignore(t *testing.T) {
 		},
 		{
 			"ctx-scm-affected_files-new_lines.star",
-			"[//ctx-scm-affected_files-new_lines.star:31] file_in_root.txt\n" +
+			"[//ctx-scm-affected_files-new_lines.star:33] file_in_root.txt\n" +
 				"1: foo\n",
 		},
 		{
@@ -478,7 +478,7 @@ func TestRun_SCM_Raw(t *testing.T) {
 	})
 	t.Run("affected-new_lines", func(t *testing.T) {
 		t.Parallel()
-		want := "[//ctx-scm-affected_files-new_lines.star:31] a.txt\n" +
+		want := "[//ctx-scm-affected_files-new_lines.star:33] a.txt\n" +
 			"1: First file\n"
 		testStarlarkPrint(t, root, "ctx-scm-affected_files-new_lines.star", false, want)
 	})
@@ -576,13 +576,13 @@ func TestRun_SCM_Git_NoUpstream_Staged(t *testing.T) {
 		{
 			"ctx-scm-affected_files-new_lines.star",
 			false,
-			"[//ctx-scm-affected_files-new_lines.star:31] ctx-scm-affected_files-include_deleted.star\n" +
+			"[//ctx-scm-affected_files-new_lines.star:33] ctx-scm-affected_files-include_deleted.star\n" +
 				"1: # Copyright 2023 The Shac Authors\n",
 		},
 		{
 			"ctx-scm-affected_files-new_lines.star",
 			true,
-			"[//ctx-scm-affected_files-new_lines.star:31] a.txt\n" +
+			"[//ctx-scm-affected_files-new_lines.star:33] a.txt\n" +
 				"1: First file\n",
 		},
 		{
@@ -859,12 +859,12 @@ func TestRun_SCM_Git_Binary_File(t *testing.T) {
 			false,
 			// Only a binary file is touched, no lines should be considered
 			// affected.
-			"[//ctx-scm-affected_files-new_lines.star:33] no new lines\n",
+			"[//ctx-scm-affected_files-new_lines.star:35] no new lines\n",
 		},
 		{
 			"ctx-scm-affected_files-new_lines.star",
 			true,
-			"[//ctx-scm-affected_files-new_lines.star:33] no new lines\n",
+			"[//ctx-scm-affected_files-new_lines.star:35] no new lines\n",
 		},
 	}
 
@@ -1115,198 +1115,198 @@ func TestTestDataFailOrThrow(t *testing.T) {
 			"backtrace.star",
 			"fail: inner",
 			"  //backtrace.star:21:4: in <toplevel>\n" +
-				"  //backtrace.star:19:6: in fn1\n" +
-				"  //backtrace.star:16:7: in fn2\n",
+				"  //backtrace.star:19:8: in fn1\n" +
+				"  //backtrace.star:16:9: in fn2\n",
 		},
 		{
 			"ctx-emit-artifact-dir.star",
 			"ctx.emit.artifact: for parameter \"filepath\": \".\" is a directory",
-			"  //ctx-emit-artifact-dir.star:16:20: in cb\n",
+			"  //ctx-emit-artifact-dir.star:16:22: in cb\n",
 		},
 		{
 			"ctx-emit-artifact-inexistant.star",
 			"ctx.emit.artifact: for parameter \"filepath\": \"inexistant\" not found",
-			"  //ctx-emit-artifact-inexistant.star:16:20: in cb\n",
+			"  //ctx-emit-artifact-inexistant.star:16:22: in cb\n",
 		},
 		{
 			"ctx-emit-artifact-kwarg.star",
 			"ctx.emit.artifact: unexpected keyword argument \"foo\"",
-			"  //ctx-emit-artifact-kwarg.star:16:20: in cb\n",
+			"  //ctx-emit-artifact-kwarg.star:16:22: in cb\n",
 		},
 		{
 			"ctx-emit-artifact-type.star",
 			"ctx.emit.artifact: for parameter \"content\": got int, want str or bytes",
-			"  //ctx-emit-artifact-type.star:16:20: in cb\n",
+			"  //ctx-emit-artifact-type.star:16:22: in cb\n",
 		},
 		{
 			"ctx-emit-artifact-windows.star",
 			"ctx.emit.artifact: for parameter \"filepath\": \"foo\\\\bar\" use POSIX style path",
-			"  //ctx-emit-artifact-windows.star:16:20: in cb\n",
+			"  //ctx-emit-artifact-windows.star:16:22: in cb\n",
 		},
 		{
 			"ctx-emit-finding-col-line.star",
 			"ctx.emit.finding: for parameter \"col\": \"line\" must be specified",
-			"  //ctx-emit-finding-col-line.star:16:19: in cb\n",
+			"  //ctx-emit-finding-col-line.star:16:21: in cb\n",
 		},
 		{
 			"ctx-emit-finding-col.star",
 			"ctx.emit.finding: for parameter \"col\": got -10, line are 1 based",
-			"  //ctx-emit-finding-col.star:16:19: in cb\n",
+			"  //ctx-emit-finding-col.star:16:21: in cb\n",
 		},
 		{
 			"ctx-emit-finding-end_col-col-equal.star",
 			"ctx.emit.finding: for parameter \"end_col\": must be greater than \"col\"",
-			"  //ctx-emit-finding-end_col-col-equal.star:16:19: in cb\n",
+			"  //ctx-emit-finding-end_col-col-equal.star:16:21: in cb\n",
 		},
 		{
 			"ctx-emit-finding-end_col-col.star",
 			"ctx.emit.finding: for parameter \"end_col\": \"col\" must be specified",
-			"  //ctx-emit-finding-end_col-col.star:16:19: in cb\n",
+			"  //ctx-emit-finding-end_col-col.star:16:21: in cb\n",
 		},
 		{
 			"ctx-emit-finding-end_col.star",
 			"ctx.emit.finding: for parameter \"end_col\": got -10, line are 1 based",
-			"  //ctx-emit-finding-end_col.star:16:19: in cb\n",
+			"  //ctx-emit-finding-end_col.star:16:21: in cb\n",
 		},
 		{
 			"ctx-emit-finding-end_line-line-reverse.star",
 			"ctx.emit.finding: for parameter \"end_line\": must be greater than or equal to \"line\"",
-			"  //ctx-emit-finding-end_line-line-reverse.star:16:19: in cb\n",
+			"  //ctx-emit-finding-end_line-line-reverse.star:16:21: in cb\n",
 		},
 		{
 			"ctx-emit-finding-end_line-line.star",
 			"ctx.emit.finding: for parameter \"end_line\": \"line\" must be specified",
-			"  //ctx-emit-finding-end_line-line.star:16:19: in cb\n",
+			"  //ctx-emit-finding-end_line-line.star:16:21: in cb\n",
 		},
 		{
 			"ctx-emit-finding-end_line.star",
 			"ctx.emit.finding: for parameter \"end_line\": got -10, line are 1 based",
-			"  //ctx-emit-finding-end_line.star:16:19: in cb\n",
+			"  //ctx-emit-finding-end_line.star:16:21: in cb\n",
 		},
 		{
 			"ctx-emit-finding-kwarg.star",
 			"ctx.emit.finding: unexpected keyword argument \"foo\"",
-			"  //ctx-emit-finding-kwarg.star:16:19: in cb\n",
+			"  //ctx-emit-finding-kwarg.star:16:21: in cb\n",
 		},
 		{
 			"ctx-emit-finding-level.star",
 			"ctx.emit.finding: for parameter \"level\": got \"invalid\", want one of \"notice\", \"warning\" or \"error\"",
-			"  //ctx-emit-finding-level.star:16:19: in cb\n",
+			"  //ctx-emit-finding-level.star:16:21: in cb\n",
 		},
 		{
 			"ctx-emit-finding-line-no_file.star",
 			"ctx.emit.finding: for parameter \"line\": \"filepath\" must be specified",
-			"  //ctx-emit-finding-line-no_file.star:16:19: in cb\n",
+			"  //ctx-emit-finding-line-no_file.star:16:21: in cb\n",
 		},
 		{
 			"ctx-emit-finding-line.star",
 			"ctx.emit.finding: for parameter \"line\": got -1, line are 1 based",
-			"  //ctx-emit-finding-line.star:16:19: in cb\n",
+			"  //ctx-emit-finding-line.star:16:21: in cb\n",
 		},
 		{
 			"ctx-emit-finding-message.star",
 			"ctx.emit.finding: for parameter \"message\": must not be empty",
-			"  //ctx-emit-finding-message.star:16:19: in cb\n",
+			"  //ctx-emit-finding-message.star:16:21: in cb\n",
 		},
 		{
 			"ctx-emit-finding-replacements-limit.star",
 			"ctx.emit.finding: for parameter \"replacements\": excessive number (101) of replacements",
-			"  //ctx-emit-finding-replacements-limit.star:17:19: in cb\n",
+			"  //ctx-emit-finding-replacements-limit.star:17:21: in cb\n",
 		},
 		{
 			"ctx-emit-finding-replacements-list.star",
 			"ctx.emit.finding: for parameter \"replacements\": got list, want sequence of str",
-			"  //ctx-emit-finding-replacements-list.star:16:19: in cb\n",
+			"  //ctx-emit-finding-replacements-list.star:16:21: in cb\n",
 		},
 		{
 			"ctx-emit-finding-replacements-no_file.star",
 			"ctx.emit.finding: for parameter \"replacements\": \"filepath\" must be specified",
-			"  //ctx-emit-finding-replacements-no_file.star:16:19: in cb\n",
+			"  //ctx-emit-finding-replacements-no_file.star:16:21: in cb\n",
 		},
 		{
 			"ctx-emit-finding-replacements-str.star",
 			"ctx.emit.finding: for parameter \"replacements\": got string, want starlark.Sequence",
-			"  //ctx-emit-finding-replacements-str.star:16:19: in cb\n",
+			"  //ctx-emit-finding-replacements-str.star:16:21: in cb\n",
 		},
 		{
 			"ctx-emit-finding-replacements-tuple.star",
 			"ctx.emit.finding: for parameter \"replacements\": got tuple, want sequence of str",
-			"  //ctx-emit-finding-replacements-tuple.star:16:19: in cb\n",
+			"  //ctx-emit-finding-replacements-tuple.star:16:21: in cb\n",
 		},
 		{
 			"ctx-immutable.star",
 			"can't assign to .key field of struct",
-			"  //ctx-immutable.star:17:6: in cb\n",
+			"  //ctx-immutable.star:17:8: in cb\n",
 		},
 		{
 			"ctx-io-read_file-dir.star",
 			"ctx.io.read_file: for parameter \"filepath\": \".\" is a directory",
-			"  //ctx-io-read_file-dir.star:16:19: in cb\n",
+			"  //ctx-io-read_file-dir.star:16:21: in cb\n",
 		},
 		{
 			"ctx-io-read_file-escape.star",
 			"ctx.io.read_file: for parameter \"filepath\": \"../checks.go\" cannot escape root",
-			"  //ctx-io-read_file-escape.star:16:19: in cb\n",
+			"  //ctx-io-read_file-escape.star:16:21: in cb\n",
 		},
 		{
 			"ctx-io-read_file-inexistant.star",
 			"ctx.io.read_file: for parameter \"filepath\": \"inexistant\" not found",
-			"  //ctx-io-read_file-inexistant.star:16:19: in cb\n",
+			"  //ctx-io-read_file-inexistant.star:16:21: in cb\n",
 		},
 		{
 			"ctx-io-read_file-missing_arg.star",
 			"ctx.io.read_file: missing argument for filepath",
-			"  //ctx-io-read_file-missing_arg.star:16:19: in cb\n",
+			"  //ctx-io-read_file-missing_arg.star:16:21: in cb\n",
 		},
 		{
 			"ctx-io-read_file-size_big.star",
 			"ctx.io.read_file: for parameter \"size\": 36893488147419103232 is an invalid size",
-			"  //ctx-io-read_file-size_big.star:16:19: in cb\n",
+			"  //ctx-io-read_file-size_big.star:16:21: in cb\n",
 		},
 		{
 			"ctx-io-read_file-size_type.star",
 			"ctx.io.read_file: for parameter \"size\": got string, want int",
-			"  //ctx-io-read_file-size_type.star:16:19: in cb\n",
+			"  //ctx-io-read_file-size_type.star:16:21: in cb\n",
 		},
 		{
 			"ctx-io-read_file-unclean.star",
 			"ctx.io.read_file: for parameter \"filepath\": \"path/../file.txt\" pass cleaned path",
-			"  //ctx-io-read_file-unclean.star:16:19: in cb\n",
+			"  //ctx-io-read_file-unclean.star:16:21: in cb\n",
 		},
 		{
 			"ctx-io-read_file-windows.star",
 			"ctx.io.read_file: for parameter \"filepath\": \"test\\\\data.txt\" use POSIX style path",
-			"  //ctx-io-read_file-windows.star:16:19: in cb\n",
+			"  //ctx-io-read_file-windows.star:16:21: in cb\n",
 		},
 		{
 			"ctx-os-exec-10Mib-exceed.star",
 			"wait: process returned too much stderr",
-			"  //ctx-os-exec-10Mib-exceed.star:16:91: in cb\n",
+			"  //ctx-os-exec-10Mib-exceed.star:16:93: in cb\n",
 		},
 		{
 			"ctx-os-exec-bad_arg.star",
 			"ctx.os.exec: unexpected keyword argument \"unknown\"",
-			"  //ctx-os-exec-bad_arg.star:16:14: in cb\n",
+			"  //ctx-os-exec-bad_arg.star:16:16: in cb\n",
 		},
 		{
 			"ctx-os-exec-bad_env_key.star",
 			"ctx.os.exec: \"env\" key is not a string: 1",
-			"  //ctx-os-exec-bad_env_key.star:16:14: in cb\n",
+			"  //ctx-os-exec-bad_env_key.star:16:16: in cb\n",
 		},
 		{
 			"ctx-os-exec-bad_env_value.star",
 			"ctx.os.exec: \"env\" value is not a string: 1",
-			"  //ctx-os-exec-bad_env_value.star:16:14: in cb\n",
+			"  //ctx-os-exec-bad_env_value.star:16:16: in cb\n",
 		},
 		{
 			"ctx-os-exec-bad_stdin_type.star",
 			"ctx.os.exec: for parameter \"stdin\": got dict, want str or bytes",
-			"  //ctx-os-exec-bad_stdin_type.star:16:14: in cb\n",
+			"  //ctx-os-exec-bad_stdin_type.star:16:16: in cb\n",
 		},
 		{
 			"ctx-os-exec-bad_type_in_args.star",
 			"ctx.os.exec: for parameter \"cmd\": got list, want sequence of str",
-			"  //ctx-os-exec-bad_type_in_args.star:16:14: in cb\n",
+			"  //ctx-os-exec-bad_type_in_args.star:16:16: in cb\n",
 		},
 		{
 			"ctx-os-exec-command_not_in_path.star",
@@ -1316,12 +1316,12 @@ func TestTestDataFailOrThrow(t *testing.T) {
 				}
 				return "ctx.os.exec: exec: \"this-command-does-not-exist\": executable file not found in $PATH"
 			}(),
-			"  //ctx-os-exec-command_not_in_path.star:16:14: in cb\n",
+			"  //ctx-os-exec-command_not_in_path.star:16:16: in cb\n",
 		},
 		{
 			"ctx-os-exec-double_wait.star",
 			"wait: wait was already called",
-			"  //ctx-os-exec-double_wait.star:18:12: in cb\n",
+			"  //ctx-os-exec-double_wait.star:18:14: in cb\n",
 		},
 		{
 			"ctx-os-exec-false.star",
@@ -1331,12 +1331,12 @@ func TestTestDataFailOrThrow(t *testing.T) {
 				}
 				return "wait: command failed with exit code 1: [false]"
 			}(),
-			"  //ctx-os-exec-false.star:16:30: in cb\n",
+			"  //ctx-os-exec-false.star:16:32: in cb\n",
 		},
 		{
 			"ctx-os-exec-invalid_cwd.star",
 			"ctx.os.exec: cannot escape root",
-			"  //ctx-os-exec-invalid_cwd.star:16:14: in cb\n",
+			"  //ctx-os-exec-invalid_cwd.star:16:16: in cb\n",
 		},
 		{
 			"ctx-os-exec-mutate_result.star",
@@ -1348,15 +1348,15 @@ func TestTestDataFailOrThrow(t *testing.T) {
 			}(),
 			func() string {
 				if !isBashAvail && runtime.GOOS == "windows" {
-					return "  //ctx-os-exec-mutate_result.star:16:20: in cb\n"
+					return "  //ctx-os-exec-mutate_result.star:16:22: in cb\n"
 				}
-				return "  //ctx-os-exec-mutate_result.star:17:6: in cb\n"
+				return "  //ctx-os-exec-mutate_result.star:17:8: in cb\n"
 			}(),
 		},
 		{
 			"ctx-os-exec-no_cmd.star",
 			"ctx.os.exec: cmdline must not be an empty list",
-			"  //ctx-os-exec-no_cmd.star:16:14: in cb\n",
+			"  //ctx-os-exec-no_cmd.star:16:16: in cb\n",
 		},
 		{
 			"ctx-os-exec-no_wait.star",
@@ -1371,57 +1371,57 @@ func TestTestDataFailOrThrow(t *testing.T) {
 				}
 				return "wait: command failed with exit code 0: [true]"
 			}(),
-			"  //ctx-os-exec-ok_retcodes.star:28:43: in cb\n",
+			"  //ctx-os-exec-ok_retcodes.star:28:45: in cb\n",
 		},
 		{
 			"ctx-os-exec-ok_retcodes_invalid_element.star",
 			"ctx.os.exec: for parameter \"ok_retcodes\": got [0, \"blah\"], wanted sequence of ints",
-			"  //ctx-os-exec-ok_retcodes_invalid_element.star:16:14: in cb\n",
+			"  //ctx-os-exec-ok_retcodes_invalid_element.star:16:16: in cb\n",
 		},
 		{
 			"ctx-os-exec-ok_retcodes_invalid_type.star",
 			"ctx.os.exec: for parameter \"ok_retcodes\": got \"blah\", wanted sequence of ints",
-			"  //ctx-os-exec-ok_retcodes_invalid_type.star:16:14: in cb\n",
+			"  //ctx-os-exec-ok_retcodes_invalid_type.star:16:16: in cb\n",
 		},
 		{
 			"ctx-os-exec-result_unhashable.star",
 			"unhashable type: subprocess",
-			"  //ctx-os-exec-result_unhashable.star:17:14: in cb\n",
+			"  //ctx-os-exec-result_unhashable.star:17:16: in cb\n",
 		},
 		{
 			"ctx-re-allmatches-no_arg.star",
 			"ctx.re.allmatches: missing argument for pattern",
-			"  //ctx-re-allmatches-no_arg.star:16:20: in cb\n",
+			"  //ctx-re-allmatches-no_arg.star:16:22: in cb\n",
 		},
 		{
 			"ctx-re-match-bad_re.star",
 			"ctx.re.match: error parsing regexp: missing closing ): `(`",
-			"  //ctx-re-match-bad_re.star:16:15: in cb\n",
+			"  //ctx-re-match-bad_re.star:16:17: in cb\n",
 		},
 		{
 			"ctx-re-match-no_arg.star",
 			"ctx.re.match: missing argument for pattern",
-			"  //ctx-re-match-no_arg.star:16:15: in cb\n",
+			"  //ctx-re-match-no_arg.star:16:17: in cb\n",
 		},
 		{
 			"ctx-scm-affected_files-arg.star",
 			"ctx.scm.affected_files: for parameter include_deleted: got string, want bool",
-			"  //ctx-scm-affected_files-arg.star:16:25: in cb\n",
+			"  //ctx-scm-affected_files-arg.star:16:27: in cb\n",
 		},
 		{
 			"ctx-scm-affected_files-kwarg.star",
 			"ctx.scm.affected_files: unexpected keyword argument \"unexpected\"",
-			"  //ctx-scm-affected_files-kwarg.star:16:25: in cb\n",
+			"  //ctx-scm-affected_files-kwarg.star:16:27: in cb\n",
 		},
 		{
 			"ctx-scm-all_files-arg.star",
 			"ctx.scm.all_files: for parameter include_deleted: got string, want bool",
-			"  //ctx-scm-all_files-arg.star:16:20: in cb\n",
+			"  //ctx-scm-all_files-arg.star:16:22: in cb\n",
 		},
 		{
 			"ctx-scm-all_files-kwarg.star",
 			"ctx.scm.all_files: unexpected keyword argument \"unexpected\"",
-			"  //ctx-scm-all_files-kwarg.star:16:20: in cb\n",
+			"  //ctx-scm-all_files-kwarg.star:16:22: in cb\n",
 		},
 		{
 			"empty.star",
@@ -1441,7 +1441,7 @@ func TestTestDataFailOrThrow(t *testing.T) {
 		{
 			"fail-check.star",
 			"fail: an  unexpected  failure  None\nfail: unexpected keyword argument \"unknown\"",
-			"  //fail-check.star:16:7: in cb\n",
+			"  //fail-check.star:16:9: in cb\n",
 		},
 		{
 			"fail.star",
@@ -1454,7 +1454,7 @@ func TestTestDataFailOrThrow(t *testing.T) {
 			// It's a bit sad that the function name is not printed out. This is
 			// because this error happens at syntax parsing phase, not at execution
 			// phase.
-			"  //load-from_check.star:16:3: in <toplevel>\n",
+			"  //load-from_check.star:16:5: in <toplevel>\n",
 		},
 		{
 			"load-inexistant.star",
@@ -1529,7 +1529,7 @@ func TestTestDataFailOrThrow(t *testing.T) {
 		{
 			"shac-register_check-recursive.star",
 			"shac.register_check: can't register checks after done loading",
-			"  //shac-register_check-recursive.star:19:22: in cb1\n",
+			"  //shac-register_check-recursive.star:19:24: in cb1\n",
 		},
 		{
 			"shac-register_check-return.star",
@@ -1890,15 +1890,15 @@ func TestTestDataPrint(t *testing.T) {
 		{
 			"ctx-re-allmatches.star",
 			"[//ctx-re-allmatches.star:17] ()\n" +
-				"[//ctx-re-allmatches.star:19] (match(groups = (\"TODO(foo)\",), offset = 4), match(groups = (\"TODO(bar)\",), offset = 14))\n" +
-				"[//ctx-re-allmatches.star:21] (match(groups = (\"anc\", \"n\", \"c\"), offset = 0),)\n",
+				"[//ctx-re-allmatches.star:20] (match(groups = (\"TODO(foo)\",), offset = 4), match(groups = (\"TODO(bar)\",), offset = 14))\n" +
+				"[//ctx-re-allmatches.star:23] (match(groups = (\"anc\", \"n\", \"c\"), offset = 0),)\n",
 		},
 		{
 			"ctx-re-match.star",
 			"[//ctx-re-match.star:17] None\n" +
-				"[//ctx-re-match.star:19] match(groups = (\"TODO(foo)\",), offset = 4)\n" +
-				"[//ctx-re-match.star:21] match(groups = (\"anc\", \"n\", \"c\"), offset = 0)\n" +
-				"[//ctx-re-match.star:23] match(groups = (\"a\", None), offset = 0)\n",
+				"[//ctx-re-match.star:20] match(groups = (\"TODO(foo)\",), offset = 4)\n" +
+				"[//ctx-re-match.star:23] match(groups = (\"anc\", \"n\", \"c\"), offset = 0)\n" +
+				"[//ctx-re-match.star:26] match(groups = (\"a\", None), offset = 0)\n",
 		},
 		{
 			"dir-ctx.star",

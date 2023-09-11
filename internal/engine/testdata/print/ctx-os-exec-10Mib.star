@@ -13,17 +13,17 @@
 # limitations under the License.
 
 def cb(ctx):
-  res = ctx.os.exec(["go", "run", "ctx-os-exec-10Mib.go"], env = _go_env(ctx)).wait()
-  print(res.retcode)
+    res = ctx.os.exec(["go", "run", "ctx-os-exec-10Mib.go"], env = _go_env(ctx)).wait()
+    print(res.retcode)
 
 def _go_env(ctx):
-  return {
-    "CGO_ENABLED": "0",
-    "GOCACHE": ctx.io.tempdir() + "/gocache",
-    "GOPACKAGESDRIVER": "off",
-    # Explicitly set GOROOT to prevent warnings about GOROOT and GOPATH being
-    # equal when they're both empty.
-    "GOROOT": ctx.os.exec(["go", "env", "GOROOT"]).wait().stdout.strip(),
-  }
+    return {
+        "CGO_ENABLED": "0",
+        "GOCACHE": ctx.io.tempdir() + "/gocache",
+        "GOPACKAGESDRIVER": "off",
+        # Explicitly set GOROOT to prevent warnings about GOROOT and GOPATH being
+        # equal when they're both empty.
+        "GOROOT": ctx.os.exec(["go", "env", "GOROOT"]).wait().stdout.strip(),
+    }
 
 shac.register_check(cb)

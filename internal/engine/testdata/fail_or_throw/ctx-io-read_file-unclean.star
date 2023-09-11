@@ -13,6 +13,6 @@
 # limitations under the License.
 
 def cb(ctx):
-  ctx.io.read_file("path/../file.txt")
+    ctx.io.read_file("path/../file.txt")
 
 shac.register_check(cb)

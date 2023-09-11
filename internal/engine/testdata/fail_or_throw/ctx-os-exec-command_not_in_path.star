@@ -13,6 +13,6 @@
 # limitations under the License.
 
 def cb(ctx):
-  ctx.os.exec(["this-command-does-not-exist"]).wait()
+    ctx.os.exec(["this-command-does-not-exist"]).wait()
 
 shac.register_check(cb)

@@ -13,13 +13,14 @@
 # limitations under the License.
 
 def cb(ctx):
-  ctx.emit.finding(
-      level="error",
-      filepath="file.txt",
-      message="Replace part of one line",
-      line=3,
-      col=4,
-      end_col=7,
-      replacements=["UPDATED"])
+    ctx.emit.finding(
+        level = "error",
+        filepath = "file.txt",
+        message = "Replace part of one line",
+        line = 3,
+        col = 4,
+        end_col = 7,
+        replacements = ["UPDATED"],
+    )
 
 shac.register_check(cb)

@@ -13,27 +13,27 @@
 # limitations under the License.
 
 def cb(ctx):
-  cmd = ["go", "run", "ctx-os-exec-stdin.go"]
-  test_inputs = [
-    None,
-    "hello\nfrom\nstdin\nstring",
-    bytes("hello\nfrom\nstdin\nbytes"),
-  ]
+    cmd = ["go", "run", "ctx-os-exec-stdin.go"]
+    test_inputs = [
+        None,
+        "hello\nfrom\nstdin\nstring",
+        bytes("hello\nfrom\nstdin\nbytes"),
+    ]
 
-  procs = []
-  for stdin in test_inputs:
-    procs.append(ctx.os.exec(cmd, env = _go_env(ctx), stdin = stdin))
+    procs = []
+    for stdin in test_inputs:
+        procs.append(ctx.os.exec(cmd, env = _go_env(ctx), stdin = stdin))
 
-  for i, proc in enumerate(procs):
-    res = proc.wait()
-    stdin = test_inputs[i]
-    print("stdout given %s for stdin:\n%s" % (type(stdin), res.stdout))
+    for i, proc in enumerate(procs):
+        res = proc.wait()
+        stdin = test_inputs[i]
+        print("stdout given %s for stdin:\n%s" % (type(stdin), res.stdout))
 
 def _go_env(ctx):
-  return {
-    "CGO_ENABLED": "0",
-    "GOCACHE": ctx.io.tempdir() + "/gocache",
-    "GOPACKAGESDRIVER": "off",
-  }
+    return {
+        "CGO_ENABLED": "0",
+        "GOCACHE": ctx.io.tempdir() + "/gocache",
+        "GOPACKAGESDRIVER": "off",
+    }
 
 shac.register_check(cb)

@@ -13,6 +13,6 @@
 # limitations under the License.
 
 def cb(ctx):
-  pass
+    pass
 
 shac.register_check(lambda ctx: cb(ctx))

@@ -13,7 +13,7 @@
 # limitations under the License.
 
 def cb(ctx):
-  print("OS: %s" % ctx.platform.os)
-  print("Arch: %s" % ctx.platform.arch)
+    print("OS: %s" % ctx.platform.os)
+    print("Arch: %s" % ctx.platform.arch)
 
 shac.register_check(cb)

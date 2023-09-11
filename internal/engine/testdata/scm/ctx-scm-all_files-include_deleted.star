@@ -13,16 +13,16 @@
 # limitations under the License.
 
 def cb(ctx):
-  out = "\nWith deleted:\n"
-  for path, meta in ctx.scm.all_files(include_deleted = True).items():
-    out += path + ": " + meta.action + "\n"
+    out = "\nWith deleted:\n"
+    for path, meta in ctx.scm.all_files(include_deleted = True).items():
+        out += path + ": " + meta.action + "\n"
 
-  # Now try with `include_deleted = False` to make sure the output is different
-  # even when the result is cached internally.
-  out += "\nWithout deleted:\n"
-  for path, meta in ctx.scm.all_files(include_deleted = False).items():
-    out += path + ": " + meta.action + "\n"
+    # Now try with `include_deleted = False` to make sure the output is different
+    # even when the result is cached internally.
+    out += "\nWithout deleted:\n"
+    for path, meta in ctx.scm.all_files(include_deleted = False).items():
+        out += path + ": " + meta.action + "\n"
 
-  print(out)
+    print(out)
 
 shac.register_check(cb)

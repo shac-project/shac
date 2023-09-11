@@ -13,7 +13,7 @@
 # limitations under the License.
 
 def cb(ctx):
-  # The ctx variable is immutable.
-  ctx.key = "value"
+    # The ctx variable is immutable.
+    ctx.key = "value"
 
 shac.register_check(cb)

@@ -13,13 +13,13 @@
 # limitations under the License.
 
 def cb(ctx):
-  if ctx.platform.os == "windows":
-    cmd = ["cmd.exe", "/c", "stdio.bat"]
-  else:
-    cmd = ["./stdio.sh"]
-  res = ctx.os.exec(cmd).wait()
-  print("retcode: %d" % res.retcode)
-  print("stdout: %s" % res.stdout.strip())
-  print("stderr: %s" % res.stderr.strip())
+    if ctx.platform.os == "windows":
+        cmd = ["cmd.exe", "/c", "stdio.bat"]
+    else:
+        cmd = ["./stdio.sh"]
+    res = ctx.os.exec(cmd).wait()
+    print("retcode: %d" % res.retcode)
+    print("stdout: %s" % res.stdout.strip())
+    print("stderr: %s" % res.stderr.strip())
 
 shac.register_check(cb)

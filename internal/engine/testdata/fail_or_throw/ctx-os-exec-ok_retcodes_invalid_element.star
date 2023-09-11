@@ -13,6 +13,6 @@
 # limitations under the License.
 
 def cb(ctx):
-  ctx.os.exec(["false"], ok_retcodes = [0, "blah"]).wait()
+    ctx.os.exec(["false"], ok_retcodes = [0, "blah"]).wait()
 
 shac.register_check(cb)

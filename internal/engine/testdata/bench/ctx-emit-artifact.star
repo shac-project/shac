@@ -13,8 +13,8 @@
 # limitations under the License.
 
 def cb(ctx):
-  ctx.emit.artifact(filepath="file.txt", content="content as str")
-  ctx.emit.artifact(filepath="file.txt", content=bytes("content as bytes"))
-  ctx.emit.artifact(filepath="file.txt")
+    ctx.emit.artifact(filepath = "file.txt", content = "content as str")
+    ctx.emit.artifact(filepath = "file.txt", content = bytes("content as bytes"))
+    ctx.emit.artifact(filepath = "file.txt")
 
 shac.register_check(cb)

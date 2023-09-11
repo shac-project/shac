@@ -13,6 +13,6 @@
 # limitations under the License.
 
 def cb(ctx):
-  print(str(ctx.io.read_file("content.json", size=10)))
+    print(str(ctx.io.read_file("content.json", size = 10)))
 
 shac.register_check(cb)

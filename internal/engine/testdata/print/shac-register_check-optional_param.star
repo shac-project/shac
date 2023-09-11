@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-def cb(ctx, optional_param="optional-param-value"):
-  print("optional_param=%r" % optional_param)
+def cb(ctx, optional_param = "optional-param-value"):
+    print("optional_param=%r" % optional_param)
 
 shac.register_check(cb)

@@ -13,12 +13,13 @@
 # limitations under the License.
 
 def cb(ctx):
-  ctx.emit.finding(
-      level="error",
-      filepath="file.txt",
-      message="Delete these lines",
-      line=2,
-      end_line=3,
-      replacements=[""])
+    ctx.emit.finding(
+        level = "error",
+        filepath = "file.txt",
+        message = "Delete these lines",
+        line = 2,
+        end_line = 3,
+        replacements = [""],
+    )
 
 shac.register_check(cb)

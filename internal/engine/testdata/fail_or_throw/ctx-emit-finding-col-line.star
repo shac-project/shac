@@ -13,6 +13,6 @@
 # limitations under the License.
 
 def cb(ctx):
-  ctx.emit.finding(level="notice", message="fix it", col=1)
+    ctx.emit.finding(level = "notice", message = "fix it", col = 1)
 
 shac.register_check(cb)

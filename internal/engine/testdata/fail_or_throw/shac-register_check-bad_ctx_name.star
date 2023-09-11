@@ -13,6 +13,6 @@
 # limitations under the License.
 
 def cb(not_ctx):
-  pass
+    pass
 
 shac.register_check(cb)

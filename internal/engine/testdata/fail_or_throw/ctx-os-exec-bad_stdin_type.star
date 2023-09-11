@@ -13,6 +13,6 @@
 # limitations under the License.
 
 def cb(ctx):
-  ctx.os.exec(["true"], stdin = {"not a": "valid stdin value"}).wait()
+    ctx.os.exec(["true"], stdin = {"not a": "valid stdin value"}).wait()
 
 shac.register_check(cb)

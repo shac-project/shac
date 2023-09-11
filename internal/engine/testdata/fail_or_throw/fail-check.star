@@ -13,6 +13,6 @@
 # limitations under the License.
 
 def cb(ctx):
-  fail("an", "unexpected", "failure", None, sep="  ", unknown="invalid")
+    fail("an", "unexpected", "failure", None, sep = "  ", unknown = "invalid")
 
 shac.register_check(cb)

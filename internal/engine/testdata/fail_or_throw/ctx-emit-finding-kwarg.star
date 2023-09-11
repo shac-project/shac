@@ -13,6 +13,6 @@
 # limitations under the License.
 
 def cb(ctx):
-  ctx.emit.finding(foo="")
+    ctx.emit.finding(foo = "")
 
 shac.register_check(cb)

@@ -13,6 +13,6 @@
 # limitations under the License.
 
 def cb(ctx):
-  print(dir(ctx))
+    print(dir(ctx))
 
 shac.register_check(cb)

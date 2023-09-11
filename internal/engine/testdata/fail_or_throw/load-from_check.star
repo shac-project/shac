@@ -13,6 +13,6 @@
 # limitations under the License.
 
 def cb(ctx):
-  load("./inexistant.star", "symbol")
+    load("./inexistant.star", "symbol")
 
 shac.register_check(cb)

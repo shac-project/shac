@@ -22,41 +22,41 @@ load("//checks/check_doc.star", "check_docs")
 load("//checks/go.star", "gofmt", "gosec", "ineffassign", "no_fork_without_lock", "shadow", "staticcheck")
 load("//checks/licenses.star", "check_license_headers")
 
-
 def _is_todo_valid(ctx, s):
-  """Returns True if the x part of "TODO(x): y" is valid."""
-  # For some project, it could be a bug number or an URL to a bug.
-  return bool(ctx.re.match("^[a-z]+$", s))
+    """Returns True if the x part of "TODO(x): y" is valid."""
 
+    # For some project, it could be a bug number or an URL to a bug.
+    return bool(ctx.re.match("^[a-z]+$", s))
 
 def new_todos(ctx):
-  """Prints the added TODOs.
+    """Prints the added TODOs.
 
-  Args:
-    ctx: A ctx instance.
-  """
-  for path, meta in ctx.scm.affected_files().items():
-    for num, line in meta.new_lines():
-      m = ctx.re.match("TODO\\(([^)]+)\\).*", line)
-      if not m:
-        continue
-      # TODO(maruel): Have ctx.re.match() return the offset since it's
-      # inefficient to calculate back.
-      if _is_todo_valid(ctx, m.groups[1]):
-        level = "notice"
-        message = m.groups[0]
-      else:
-        level = "error"
-        message = "Use a valid username in your TODO, %r is not valid" % m.groups[1]
-      ctx.emit.finding(
-          level=level,
-          message=message,
-          filepath=path,
-          line=num,
-          col=line.index(m.groups[0])+1,
-          end_line=num,
-          end_col=len(line)+1,
-      )
+    Args:
+      ctx: A ctx instance.
+    """
+    for path, meta in ctx.scm.affected_files().items():
+        for num, line in meta.new_lines():
+            m = ctx.re.match("TODO\\(([^)]+)\\).*", line)
+            if not m:
+                continue
+
+            # TODO(maruel): Have ctx.re.match() return the offset since it's
+            # inefficient to calculate back.
+            if _is_todo_valid(ctx, m.groups[1]):
+                level = "notice"
+                message = m.groups[0]
+            else:
+                level = "error"
+                message = "Use a valid username in your TODO, %r is not valid" % m.groups[1]
+            ctx.emit.finding(
+                level = level,
+                message = message,
+                filepath = path,
+                line = num,
+                col = line.index(m.groups[0]) + 1,
+                end_line = num,
+                end_col = len(line) + 1,
+            )
 
 shac.register_check(buildifier)
 shac.register_check(check_docs)

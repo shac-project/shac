@@ -13,10 +13,11 @@
 # limitations under the License.
 
 def cb(ctx):
-  ctx.emit.finding(
-      level="error",
-      filepath="file.txt",
-      message="Replace the whole file",
-      replacements=["this text is a replacement\nfor the entire file\n"])
+    ctx.emit.finding(
+        level = "error",
+        filepath = "file.txt",
+        message = "Replace the whole file",
+        replacements = ["this text is a replacement\nfor the entire file\n"],
+    )
 
 shac.register_check(cb)

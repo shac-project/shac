@@ -13,11 +13,11 @@
 # limitations under the License.
 
 def cb(ctx):
-  ext = "bat" if ctx.platform.os == "windows" else "sh"
-  print(ctx.os.exec(
-    # Implicit relative path should be evaluated relative to the calling
-    # Starlark file.
-    ["dir/nested_hello_world." + ext]
-  ).wait().stdout)
+    ext = "bat" if ctx.platform.os == "windows" else "sh"
+    print(ctx.os.exec(
+        # Implicit relative path should be evaluated relative to the calling
+        # Starlark file.
+        ["dir/nested_hello_world." + ext],
+    ).wait().stdout)
 
 shac.register_check(cb)

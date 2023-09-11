@@ -13,23 +13,27 @@
 # limitations under the License.
 
 def cb(ctx):
-  ctx.emit.finding(
-      level="error",
-      filepath="file.txt",
-      message="Replace the whole file",
-      replacements=["this text is a replacement\nfor the entire file\n"])
-  # Other findings should be ignored because they overlap with the first one.
-  ctx.emit.finding(
-      level="error",
-      filepath="file.txt",
-      message="Change this line",
-      line=1,
-      replacements=["new line 1 content"])
-  ctx.emit.finding(
-      level="error",
-      filepath="file.txt",
-      message="Change this line",
-      line=2,
-      replacements=["new line 2 content"])
+    ctx.emit.finding(
+        level = "error",
+        filepath = "file.txt",
+        message = "Replace the whole file",
+        replacements = ["this text is a replacement\nfor the entire file\n"],
+    )
+
+    # Other findings should be ignored because they overlap with the first one.
+    ctx.emit.finding(
+        level = "error",
+        filepath = "file.txt",
+        message = "Change this line",
+        line = 1,
+        replacements = ["new line 1 content"],
+    )
+    ctx.emit.finding(
+        level = "error",
+        filepath = "file.txt",
+        message = "Change this line",
+        line = 2,
+        replacements = ["new line 2 content"],
+    )
 
 shac.register_check(cb)

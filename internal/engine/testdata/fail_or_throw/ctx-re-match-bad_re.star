@@ -13,6 +13,6 @@
 # limitations under the License.
 
 def cb(ctx):
-  ctx.re.match("(", "")
+    ctx.re.match("(", "")
 
 shac.register_check(cb)

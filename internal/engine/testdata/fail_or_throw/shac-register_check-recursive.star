@@ -13,9 +13,9 @@
 # limitations under the License.
 
 def cb2(ctx):
-  pass
+    pass
 
 def cb1(ctx):
-  shac.register_check(cb2)
+    shac.register_check(cb2)
 
 shac.register_check(cb1)

@@ -13,6 +13,6 @@
 # limitations under the License.
 
 def cb(ctx):
-  ctx.os.exec(["true"], env = {1: "foo"}).wait()
+    ctx.os.exec(["true"], env = {1: "foo"}).wait()
 
 shac.register_check(cb)
