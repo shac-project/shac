@@ -32,7 +32,6 @@ import (
 	"unsafe"
 
 	"github.com/go-git/go-git/plumbing/format/gitignore"
-	"go.fuchsia.dev/shac-project/shac/internal/execsupport"
 	"go.starlark.net/starlark"
 )
 
@@ -285,8 +284,8 @@ func (s *subdirSCM) newLines(ctx context.Context, f file) (starlark.Value, error
 func getSCM(ctx context.Context, root string, allFiles bool) (scmCheckout, error) {
 	// Flip to POSIX style path.
 	root = strings.ReplaceAll(root, string(os.PathSeparator), "/")
-	g := &gitCheckout{returnAll: allFiles}
-	err := g.init(ctx, root)
+	g := &gitCheckout{returnAll: allFiles, checkoutRoot: root}
+	err := g.init(ctx)
 	if err == nil {
 		if g.checkoutRoot != root {
 			if !strings.HasPrefix(root, g.checkoutRoot) {
@@ -365,7 +364,6 @@ func (c *cachingSCM) newLines(ctx context.Context, fi file) (starlark.Value, err
 // gitCheckout represents a git checkout.
 type gitCheckout struct {
 	// Configuration.
-	env       []string
 	returnAll bool
 
 	// Detected environment at initialization.
@@ -378,13 +376,7 @@ type gitCheckout struct {
 	err error // save error.
 }
 
-func (g *gitCheckout) init(ctx context.Context, root string) error {
-	// Find root.
-	g.checkoutRoot = root
-	g.checkoutRoot = g.run(ctx, "rev-parse", "--show-toplevel")
-	// root will have normal Windows path but git returns a POSIX style path
-	// that may be incorrect. Clean it up.
-	g.checkoutRoot = strings.ReplaceAll(filepath.Clean(g.checkoutRoot), string(os.PathSeparator), "/")
+func (g *gitCheckout) init(ctx context.Context) error {
 	g.head.hash = g.run(ctx, "rev-parse", "HEAD")
 	g.head.ref = g.run(ctx, "rev-parse", "--abbrev-ref=strict", "--symbolic-full-name", "HEAD")
 	if g.err != nil {
@@ -421,69 +413,9 @@ func (g *gitCheckout) run(ctx context.Context, args ...string) string {
 	if g.err != nil {
 		return ""
 	}
-	args = append([]string{
-		// Don't update the git index during read operations.
-		"--no-optional-locks",
-	}, args...)
-	cmd := exec.CommandContext(ctx, "git", args...)
-	cmd.Dir = g.checkoutRoot
-	if g.env == nil {
-		// First is for git version before 2.32, the rest are to skip the user and system config.
-		g.env = append(os.Environ(),
-			"GIT_CONFIG_NOGLOBAL=true",
-			"GIT_CONFIG_GLOBAL=",
-			"GIT_CONFIG_SYSTEM=",
-			"LANG=C",
-			"GIT_EXTERNAL_DIFF=",
-			"GIT_DIFF_OPTS=",
-		)
-		gitConfig := map[string]string{
-			// Prevents automatic unicode decomposition of filenames. Only has
-			// an effect on macOS.
-			"core.precomposeUnicode": "true",
-		}
-		g.env = append(g.env, gitConfigEnv(gitConfig)...)
-	}
-	cmd.Env = g.env
-	b := buffers.get()
-	cmd.Stdout = b
-	cmd.Stderr = b
-	err := execsupport.Run(cmd)
-	// Always make a copy of the output, since it could be persisted. Only reuse
-	// the temporary buffer.
-	out := b.String()
-	buffers.push(b)
+	res, err := runGitCmd(ctx, g.checkoutRoot, args...)
 	if err != nil {
-		if errExit := (&exec.ExitError{}); errors.As(err, &errExit) {
-			g.err = fmt.Errorf("error running git %s: %w\n%s", strings.Join(args, " "), err, out)
-		} else {
-			g.err = err
-		}
-	}
-	return strings.TrimSpace(out)
-}
-
-// gitConfigEnv converts a map of key-value git config pairs into corresponding
-// environment variables.
-//
-// See https://git-scm.com/docs/git-config#ENVIRONMENT for details on how git
-// configs are set via environment variables.
-func gitConfigEnv(gitConfig map[string]string) []string {
-	// GIT_CONFIG_COUNT specifies how many key/value env var pairs to look for.
-	res := []string{fmt.Sprintf("GIT_CONFIG_COUNT=%d", len(gitConfig))}
-
-	keys := make([]string, 0, len(gitConfig))
-	for k := range gitConfig {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-
-	for i, k := range keys {
-		// Each config setting is specified by setting a pair of
-		// GIT_CONFIG_KEY_<N> and GIT_CONFIG_VALUE_<N> variables.
-		res = append(res,
-			fmt.Sprintf("GIT_CONFIG_KEY_%d=%s", i, k),
-			fmt.Sprintf("GIT_CONFIG_VALUE_%d=%s", i, gitConfig[k]))
+		g.err = err
 	}
 	return res
 }

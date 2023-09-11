@@ -32,8 +32,10 @@ func BenchmarkPrint_Raw(b *testing.B) {
 }
 
 func BenchmarkPrint_Git(b *testing.B) {
+	root := makeGit(b)
+	copyFile(b, root, "testdata/bench/print.star")
 	want := "[//print.star:16] running\n"
-	benchStarlarkPrint(b, "testdata/bench", "print.star", true, want)
+	benchStarlarkPrint(b, root, "print.star", true, want)
 }
 
 func BenchmarkPrint100_Raw(b *testing.B) {
@@ -44,8 +46,10 @@ func BenchmarkPrint100_Raw(b *testing.B) {
 }
 
 func BenchmarkPrint100_Git(b *testing.B) {
+	root := makeGit(b)
+	copyFile(b, root, "testdata/bench/print100.star")
 	want := strings.Repeat("[//print100.star:16] running\n", 100)
-	benchStarlarkPrint(b, "testdata/bench", "print100.star", true, want)
+	benchStarlarkPrint(b, root, "print100.star", true, want)
 }
 
 func BenchmarkCtxEmitFinding(b *testing.B) {

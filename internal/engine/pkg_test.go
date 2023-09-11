@@ -97,6 +97,10 @@ func copyTree(t *testing.T, dstDir, srcDir string, renamings map[string]string) 
 			rel = newName
 		}
 		dest := filepath.Join(dstDir, rel)
+		fi, err := os.Stat(path)
+		if err != nil {
+			return err
+		}
 		b, err := os.ReadFile(path)
 		if err != nil {
 			return err
@@ -104,7 +108,7 @@ func copyTree(t *testing.T, dstDir, srcDir string, renamings map[string]string) 
 		if err := os.MkdirAll(filepath.Dir(dest), 0o700); err != nil {
 			return err
 		}
-		return os.WriteFile(dest, b, 0o600)
+		return os.WriteFile(dest, b, fi.Mode())
 	})
 	if err != nil {
 		t.Fatal(err)

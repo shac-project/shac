@@ -231,7 +231,7 @@ func (e *starlarkEnv) loadInner(th *starlark.Thread, sk sourceKey) (starlark.Str
 			}
 		} else if errors.Is(err, fs.ErrNotExist) {
 			// Hide the underlying error for determinism.
-			source.err = errors.New("file not found")
+			source.err = fmt.Errorf("%s not found", sk.relpath)
 		} else {
 			source.err = err
 		}

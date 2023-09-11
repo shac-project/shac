@@ -22,7 +22,9 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"log"
 	"os"
+	"os/exec"
 	"path"
 	"path/filepath"
 	"runtime"
@@ -142,7 +144,9 @@ type Options struct {
 	// reporting.Get() which returns the right implementation based on the
 	// environment (CI, interactive, etc).
 	Report Report
-	// Root directory. Defaults to the current working directory.
+	// Root overrides the current working directory, making shac behave as if it
+	// was run in the specified directory. It defaults to the current working
+	// directory.
 	Root string
 	// Files lists specific files to analyze.
 	Files []string
@@ -162,11 +166,7 @@ type Options struct {
 
 // Run loads a main shac.star file from a root directory and runs it.
 func Run(ctx context.Context, o *Options) error {
-	root := o.Root
-	if root == "" {
-		root = "."
-	}
-	root, err := filepath.Abs(root)
+	root, err := resolveRoot(ctx, o.Root)
 	if err != nil {
 		return err
 	}
@@ -422,6 +422,44 @@ func runInner(ctx context.Context, root, tmpdir, main string, r Report, allowNet
 		}
 	}
 	return nil
+}
+
+// resolveRoot resolves an appropriate root directory from which to load shac
+// checks and analyze files.
+func resolveRoot(ctx context.Context, dir string) (string, error) {
+	if dir == "" {
+		dir = "."
+	}
+
+	fi, err := os.Stat(dir)
+	if errors.Is(err, fs.ErrNotExist) {
+		return "", fmt.Errorf("no such directory: %s", dir)
+	} else if err != nil {
+		return "", err
+	} else if !fi.IsDir() {
+		return "", fmt.Errorf("not a directory: %s", dir)
+	}
+
+	dir, err = filepath.Abs(dir)
+	if err != nil {
+		return "", err
+	}
+	root, err := runGitCmd(ctx, dir, "rev-parse", "--show-toplevel")
+	if err != nil {
+		if errors.Is(err, exec.ErrNotFound) {
+			log.Printf("git not detected on $PATH")
+			return dir, nil
+		} else if strings.Contains(err.Error(), "not a git repository") {
+			log.Printf("current working directory is not a git repository")
+			return dir, nil
+		}
+		// Any other error is fatal.
+		return "", err
+	}
+	// root will have normal Windows path but git returns a POSIX style path
+	// that may be incorrect. Clean it up.
+	root = strings.ReplaceAll(filepath.Clean(root), string(os.PathSeparator), "/")
+	return root, nil
 }
 
 // shacState represents a parsing state of one shac.star.

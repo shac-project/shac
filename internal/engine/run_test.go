@@ -40,6 +40,7 @@ import (
 
 func TestRun_Fail(t *testing.T) {
 	t.Parallel()
+	scratchDir := t.TempDir()
 	data := []struct {
 		name string
 		o    Options
@@ -71,9 +72,14 @@ func TestRun_Fail(t *testing.T) {
 		},
 		{
 			"malformed config file",
-			Options{
-				config: "testdata/config/syntax.textproto",
-			},
+			func() Options {
+				root := t.TempDir()
+				writeFile(t, root, "shac.star", ``)
+				writeFile(t, root, "shac.textproto", "bad")
+				return Options{
+					Root: root,
+				}
+			}(),
 			// The encoding is not deterministic.
 			"...: unknown field: bad",
 		},
@@ -84,7 +90,7 @@ func TestRun_Fail(t *testing.T) {
 			},
 			// TODO(olivernewman): This error should be more specific, like "no
 			// shac.star file found".
-			"file not found",
+			"shac.star not found",
 		},
 		{
 			"no shac.star files (recursive)",
@@ -93,6 +99,23 @@ func TestRun_Fail(t *testing.T) {
 				Recurse: true,
 			},
 			"no shac.star files found",
+		},
+		{
+			"nonexistent directory",
+			Options{
+				Root: "!!!this-is-a-file-that-does-not-exist!!!",
+			},
+			"no such directory: !!!this-is-a-file-that-does-not-exist!!!",
+		},
+		{
+			"not a directory",
+			Options{
+				Root: func() string {
+					writeFile(t, scratchDir, "foo.txt", "")
+					return filepath.Join(scratchDir, "foo.txt")
+				}(),
+			},
+			fmt.Sprintf("not a directory: %s", filepath.Join(scratchDir, "foo.txt")),
 		},
 	}
 	for i := range data {
@@ -113,6 +136,41 @@ func TestRun_Fail(t *testing.T) {
 			} else if diff := cmp.Diff(data[i].err, s); diff != "" {
 				t.Fatalf("mismatch (-want +got):\n%s", diff)
 			}
+		})
+	}
+}
+
+func TestRun_DirOverridden(t *testing.T) {
+	t.Parallel()
+
+	data := []struct {
+		name string
+		// The full error message often includes the directory, hence a function
+		// so it's easier to construct the values.
+		dir  string
+		want string
+	}{
+		{
+			"git-aware",
+			func() string {
+				root := makeGit(t)
+				writeFile(t, root, "shac.star", `print("hello")`)
+
+				// If shac is pointed at a subdirectory of a git repo, it should
+				// discover and run checks defined anywhere in the repo.
+				subdir := filepath.Join(root, "a", "b")
+				mkdirAll(t, subdir)
+				return subdir
+			}(),
+			"[//shac.star:1] hello\n",
+		},
+	}
+
+	for i := range data {
+		i := i
+		t.Run(data[i].name, func(t *testing.T) {
+			t.Parallel()
+			testStarlarkPrint(t, data[i].dir, "", false, data[i].want)
 		})
 	}
 }
@@ -282,9 +340,7 @@ func TestRun_SpecificFiles_Fail(t *testing.T) {
 
 	root := t.TempDir()
 	subdir := filepath.Join(root, "dir")
-	if err := os.Mkdir(subdir, 0o700); err != nil {
-		t.Fatal(err)
-	}
+	mkdirAll(t, subdir)
 	dirOutsideRoot := t.TempDir()
 
 	data := []struct {
@@ -1402,7 +1458,7 @@ func TestTestDataFailOrThrow(t *testing.T) {
 		},
 		{
 			"load-inexistant.star",
-			"cannot load ./inexistant.star: file not found",
+			"cannot load ./inexistant.star: inexistant.star not found",
 			"  //load-inexistant.star:15:1: in <toplevel>\n",
 		},
 		{
@@ -1945,7 +2001,10 @@ func TestRun_FilesystemSandbox(t *testing.T) {
 }
 
 func TestRun_Vendored(t *testing.T) {
-	testStarlarkPrint(t, "testdata/vendored", "shac.star", false, "[//shac.star:17] True\n")
+	t.Parallel()
+	dir := t.TempDir()
+	copyTree(t, dir, "testdata/vendored", nil)
+	testStarlarkPrint(t, dir, "shac.star", false, "[//shac.star:17] True\n")
 }
 
 // Utilities
@@ -1980,10 +2039,13 @@ func enumDir(t *testing.T, name string) (string, []string) {
 			out = append(out, n)
 		}
 	}
-	return p, out
+	dest := t.TempDir()
+	copyTree(t, dest, p, nil)
+	return dest, out
 }
 
 func makeGit(t testing.TB) string {
+	t.Helper()
 	// scm.go requires two commits. Not really worth fixing yet, it's only
 	// annoying in unit tests.
 	root := t.TempDir()
@@ -2003,6 +2065,7 @@ func makeGit(t testing.TB) string {
 }
 
 func initGit(t testing.TB, dir string) {
+	t.Helper()
 	runGit(t, dir, "init")
 	runGit(t, dir, "config", "user.email", "test@example.com")
 	runGit(t, dir, "config", "user.name", "engine test")
@@ -2032,20 +2095,28 @@ func copyFile(t testing.TB, dst, src string) {
 }
 
 func writeFile(t testing.TB, root, path, content string) {
+	t.Helper()
 	writeFileBytes(t, root, path, []byte(content), 0o600)
 }
 
 func writeFileBytes(t testing.TB, root, path string, content []byte, perm os.FileMode) {
+	t.Helper()
 	abs := filepath.Join(root, path)
-	if err := os.MkdirAll(filepath.Dir(abs), 0o700); err != nil {
-		t.Fatal(err)
-	}
+	mkdirAll(t, filepath.Dir(abs))
 	if err := os.WriteFile(abs, content, perm); err != nil {
 		t.Fatal(err)
 	}
 }
 
+func mkdirAll(t testing.TB, dir string) {
+	t.Helper()
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func readFile(t *testing.T, path string) string {
+	t.Helper()
 	b, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatal(err)

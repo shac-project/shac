@@ -51,9 +51,8 @@ func Fix(ctx context.Context, o *Options, quiet bool) error {
 	// Sort for determinism.
 	sort.Strings(orderedFiles)
 
-	for _, f := range orderedFiles {
-		findings := findingsByFile[f]
-		path := filepath.Join(o.Root, f)
+	for _, path := range orderedFiles {
+		findings := findingsByFile[path]
 		numFixed, err := fixFindings(path, findings)
 		if err != nil {
 			return err
@@ -63,7 +62,7 @@ func Fix(ctx context.Context, o *Options, quiet bool) error {
 			noun += "s"
 		}
 		if !quiet {
-			fmt.Fprintf(os.Stderr, "Fixed %d %s in %s\n", numFixed, noun, f)
+			fmt.Fprintf(os.Stderr, "Fixed %d %s in %s\n", numFixed, noun, path)
 		}
 	}
 	return nil
@@ -185,7 +184,7 @@ func (c *findingCollector) EmitFinding(ctx context.Context, check string, level 
 		c.mu.Lock()
 		defer c.mu.Unlock()
 		c.findings = append(c.findings, findingToFix{
-			file:        file,
+			file:        filepath.Join(root, filepath.FromSlash(file)),
 			span:        s,
 			replacement: replacements[0],
 		})
