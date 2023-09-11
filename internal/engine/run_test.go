@@ -77,7 +77,7 @@ func TestRun_Fail(t *testing.T) {
 				writeFile(t, root, "shac.star", ``)
 				writeFile(t, root, "shac.textproto", "bad")
 				return Options{
-					Root: root,
+					Dir: root,
 				}
 			}(),
 			// The encoding is not deterministic.
@@ -86,7 +86,7 @@ func TestRun_Fail(t *testing.T) {
 		{
 			"no shac.star file",
 			Options{
-				Root: t.TempDir(),
+				Dir: t.TempDir(),
 			},
 			// TODO(olivernewman): This error should be more specific, like "no
 			// shac.star file found".
@@ -95,7 +95,7 @@ func TestRun_Fail(t *testing.T) {
 		{
 			"no shac.star files (recursive)",
 			Options{
-				Root:    t.TempDir(),
+				Dir:     t.TempDir(),
 				Recurse: true,
 			},
 			"no shac.star files found",
@@ -103,14 +103,14 @@ func TestRun_Fail(t *testing.T) {
 		{
 			"nonexistent directory",
 			Options{
-				Root: "!!!this-is-a-file-that-does-not-exist!!!",
+				Dir: "!!!this-is-a-file-that-does-not-exist!!!",
 			},
 			"no such directory: !!!this-is-a-file-that-does-not-exist!!!",
 		},
 		{
 			"not a directory",
 			Options{
-				Root: func() string {
+				Dir: func() string {
 					writeFile(t, scratchDir, "foo.txt", "")
 					return filepath.Join(scratchDir, "foo.txt")
 				}(),
@@ -312,7 +312,7 @@ func TestRun_SpecificFiles(t *testing.T) {
 		for _, f := range files {
 			absFiles = append(absFiles, filepath.Join(root, f))
 		}
-		o := Options{Report: &r, Root: root, Files: absFiles, Recurse: true}
+		o := Options{Report: &r, Dir: root, Files: absFiles, Recurse: true}
 
 		if err := Run(context.Background(), &o); err != nil {
 			t.Fatal(err)
@@ -370,7 +370,7 @@ func TestRun_SpecificFiles_Fail(t *testing.T) {
 		t.Run(data[i].name, func(t *testing.T) {
 			t.Parallel()
 			r := reportPrint{reportNoPrint: reportNoPrint{t: t}}
-			o := Options{Report: &r, Root: root, main: "shac.star", Files: data[i].files}
+			o := Options{Report: &r, Dir: root, main: "shac.star", Files: data[i].files}
 			err := Run(context.Background(), &o)
 			if err == nil {
 				t.Fatalf("Expected error: %q", data[i].wantErr)
@@ -453,7 +453,7 @@ func TestRun_Ignore(t *testing.T) {
 		}))
 
 		r := reportPrint{reportNoPrint: reportNoPrint{t: t}}
-		o := Options{Report: &r, Root: root, AllFiles: false, main: "shac.star"}
+		o := Options{Report: &r, Dir: root, AllFiles: false, main: "shac.star"}
 		err := Run(context.Background(), &o)
 		if err == nil {
 			t.Fatal("Expected empty ignore field to be rejected")
@@ -710,7 +710,7 @@ func TestRun_SCM_Git_Untracked(t *testing.T) {
 			r := reportPrint{reportNoPrint: reportNoPrint{t: t}}
 			// Don't specify `main` so it defaults to shac.star.
 			// Specify `recurse` so we use the scm to discover shac.star files.
-			o := Options{Report: &r, Root: root, Recurse: true}
+			o := Options{Report: &r, Dir: root, Recurse: true}
 			if err = Run(context.Background(), &o); err != nil {
 				t.Fatal(err)
 			}
@@ -897,7 +897,7 @@ func TestRun_SCM_Git_Broken(t *testing.T) {
 	}
 	// Git reports paths separated with "/" even on Windows.
 	dotGit = strings.ReplaceAll(dotGit, string(os.PathSeparator), "/")
-	o := Options{Report: &reportNoPrint{t: t}, Root: root, main: "ctx-scm-affected_files.star"}
+	o := Options{Report: &reportNoPrint{t: t}, Dir: root, main: "ctx-scm-affected_files.star"}
 	if err = Run(context.Background(), &o); err == nil {
 		t.Fatal("expected error")
 	}
@@ -963,7 +963,7 @@ func TestRun_SCM_Git_Recursive(t *testing.T) {
 	runGit(t, root, "add", ".")
 	runGit(t, root, "commit", "-m", "Second commit")
 	r := reportEmitPrint{reportPrint: reportPrint{reportNoPrint: reportNoPrint{t: t}}}
-	o := Options{Report: &r, Root: root, Recurse: true}
+	o := Options{Report: &r, Dir: root, Recurse: true}
 	if err := Run(context.Background(), &o); err != nil {
 		t.Fatal(err)
 	}
@@ -1063,7 +1063,7 @@ func TestRun_SCM_Git_Recursive_Shared(t *testing.T) {
 	runGit(t, root, "add", ".")
 	runGit(t, root, "commit", "-m", "Second commit")
 	r := reportEmitPrint{reportPrint: reportPrint{reportNoPrint: reportNoPrint{t: t}}}
-	o := Options{Report: &r, Root: root, Recurse: true}
+	o := Options{Report: &r, Dir: root, Recurse: true}
 	if err := Run(context.Background(), &o); err != nil {
 		t.Fatal(err)
 	}
@@ -1563,7 +1563,7 @@ func TestTestDataFailOrThrow(t *testing.T) {
 		i := i
 		t.Run(data[i].name, func(t *testing.T) {
 			t.Parallel()
-			o := Options{Report: &reportNoPrint{t: t}, Root: root, main: data[i].name}
+			o := Options{Report: &reportNoPrint{t: t}, Dir: root, main: data[i].name}
 			err := Run(context.Background(), &o)
 			if err == nil {
 				t.Fatal("expecting an error")
@@ -1769,7 +1769,7 @@ func TestTestDataEmit(t *testing.T) {
 		t.Run(data[i].name, func(t *testing.T) {
 			t.Parallel()
 			r := reportEmitNoPrint{reportNoPrint: reportNoPrint{t: t}}
-			o := Options{Report: &r, Root: root, main: data[i].name, config: "../config/valid.textproto"}
+			o := Options{Report: &r, Dir: root, main: data[i].name, config: "../config/valid.textproto"}
 			err := Run(context.Background(), &o)
 			if data[i].err != "" {
 				if err == nil {
@@ -2012,7 +2012,7 @@ func TestRun_Vendored(t *testing.T) {
 // testStarlarkPrint test a starlark file that calls print().
 func testStarlarkPrint(t testing.TB, root, name string, all bool, want string, files ...string) {
 	r := reportPrint{reportNoPrint: reportNoPrint{t: t}}
-	o := Options{Report: &r, Root: root, AllFiles: all, main: name, Files: files}
+	o := Options{Report: &r, Dir: root, AllFiles: all, main: name, Files: files}
 	if err := Run(context.Background(), &o); err != nil {
 		t.Helper()
 		t.Fatal(err)

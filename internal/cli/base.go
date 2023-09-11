@@ -52,7 +52,7 @@ func (c *commandBase) options(files []string) (engine.Options, error) {
 		cwd = c.root
 	}
 	return engine.Options{
-		Root:     cwd,
+		Dir:      cwd,
 		AllFiles: c.allFiles,
 		Files:    files,
 		Recurse:  !c.noRecurse,

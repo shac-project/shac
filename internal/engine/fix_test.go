@@ -113,7 +113,7 @@ func TestFix(t *testing.T) {
 			}
 
 			o := Options{
-				Root:   root,
+				Dir:    root,
 				main:   data[i].name,
 				config: "../config/valid.textproto",
 			}

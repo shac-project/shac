@@ -144,10 +144,10 @@ type Options struct {
 	// reporting.Get() which returns the right implementation based on the
 	// environment (CI, interactive, etc).
 	Report Report
-	// Root overrides the current working directory, making shac behave as if it
+	// Dir overrides the current working directory, making shac behave as if it
 	// was run in the specified directory. It defaults to the current working
 	// directory.
-	Root string
+	Dir string
 	// Files lists specific files to analyze.
 	Files []string
 	// AllFiles tells to consider all files as affected.
@@ -166,7 +166,7 @@ type Options struct {
 
 // Run loads a main shac.star file from a root directory and runs it.
 func Run(ctx context.Context, o *Options) error {
-	root, err := resolveRoot(ctx, o.Root)
+	root, err := resolveRoot(ctx, o.Dir)
 	if err != nil {
 		return err
 	}
