@@ -43,7 +43,6 @@ import (
 	"google.golang.org/protobuf/encoding/prototext"
 )
 
-// TODO(olivernewman): Foo
 func init() {
 	// Enable not-yet-standard Starlark features.
 	resolve.AllowRecursion = true
@@ -121,19 +120,6 @@ func (l *Level) String() string {
 
 func (l *Level) Type() string {
 	return "level"
-}
-
-// Meets returns whether `l` is semantically more severe than, or as severe as,
-// `other`.
-func (l Level) Meets(other Level) bool {
-	// Any Level object that gets passed from user code should have already been
-	// validated at this point, so no need to check `isValid`.
-	ordered := []Level{
-		Notice,
-		Warning,
-		Error,
-	}
-	return slices.Index(ordered, l) >= slices.Index(ordered, other)
 }
 
 func (l Level) isValid() bool {
