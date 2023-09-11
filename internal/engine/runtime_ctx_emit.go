@@ -116,7 +116,7 @@ func ctxEmitFinding(ctx context.Context, s *shacState, name string, args starlar
 	c := ctxCheck(ctx)
 	message := string(argmessage)
 	if len(message) == 0 {
-		if c.formatter && file != "" && level == Error && len(replacements) == 1 {
+		if c.formatter && file != "" && len(replacements) == 1 {
 			// If the check is a formatter, and the finding would be fixed by
 			// `shac fmt`, let users omit `message` as long as `file` is
 			// specified, since `message` will always look something like the

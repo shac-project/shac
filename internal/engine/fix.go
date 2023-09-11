@@ -30,7 +30,10 @@ import (
 // Fix loads a main shac.star file from a root directory and runs checks defined
 // in it, then applies suggested fixes to files on disk.
 func Fix(ctx context.Context, o *Options, quiet bool) error {
-	fc := findingCollector{countsByCheck: map[string]int{}, quiet: quiet}
+	fc := findingCollector{
+		countsByCheck: map[string]int{},
+		quiet:         quiet,
+	}
 	if o.Report != nil {
 		return fmt.Errorf("cannot overwrite reporter")
 	}
@@ -176,11 +179,13 @@ type findingCollector struct {
 var _ Report = (*findingCollector)(nil)
 
 func (c *findingCollector) EmitFinding(ctx context.Context, check string, level Level, message, root, file string, s Span, replacements []string) error {
-	// Only findings with "error" level and a single replacement will be
-	// automatically fixed. Non-error findings may not be necessary to fix, and
-	// findings with more than one replacement do not have a single fix that can
+	// Only findings with a single replacement will be automatically fixed.
+	// Findings with more than one replacement do not have a single fix that can
 	// be automatically chosen.
-	if level == Error && len(replacements) == 1 {
+	// TODO(olivernewman): Add level-based filtering; it should be possible to
+	// only apply fixes for findings with level=error, as others are not
+	// necessary to fix for `shac check` to pass.
+	if len(replacements) == 1 {
 		c.mu.Lock()
 		defer c.mu.Unlock()
 		c.findings = append(c.findings, findingToFix{

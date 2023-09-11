@@ -35,6 +35,7 @@ import (
 	"time"
 
 	"github.com/go-git/go-git/plumbing/format/gitignore"
+	flag "github.com/spf13/pflag"
 	"go.fuchsia.dev/shac-project/shac/internal/sandbox"
 	"go.starlark.net/resolve"
 	"go.starlark.net/starlark"
@@ -42,6 +43,7 @@ import (
 	"google.golang.org/protobuf/encoding/prototext"
 )
 
+// TODO(olivernewman): Foo
 func init() {
 	// Enable not-yet-standard Starlark features.
 	resolve.AllowRecursion = true
@@ -95,6 +97,8 @@ func OnlyNonFormatters(c registeredCheck) bool {
 // level "error".
 type Level string
 
+var _ flag.Value = (*Level)(nil)
+
 // Valid Level values.
 const (
 	Notice  Level = "notice"
@@ -102,6 +106,35 @@ const (
 	Error   Level = "error"
 	Nothing Level = ""
 )
+
+func (l *Level) Set(value string) error {
+	*l = Level(value)
+	if !l.isValid() {
+		return fmt.Errorf("invalid level value %q", l)
+	}
+	return nil
+}
+
+func (l *Level) String() string {
+	return string(*l)
+}
+
+func (l *Level) Type() string {
+	return "level"
+}
+
+// Meets returns whether `l` is semantically more severe than, or as severe as,
+// `other`.
+func (l Level) Meets(other Level) bool {
+	// Any Level object that gets passed from user code should have already been
+	// validated at this point, so no need to check `isValid`.
+	ordered := []Level{
+		Notice,
+		Warning,
+		Error,
+	}
+	return slices.Index(ordered, l) >= slices.Index(ordered, other)
+}
 
 func (l Level) isValid() bool {
 	switch l {
@@ -233,7 +266,7 @@ func Run(ctx context.Context, o *Options) error {
 	if err != nil {
 		return err
 	}
-	err = runInner(ctx, root, tmpdir, main, o.Report, doc.AllowNetwork, doc.WritableRoot, o.Recurse, o.Filter, scm, packages)
+	err = runInner(ctx, root, tmpdir, main, doc.AllowNetwork, doc.WritableRoot, o, scm, packages)
 	if err2 := os.RemoveAll(tmpdir); err == nil {
 		err = err2
 	}
@@ -295,7 +328,7 @@ func normalizeFiles(files []string, root string) ([]file, error) {
 	return res, nil
 }
 
-func runInner(ctx context.Context, root, tmpdir, main string, r Report, allowNetwork, writableRoot, recurse bool, filter CheckFilter, scm scmCheckout, packages map[string]fs.FS) error {
+func runInner(ctx context.Context, root, tmpdir, main string, allowNetwork, writableRoot bool, o *Options, scm scmCheckout, packages map[string]fs.FS) error {
 	sb, err := sandbox.New(tmpdir)
 	if err != nil {
 		return err
@@ -318,9 +351,9 @@ func runInner(ctx context.Context, root, tmpdir, main string, r Report, allowNet
 		return &shacState{
 			allowNetwork: allowNetwork,
 			env:          &env,
-			filter:       filter,
+			filter:       o.Filter,
 			main:         main,
-			r:            r,
+			r:            o.Report,
 			root:         root,
 			sandbox:      sb,
 			scm:          scm,
@@ -330,7 +363,7 @@ func runInner(ctx context.Context, root, tmpdir, main string, r Report, allowNet
 		}
 	}
 	var shacStates []*shacState
-	if recurse {
+	if o.Recurse {
 		// Each found shac.star is run in its own interpreter for maximum
 		// parallelism.
 		// Discover all the main files via the SCM. This enables us to not walk

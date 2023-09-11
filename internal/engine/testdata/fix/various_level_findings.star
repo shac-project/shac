@@ -14,11 +14,22 @@
 
 def cb(ctx):
   ctx.emit.finding(
+      level="notice",
+      filepath="file.txt",
+      message="Just a notice",
+      line=1,
+      replacements=["NOTICE\n"])
+  ctx.emit.finding(
+      level="warning",
+      filepath="file.txt",
+      message="A warning",
+      line=2,
+      replacements=["WARNING\n"])
+  ctx.emit.finding(
       level="error",
       filepath="file.txt",
-      message="Error, but multiple options",
-      line=1,
-      # Multiple replacements do not trigger fixes.
-      replacements=["IGNORED", "OTHER_IGNORED"])
+      message="An error!!!",
+      line=3,
+      replacements=["ERROR\n"])
 
 shac.register_check(cb)

@@ -35,45 +35,46 @@ func TestFix(t *testing.T) {
 
 	// TODO(olivernewman): Checks that emit findings in different files.
 	data := []struct {
-		name string
-		want []string
+		name  string
+		want  []string
+		level Level
 	}{
 		{
-			"delete_lines.star",
-			[]string{
+			name: "delete_lines.star",
+			want: []string{
 				"These are",
 				"that may be modified",
 			},
 		},
 		{
-			"ignored_findings.star",
-			originalLines,
+			name: "ignored_findings.star",
+			want: originalLines,
 		},
 		{
-			"multiple_replacements_one_file.star",
-			[]string{
+			name: "multiple_replacements_one_file.star",
+			want: []string{
 				"<REPL1>",
 				"the contents",
 				"<REPL2>",
 			},
 		},
 		{
-			"replace_entire_file.star",
-			[]string{
+			name: "replace_entire_file.star",
+			want: []string{
 				"this text is a replacement",
 				"for the entire file",
 			},
 		},
 		{
-			"replace_entire_file_others_ignored.star",
-			[]string{
+			name: "replace_entire_file_others_ignored.star",
+			want: []string{
 				"this text is a replacement",
 				"for the entire file",
 			},
 		},
 		{
-			"replace_one_full_line.star",
-			[]string{
+			name: "replace_one_full_line.star",
+			want: []string{
 				"These are",
 				"the contents",
 				"UPDATED",
@@ -81,11 +82,20 @@ func TestFix(t *testing.T) {
 			},
 		},
 		{
-			"replace_partial_line.star",
-			[]string{
+			name: "replace_partial_line.star",
+			want: []string{
 				"These are",
 				"the contents",
 				"of UPDATED file",
+				"that may be modified",
+			},
+		},
+		{
+			name: "various_level_findings.star",
+			want: []string{
+				"NOTICE",
+				"WARNING",
+				"ERROR",
 				"that may be modified",
 			},
 		},
