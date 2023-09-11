@@ -17,6 +17,7 @@
 This file will evolve as new shac functionality is being added.
 """
 
+load("//checks/buildifier.star", "buildifier")
 load("//checks/check_doc.star", "check_docs")
 load("//checks/go.star", "gofmt", "gosec", "ineffassign", "no_fork_without_lock", "shadow", "staticcheck")
 load("//checks/licenses.star", "check_license_headers")
@@ -57,7 +58,7 @@ def new_todos(ctx):
           end_col=len(line)+1,
       )
 
-
+shac.register_check(buildifier)
 shac.register_check(check_docs)
 shac.register_check(check_license_headers)
 shac.register_check(gofmt)

@@ -14,7 +14,7 @@
 
 def cb(ctx):
   first = ctx.io.tempfile("first\nfile\ncontents\n")
-  second = ctx.io.tempfile(b"contents\nof\nsecond\nfile\n", name="dir/second.txt")
+  second = ctx.io.tempfile(bytes("contents\nof\nsecond\nfile\n"), name = "dir/second.txt")
   print(ctx.io.read_file(first))
   print(ctx.io.read_file(second))
 

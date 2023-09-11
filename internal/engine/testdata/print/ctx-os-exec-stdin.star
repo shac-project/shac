@@ -17,7 +17,7 @@ def cb(ctx):
   test_inputs = [
     None,
     "hello\nfrom\nstdin\nstring",
-    b"hello\nfrom\nstdin\nbytes",
+    bytes("hello\nfrom\nstdin\nbytes"),
   ]
 
   procs = []
