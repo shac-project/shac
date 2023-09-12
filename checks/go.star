@@ -128,9 +128,6 @@ def _staticcheck(ctx, version = "v0.4.3"):
         [exe, "-f=json", "./..."],
         ok_retcodes = [0, 1],
         env = env,
-        # TODO(olivernewman): Figure out why staticcheck needs network access and
-        # remove. We may need to make sure to `go get` all dependencies first?
-        allow_network = True,
     ).wait()
 
     # Output is JSON-lines.
@@ -176,7 +173,6 @@ def _shadow(ctx, version = "v0.7.0"):
             "./...",
         ],
         env = go_env(ctx, "shadow"),
-        allow_network = True,
     ).wait()
 
     # Example output:
