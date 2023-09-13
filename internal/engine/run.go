@@ -187,6 +187,18 @@ type Options struct {
 
 // Run loads a main shac.star file from a root directory and runs it.
 func Run(ctx context.Context, o *Options) error {
+	tmpdir, err := os.MkdirTemp("", "shac")
+	if err != nil {
+		return err
+	}
+	err = runInner(ctx, o, tmpdir)
+	if err2 := os.RemoveAll(tmpdir); err == nil {
+		err = err2
+	}
+	return err
+}
+
+func runInner(ctx context.Context, o *Options, tmpdir string) error {
 	root, err := resolveRoot(ctx, o.Dir)
 	if err != nil {
 		return err
@@ -256,78 +268,12 @@ func Run(ctx context.Context, o *Options) error {
 		vars[name] = value
 	}
 
-	tmpdir, err := os.MkdirTemp("", "shac")
-	if err != nil {
-		return err
-	}
 	pkgMgr := NewPackageManager(tmpdir)
 	packages, err := pkgMgr.RetrievePackages(ctx, root, &doc)
 	if err != nil {
 		return err
 	}
-	err = runInner(ctx, root, tmpdir, main, doc.AllowNetwork, doc.WritableRoot, o, scm, packages, vars)
-	if err2 := os.RemoveAll(tmpdir); err == nil {
-		err = err2
-	}
-	return err
-}
 
-// normalizeFiles makes all the file paths relative to the project root, sorts,
-// and removes duplicates.
-//
-// Input paths may be absolute or relative. If relative, they are assumed to be
-// relative to the current working directory.
-func normalizeFiles(files []string, root string) ([]file, error) {
-	var cwd string
-	cwd, err := os.Getwd()
-	if err != nil {
-		return nil, err
-	}
-	var relativized []string
-	for _, orig := range files {
-		f := orig
-		if !filepath.IsAbs(f) {
-			f = filepath.Join(cwd, f)
-		}
-		var rel string
-		rel, err = filepath.Rel(root, f)
-		if err != nil {
-			return nil, err
-		}
-		// Validates that the path is within the root directory (i.e.
-		// doesn't start with "..").
-		if !filepath.IsLocal(rel) {
-			return nil, fmt.Errorf("cannot analyze file outside root: %s", orig)
-		}
-		fi, err := os.Stat(f)
-		if err != nil {
-			if errors.Is(err, os.ErrNotExist) {
-				// Make the error message more concise and use the original
-				// user-specified path rather than the normalized absolute path.
-				return nil, fmt.Errorf("no such file: %s", orig)
-			}
-			return nil, err
-		}
-		// TODO(olivernewman): Support analyzing directories. This will require
-		// doing a filesystem traversal that respects the scm, so `shac check .`
-		// still ignores git-ignored files.
-		if fi.IsDir() {
-			return nil, fmt.Errorf("is a directory: %s", orig)
-		}
-		relativized = append(relativized, rel)
-	}
-
-	slices.Sort(relativized)
-	slices.Compact(relativized)
-
-	var res []file
-	for _, f := range relativized {
-		res = append(res, &fileImpl{path: filepath.ToSlash(f)})
-	}
-	return res, nil
-}
-
-func runInner(ctx context.Context, root, tmpdir, main string, allowNetwork, writableRoot bool, o *Options, scm scmCheckout, packages map[string]fs.FS, vars map[string]string) error {
 	sb, err := sandbox.New(tmpdir)
 	if err != nil {
 		return err
@@ -348,7 +294,7 @@ func runInner(ctx context.Context, root, tmpdir, main string, allowNetwork, writ
 			scm = &subdirSCM{s: scm, subdir: normalized}
 		}
 		return &shacState{
-			allowNetwork: allowNetwork,
+			allowNetwork: doc.AllowNetwork,
 			env:          &env,
 			filter:       o.Filter,
 			main:         main,
@@ -358,7 +304,7 @@ func runInner(ctx context.Context, root, tmpdir, main string, allowNetwork, writ
 			scm:          scm,
 			subdir:       subdir,
 			tmpdir:       filepath.Join(tmpdir, strconv.Itoa(idx)),
-			writableRoot: writableRoot,
+			writableRoot: doc.WritableRoot,
 			vars:         vars,
 		}
 	}
@@ -493,6 +439,61 @@ func resolveRoot(ctx context.Context, dir string) (string, error) {
 	// that may be incorrect. Clean it up.
 	root = strings.ReplaceAll(filepath.Clean(root), string(os.PathSeparator), "/")
 	return root, nil
+}
+
+// normalizeFiles makes all the file paths relative to the project root, sorts,
+// and removes duplicates.
+//
+// Input paths may be absolute or relative. If relative, they are assumed to be
+// relative to the current working directory.
+func normalizeFiles(files []string, root string) ([]file, error) {
+	var cwd string
+	cwd, err := os.Getwd()
+	if err != nil {
+		return nil, err
+	}
+	var relativized []string
+	for _, orig := range files {
+		f := orig
+		if !filepath.IsAbs(f) {
+			f = filepath.Join(cwd, f)
+		}
+		var rel string
+		rel, err = filepath.Rel(root, f)
+		if err != nil {
+			return nil, err
+		}
+		// Validates that the path is within the root directory (i.e.
+		// doesn't start with "..").
+		if !filepath.IsLocal(rel) {
+			return nil, fmt.Errorf("cannot analyze file outside root: %s", orig)
+		}
+		fi, err := os.Stat(f)
+		if err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				// Make the error message more concise and use the original
+				// user-specified path rather than the normalized absolute path.
+				return nil, fmt.Errorf("no such file: %s", orig)
+			}
+			return nil, err
+		}
+		// TODO(olivernewman): Support analyzing directories. This will require
+		// doing a filesystem traversal that respects the scm, so `shac check .`
+		// still ignores git-ignored files.
+		if fi.IsDir() {
+			return nil, fmt.Errorf("is a directory: %s", orig)
+		}
+		relativized = append(relativized, rel)
+	}
+
+	slices.Sort(relativized)
+	slices.Compact(relativized)
+
+	var res []file
+	for _, f := range relativized {
+		res = append(res, &fileImpl{path: filepath.ToSlash(f)})
+	}
+	return res, nil
 }
 
 // shacState represents a parsing state of one shac.star.
