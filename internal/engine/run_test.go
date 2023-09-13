@@ -187,15 +187,7 @@ func TestRun_DirOverridden(t *testing.T) {
 func TestRun_SpecificFiles(t *testing.T) {
 	// Not parallelized because it calls os.Chdir.
 
-	root := t.TempDir()
-
-	// Evaluate symlinks so that tests work on Mac, where t.TempDir() returns
-	// path under /var, but /var is symlinked to /private/var and os.Getwd()
-	// returns the path with symlinks resolved.
-	root, err := filepath.EvalSymlinks(root)
-	if err != nil {
-		t.Fatal(err)
-	}
+	root := resolvedTempDir(t)
 
 	writeFile(t, root, "shac.textproto", prototext.Format(&Document{
 		Ignore: []string{
@@ -987,7 +979,7 @@ func TestRun_SCM_Git_Recursive(t *testing.T) {
 	//   b/
 	//     shac.star
 	//     b.txt
-	root := t.TempDir()
+	root := resolvedTempDir(t)
 	initGit(t, root)
 	for _, p := range []string{"a", "b", "c"} {
 		if err := os.Mkdir(filepath.Join(root, p), 0o700); err != nil {
@@ -1093,7 +1085,7 @@ func TestRun_SCM_Git_Recursive_Shared(t *testing.T) {
 	//       internal.star
 	//   d/
 	//     shared2.star
-	root := t.TempDir()
+	root := resolvedTempDir(t)
 	initGit(t, root)
 	for _, p := range [...]string{"a", "common", filepath.Join("common", "internal"), "d"} {
 		if err := os.Mkdir(filepath.Join(root, p), 0o700); err != nil {
@@ -2128,7 +2120,7 @@ func makeGit(t testing.TB) string {
 	t.Helper()
 	// scm.go requires two commits. Not really worth fixing yet, it's only
 	// annoying in unit tests.
-	root := t.TempDir()
+	root := resolvedTempDir(t)
 	initGit(t, root)
 
 	writeFile(t, root, "file.txt", "First file\nIt doesn't contain\na lot of lines.\n")
@@ -2159,6 +2151,21 @@ func copySCM(t testing.TB, dst string) {
 	for _, src := range m {
 		copyFile(t, dst, src)
 	}
+}
+
+// resolvedTempDir creates a new test tempdir and resolves all symlinks. This is
+// useful when creating a temp dir and passing into shac, then comparing some
+// output, because shac internally resolves symlinks.
+func resolvedTempDir(t testing.TB) string {
+	d := t.TempDir()
+	// Evaluate symlinks so that tests work on Mac, where t.TempDir() returns
+	// path under /var, but /var is symlinked to /private/var and os.Getwd()
+	// returns the path with symlinks resolved.
+	d, err := filepath.EvalSymlinks(d)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return d
 }
 
 func copyFile(t testing.TB, dst, src string) {
