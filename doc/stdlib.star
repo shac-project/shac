@@ -361,7 +361,7 @@ def _ctx_re_match(pattern, string):
       ```
 
     Args:
-      pattern: Pegexp to run. The syntax as described at
+      pattern: Regexp to run. The syntax as described at
         https://golang.org/s/re2syntax.
       string: String to run the regexp on.
 
@@ -385,7 +385,7 @@ def _ctx_scm_affected_files(glob = None, include_deleted = False):
 
     Example:
       ```python
-      def new_todos(cb):
+      def new_todos(ctx):
         # Prints only the TODO that were added compared to upstream.
         for path, meta in ctx.scm.affected_files().items():
           for num, line in meta.new_lines():
@@ -413,7 +413,7 @@ def _ctx_scm_all_files(glob = None, include_deleted = False):
 
     Example:
       ```python
-      def all_todos(cb):
+      def all_todos(ctx):
         for path, meta in ctx.scm.all_files().items():
           for num, line in meta.new_lines():
             m = ctx.re.match("TODO\\(([^)]+)\\).*", line)
@@ -430,6 +430,36 @@ def _ctx_scm_all_files(glob = None, include_deleted = False):
     Returns:
       A map of {path: struct()} where the struct has a string field action and a
       function new_lines().
+    """
+    pass
+
+def _ctx_vars_get(name):
+    """Returns the value of a runtime-configurable variable.
+
+    The value may be specified at runtime by using the `--var name=value` flag
+    when running shac. In order to be set at runtime, a variable must be
+    registered in shac.textproto.
+
+    If not set via the command line, the value will be the default declared in
+    shac.textproto.
+
+    Raises an error if the requested variable is not registered in the project's
+    shac.textproto config file.
+
+    Example:
+      ```python
+      def cb(ctx):
+        build_dir = ctx.vars.get("build_directory")
+        ctx.os.exec([build_dir + "/compiled_tool"]).wait()
+
+      shac.register_check(cb)
+      ```
+
+    Args:
+      name: The name of the variable.
+
+    Returns:
+      A string corresponding to the current value of the variable.
     """
     pass
 
@@ -476,6 +506,10 @@ ctx = struct(
         root = "",
         affected_files = _ctx_scm_affected_files,
         all_files = _ctx_scm_all_files,
+    ),
+    # ctx.vars provides access to runtime-configurable variables.
+    vars = struct(
+        get = _ctx_vars_get,
     ),
 )
 

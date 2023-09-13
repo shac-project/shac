@@ -26,12 +26,15 @@ type commandBase struct {
 	cwd       string
 	allFiles  bool
 	noRecurse bool
+	vars      stringMapFlag
 }
 
 func (c *commandBase) SetFlags(f *flag.FlagSet) {
 	f.StringVarP(&c.cwd, "cwd", "C", ".", "directory in which to run shac")
 	f.BoolVar(&c.allFiles, "all", false, "checks all the files instead of guess the upstream to diff against")
 	f.BoolVar(&c.noRecurse, "no-recurse", false, "do not look for shac.star files recursively")
+	c.vars = stringMapFlag{}
+	f.Var(&c.vars, "var", "runtime variables to set, of the form key=value")
 
 	// TODO(olivernewman): Delete this flag after it's no longer used.
 	f.StringVar(&c.root, "root", ".", "path to the root of the tree to analyse")
@@ -56,5 +59,6 @@ func (c *commandBase) options(files []string) (engine.Options, error) {
 		AllFiles: c.allFiles,
 		Files:    files,
 		Recurse:  !c.noRecurse,
+		Vars:     c.vars,
 	}, nil
 }

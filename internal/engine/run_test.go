@@ -117,6 +117,15 @@ func TestRun_Fail(t *testing.T) {
 			},
 			fmt.Sprintf("not a directory: %s", filepath.Join(scratchDir, "foo.txt")),
 		},
+		{
+			"invalid var",
+			Options{
+				Vars: map[string]string{
+					"unknown_var": "",
+				},
+			},
+			"var not declared in shac.textproto: unknown_var",
+		},
 	}
 	for i := range data {
 		i := i
@@ -461,6 +470,67 @@ func TestRun_Ignore(t *testing.T) {
 			t.Fatalf("Expected error %q, got %q", errEmptyIgnore, err)
 		}
 	})
+}
+
+func TestRun_Vars(t *testing.T) {
+	t.Parallel()
+
+	data := []struct {
+		name       string
+		configVars map[string]string
+		flagVars   map[string]string
+		want       string
+	}{
+		{
+			name:       "default",
+			configVars: map[string]string{"foo": "default_foo"},
+			want:       "default_foo",
+		},
+		{
+			name:       "overridden",
+			configVars: map[string]string{"foo": "default_foo"},
+			flagVars:   map[string]string{"foo": "overridden_foo"},
+			want:       "overridden_foo",
+		},
+	}
+	for i := range data {
+		i := i
+		t.Run(data[i].name, func(t *testing.T) {
+			t.Parallel()
+			root := t.TempDir()
+			main := "ctx-var-value.star"
+			copyFile(t, root, filepath.Join("testdata", main))
+			r := reportPrint{reportNoPrint: reportNoPrint{t: t}}
+			o := Options{
+				Report: &r,
+				Dir:    root,
+				Vars:   data[i].flagVars,
+				main:   main,
+			}
+
+			config := &Document{}
+			for name, def := range data[i].configVars {
+				config.Vars = append(config.Vars, &Var{
+					Name:        name,
+					Description: "a variable",
+					Default:     def,
+				})
+			}
+			b, err := prototext.Marshal(config)
+			if err != nil {
+				t.Fatal(err)
+			}
+			writeFileBytes(t, root, "shac.textproto", b, 0o600)
+
+			if err = Run(context.Background(), &o); err != nil {
+				t.Fatal(err)
+			}
+			want := fmt.Sprintf("[//ctx-var-value.star:16] %s\n", data[i].want)
+			if diff := cmp.Diff(want, r.b.String()); diff != "" {
+				t.Fatalf("mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
 }
 
 func TestRun_SCM_Raw(t *testing.T) {
@@ -1424,6 +1494,16 @@ func TestTestDataFailOrThrow(t *testing.T) {
 			"  //ctx-scm-all_files-kwarg.star:16:22: in cb\n",
 		},
 		{
+			"ctx-vars-empty.star",
+			"ctx.vars.get: for parameter \"name\": must not be empty",
+			"  //ctx-vars-empty.star:16:17: in cb\n",
+		},
+		{
+			"ctx-vars-invalid.star",
+			"ctx.vars.get: unknown variable \"invalid_var\"",
+			"  //ctx-vars-invalid.star:16:17: in cb\n",
+		},
+		{
 			"empty.star",
 			"did you forget to call shac.register_check?",
 			"",
@@ -1902,7 +1982,7 @@ func TestTestDataPrint(t *testing.T) {
 		},
 		{
 			"dir-ctx.star",
-			"[//dir-ctx.star:16] [\"emit\", \"io\", \"os\", \"platform\", \"re\", \"scm\"]\n",
+			"[//dir-ctx.star:16] [\"emit\", \"io\", \"os\", \"platform\", \"re\", \"scm\", \"vars\"]\n",
 		},
 		{
 			"dir-shac.star",

@@ -114,6 +114,7 @@ Fields:
 - platform
 - re
 - scm
+- vars
 
 ## ctx.emit
 
@@ -413,7 +414,7 @@ shac.register_check(cb)
 
 ### Arguments
 
-* **pattern**: Pegexp to run. The syntax as described at https://golang.org/s/re2syntax.
+* **pattern**: Regexp to run. The syntax as described at https://golang.org/s/re2syntax.
 * **string**: String to run the regexp on.
 
 ### Returns
@@ -452,7 +453,7 @@ a full run on all files.
 ### Example
 
 ```python
-def new_todos(cb):
+def new_todos(ctx):
   # Prints only the TODO that were added compared to upstream.
   for path, meta in ctx.scm.affected_files().items():
     for num, line in meta.new_lines():
@@ -481,7 +482,7 @@ All files are considered "added" or "deleted".
 ### Example
 
 ```python
-def all_todos(cb):
+def all_todos(ctx):
   for path, meta in ctx.scm.all_files().items():
     for num, line in meta.new_lines():
       m = ctx.re.match("TODO\(([^)]+)\).*", line)
@@ -499,6 +500,46 @@ shac.register_check(all_todos)
 
 A map of {path: struct()} where the struct has a string field action and a
 function new_lines().
+
+## ctx.vars
+
+ctx.vars provides access to runtime-configurable variables.
+
+Fields:
+
+- get
+
+## ctx.vars.get
+
+Returns the value of a runtime-configurable variable.
+
+The value may be specified at runtime by using the `--var name=value` flag
+when running shac. In order to be set at runtime, a variable must be
+registered in shac.textproto.
+
+If not set via the command line, the value will be the default declared in
+shac.textproto.
+
+Raises an error if the requested variable is not registered in the project's
+shac.textproto config file.
+
+### Example
+
+```python
+def cb(ctx):
+  build_dir = ctx.vars.get("build_directory")
+  ctx.os.exec([build_dir + "/compiled_tool"]).wait()
+
+shac.register_check(cb)
+```
+
+### Arguments
+
+* **name**: The name of the variable.
+
+### Returns
+
+A string corresponding to the current value of the variable.
 
 ## dir
 

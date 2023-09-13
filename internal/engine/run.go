@@ -175,6 +175,8 @@ type Options struct {
 	Recurse bool
 	// Filter controls which checks run.
 	Filter CheckFilter
+	// Vars contains the user-specified runtime variables and their values.
+	Vars map[string]string
 
 	// main source file to run. Defaults to shac.star. Only used in unit tests.
 	main string
@@ -243,6 +245,17 @@ func Run(ctx context.Context, o *Options) error {
 		scm = &cachingSCM{scm: scm}
 	}
 
+	vars := make(map[string]string)
+	for _, v := range doc.Vars {
+		vars[v.Name] = v.Default
+	}
+	for name, value := range o.Vars {
+		if _, ok := vars[name]; !ok {
+			return fmt.Errorf("var not declared in %s: %s", config, name)
+		}
+		vars[name] = value
+	}
+
 	tmpdir, err := os.MkdirTemp("", "shac")
 	if err != nil {
 		return err
@@ -252,7 +265,7 @@ func Run(ctx context.Context, o *Options) error {
 	if err != nil {
 		return err
 	}
-	err = runInner(ctx, root, tmpdir, main, doc.AllowNetwork, doc.WritableRoot, o, scm, packages)
+	err = runInner(ctx, root, tmpdir, main, doc.AllowNetwork, doc.WritableRoot, o, scm, packages, vars)
 	if err2 := os.RemoveAll(tmpdir); err == nil {
 		err = err2
 	}
@@ -314,7 +327,7 @@ func normalizeFiles(files []string, root string) ([]file, error) {
 	return res, nil
 }
 
-func runInner(ctx context.Context, root, tmpdir, main string, allowNetwork, writableRoot bool, o *Options, scm scmCheckout, packages map[string]fs.FS) error {
+func runInner(ctx context.Context, root, tmpdir, main string, allowNetwork, writableRoot bool, o *Options, scm scmCheckout, packages map[string]fs.FS, vars map[string]string) error {
 	sb, err := sandbox.New(tmpdir)
 	if err != nil {
 		return err
@@ -346,6 +359,7 @@ func runInner(ctx context.Context, root, tmpdir, main string, allowNetwork, writ
 			subdir:       subdir,
 			tmpdir:       filepath.Join(tmpdir, strconv.Itoa(idx)),
 			writableRoot: writableRoot,
+			vars:         vars,
 		}
 	}
 	var shacStates []*shacState
@@ -491,6 +505,8 @@ type shacState struct {
 	// root is the root for the root shac.star that was executed. Native path
 	// style.
 	root string
+	// vars is the map of runtime variables and their values.
+	vars map[string]string
 	// subdir is the relative directory in which this shac.star is located.
 	// Only set when Options.Recurse is set to true. POSIX path style.
 	subdir string
@@ -571,7 +587,7 @@ func (s *shacState) parse(ctx context.Context) error {
 
 // bufferAllChecks adds all the checks to the channel for execution.
 func (s *shacState) bufferAllChecks(ctx context.Context, ch chan<- func() error) {
-	args := starlark.Tuple{getCtx(path.Join(s.root, s.subdir))}
+	args := starlark.Tuple{getCtx(path.Join(s.root, s.subdir), s.vars)}
 	args.Freeze()
 	for i := range s.checks {
 		if s.filter != nil && !s.filter(s.checks[i]) {

@@ -256,6 +256,15 @@ func TestDocument_Validate(t *testing.T) {
 			"",
 		},
 		{
+			"vars: [\n" +
+				"{\n" +
+				"name: \"\"\n" +
+				"default: \"foo\"\n" +
+				"}\n" +
+				"]\n",
+			"vars cannot have empty names",
+		},
+		{
 			"min_shac_version: \"1000\"\n",
 			func() string {
 				return fmt.Sprintf(

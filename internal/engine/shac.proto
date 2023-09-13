@@ -39,6 +39,24 @@ message Document {
   // TODO(olivernewman): Remove this option once named caches and pass-throughs
   // are implemented.
   bool writable_root = 7;
+  repeated Var vars = 8;
+}
+
+// Var specifies a variable that may be passed into checks at runtime by the
+// --var flag and accessed via `ctx.vars.get(name)`.
+//
+// Vars are intentionally limited in usefulness so they can only be used for
+// passing through opaque configuration strings, not for controlling behavior,
+// which would introduce the potential for divergence between environments.
+message Var {
+  // name is the name of the variable, as specified on the command line and as
+  // passed into `ctx.vars.get()`.
+  string name = 1;
+  // desc is an optional description of the meaning of the variable.
+  string description = 2;
+  // default is the default value of the variable. It may be left unspecified,
+  // in which case the default is the empty string.
+  string default = 3;
 }
 
 // Requirements lists all the external dependencies, both direct and transitive

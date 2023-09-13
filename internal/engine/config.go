@@ -117,6 +117,11 @@ func (doc *Document) Validate() error {
 			return fmt.Errorf("vendor_path %s is not clean", doc.VendorPath)
 		}
 	}
+	for _, v := range doc.Vars {
+		if v.Name == "" {
+			return fmt.Errorf("vars cannot have empty names")
+		}
+	}
 	return nil
 }
 
