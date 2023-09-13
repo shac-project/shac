@@ -55,8 +55,7 @@ Constructs a shac check object.
 
 ```python
 def cb(ctx):
-  fail("implement me")
-
+    fail("implement me")
 
 fail_often = shac.check(cb, name="fail_often")
 
@@ -81,7 +80,7 @@ name.
 
 ```python
 def cb(ctx):
-  fail("implement me")
+    fail("implement me")
 
 fail_often = shac.check(cb, name="fail_often")
 
@@ -93,7 +92,7 @@ simple checks. The callback function name will be used as the check name.
 
 ```python
 def fail_often(ctx):
-  fail("implement me")
+    fail("implement me")
 
 shac.register_check(cb, fail_often)
 ```
@@ -135,7 +134,10 @@ A check level finding:
 
 ```python
 def cb(ctx):
-  ctx.emit.finding(level="warning", message="Do not change anything")
+    ctx.emit.finding(
+        level="warning",
+        message="Do not change anything",
+    )
 
 shac.register_check(cb)
 ```
@@ -144,12 +146,12 @@ A finding associated with a specific file:
 
 ```python
 def cb(ctx):
-  for path, _ in ctx.scm.affected_files().items():
-    ctx.emit.finding(
-        level="notice",
-        message="great code",
-        filepath=path,
-    )
+    for path, _ in ctx.scm.affected_files().items():
+        ctx.emit.finding(
+            level="notice",
+            message="great code",
+            filepath=path,
+        )
 
 shac.register_check(cb)
 ```
@@ -158,17 +160,17 @@ A finding associated with a specific line within a file:
 
 ```python
 def cb(ctx):
-  for path, meta in ctx.scm.affected_files().items():
-    for num, line in meta.new_lines():
-      ctx.emit.finding(
-          level="error",
-          message="This line is superfluous",
-          filepath=path,
-          line=num,
-          # Suggesting an empty string as a replacement results in the line
-          # being deleted when applying the replacement.
-          replacements=[""],
-      )
+    for path, meta in ctx.scm.affected_files().items():
+        for num, line in meta.new_lines():
+            ctx.emit.finding(
+                level="error",
+                message="This line is superfluous",
+                filepath=path,
+                line=num,
+                # Suggesting an empty string as a replacement results in the line
+                # being deleted when applying the replacement.
+                replacements=[""],
+            )
 
 shac.register_check(cb)
 ```
@@ -177,20 +179,20 @@ A finding associated with a line and column within a file:
 
 ```python
 def cb(ctx):
-  for path, meta in ctx.scm.affected_files().items():
-    for num, line in meta.new_lines():
-      idx = str.find("bad_word")
-      if idx < 0:
-        continue
-      ctx.emit.finding(
-          level="error",
-          message="Do not use bad_word",
-          filepath=path,
-          line=num,
-          start_col=idx+1,
-          end_col=idx+1+len("bad_word"),
-          replacements=["best_word", "good_word"],
-      )
+    for path, meta in ctx.scm.affected_files().items():
+        for num, line in meta.new_lines():
+            idx = str.find("bad_word")
+            if idx < 0:
+                continue
+            ctx.emit.finding(
+                level="error",
+                message="Do not use bad_word",
+                filepath=path,
+                line=num,
+                start_col=idx+1,
+                end_col=idx+1+len("bad_word"),
+                replacements=["best_word", "good_word"],
+            )
 
 shac.register_check(cb)
 ```
@@ -214,7 +216,7 @@ Emits an artifact from the current check.
 
 ```python
 def cb(ctx):
-  ctx.emit.artifact("result.txt", "fake data")
+    ctx.emit.artifact("result.txt", "fake data")
 
 shac.register_check(cb)
 ```
@@ -242,11 +244,11 @@ Returns the content of a file.
 
 ```python
 def cb(ctx):
-  # Read at most 4Kib of "path/to/file.txt".
-  content = str(ctx.io_read_file("path/to/file.txt", size=4096))
-  # Usually run a regexp via ctx.re.match(), or other simple text
-  # processing.
-  print(content)
+    # Read at most 4Kib of "path/to/file.txt".
+    content = str(ctx.io_read_file("path/to/file.txt", size=4096))
+    # Usually run a regexp via ctx.re.match(), or other simple text
+    # processing.
+    print(content)
 
 shac.register_check(cb)
 ```
@@ -298,8 +300,8 @@ Subprocesses are denied network access by default on Linux. Use
 
 ```python
 def cb(ctx):
-  res = ctx.os.exec(["echo", "hello world"], cwd=".").wait()
-  print(res.stdout)  # "hello world"
+    res = ctx.os.exec(["echo", "hello world"], cwd=".").wait()
+    print(res.stdout)  # "hello world"
 
 shac.register_check(cb)
 ```
@@ -309,9 +311,12 @@ automatically failing the check:
 
 ```python
 def cb(ctx):
-  res = ctx.os.exec(["cat", "does-not-exist.txt"], raise_on_failure = False).wait()
-  print(res.retcode)  # 1
-  print(res.stderr)   # cat: does-not-exist.txt: No such file or directory
+    res = ctx.os.exec(
+        ["cat", "does-not-exist.txt"],
+        raise_on_failure = False,
+    ).wait()
+    print(res.retcode)  # 1
+    print(res.stderr)   # cat: does-not-exist.txt: No such file or directory
 
 shac.register_check(cb)
 ```
@@ -320,7 +325,7 @@ Use `env` to pass environment variables:
 
 ```python
 def cb(ctx):
-  ctx.os.exec(["foo"], env = {"FOO_CONFIG": "foo.config"}).wait()
+    ctx.os.exec(["foo"], env = {"FOO_CONFIG": "foo.config"}).wait()
 
 shac.register_check(cb)
 ```
@@ -380,9 +385,9 @@ Returns all the matches of the regexp pattern onto content.
 
 ```python
 def cb(ctx):
-  content = str(ctx.io_read_file("path/to/file.txt"))
-  for match in ctx.re.allmatches("TODO\(([^)]+)\).*", content):
-    print(match)
+    content = str(ctx.io_read_file("path/to/file.txt"))
+    for match in ctx.re.allmatches("TODO\(([^)]+)\).*", content):
+        print(match)
 
 shac.register_check(cb)
 ```
@@ -404,10 +409,10 @@ Returns the first match of the regexp pattern onto content.
 
 ```python
 def cb(ctx):
-  content = str(ctx.io_read_file("path/to/file.txt"))
-  # Only print the first match, if any.
-  match = ctx.re.match("TODO\(([^)]+)\).*", "content/true")
-  print(match)
+    content = str(ctx.io_read_file("path/to/file.txt"))
+    # Only print the first match, if any.
+    match = ctx.re.match("TODO\(([^)]+)\).*", "content/true")
+    print(match)
 
 shac.register_check(cb)
 ```
@@ -454,11 +459,11 @@ a full run on all files.
 
 ```python
 def new_todos(ctx):
-  # Prints only the TODO that were added compared to upstream.
-  for path, meta in ctx.scm.affected_files().items():
-    for num, line in meta.new_lines():
-      m = ctx.re.match("TODO\(([^)]+)\).*", line)
-      print(path + "(" + str(num) + "): " + m.groups[0])
+    # Prints only the TODO that were added compared to upstream.
+    for path, meta in ctx.scm.affected_files().items():
+        for num, line in meta.new_lines():
+            m = ctx.re.match("TODO\(([^)]+)\).*", line)
+            print(path + "(" + str(num) + "): " + m.groups[0])
 
 shac.register_check(new_todos)
 ```
@@ -483,10 +488,10 @@ All files are considered "added" or "deleted".
 
 ```python
 def all_todos(ctx):
-  for path, meta in ctx.scm.all_files().items():
-    for num, line in meta.new_lines():
-      m = ctx.re.match("TODO\(([^)]+)\).*", line)
-      print(path + "(" + str(num) + "): " + m.groups[0])
+    for path, meta in ctx.scm.all_files().items():
+        for num, line in meta.new_lines():
+            m = ctx.re.match("TODO\(([^)]+)\).*", line)
+            print(path + "(" + str(num) + "): " + m.groups[0])
 
 shac.register_check(all_todos)
 ```
@@ -527,8 +532,8 @@ shac.textproto config file.
 
 ```python
 def cb(ctx):
-  build_dir = ctx.vars.get("build_directory")
-  ctx.os.exec([build_dir + "/compiled_tool"]).wait()
+    build_dir = ctx.vars.get("build_directory")
+    ctx.os.exec([build_dir + "/compiled_tool"]).wait()
 
 shac.register_check(cb)
 ```
@@ -554,23 +559,23 @@ https://github.com/google/starlark-go/blob/HEAD/doc/spec.md#dir.
 
 ```python
 def print_attributes(name, obj):
-  for attrname in dir(obj):
-    attrval = getattr(obj, attrname)
-    attrtype = type(attrval)
-    fullname = name + "." + attrname
-    if attrtype in ("builtin_function_or_method", "function"):
-      print(fullname + "()")
-    elif attrtype == "struct":
-      print_attributes(fullname, attrval)
-    else:
-      print(fullname + "=" + repr(attrval))
+    for attrname in dir(obj):
+      attrval = getattr(obj, attrname)
+      attrtype = type(attrval)
+      fullname = name + "." + attrname
+      if attrtype in ("builtin_function_or_method", "function"):
+          print(fullname + "()")
+      elif attrtype == "struct":
+          print_attributes(fullname, attrval)
+      else:
+          print(fullname + "=" + repr(attrval))
 
 def cb(ctx):
-  print_attributes("ctx", ctx)
-  print_attributes("str", "")
-  print_attributes("dict", {})
-  print_attributes("set", set())
-  print_attributes("struct", struct(foo = "bar", p = print_attributes))
+    print_attributes("ctx", ctx)
+    print_attributes("str", "")
+    print_attributes("dict", {})
+    print_attributes("set", set())
+    print_attributes("struct", struct(foo = "bar", p = print_attributes))
 
 shac.register_check(cb)
 ```
@@ -610,11 +615,11 @@ The check will be annotated with the abnormal failure:
 
 ```python
 def cb1(ctx):
-  fail("implement me")
+    fail("implement me")
 
 def cb2(ctx):
-  # This check may or may not run, depending on concurrency.
-  pass
+    # This check may or may not run, depending on concurrency.
+    pass
 
 shac.register_check(cb1)
 shac.register_check(cb2)
@@ -658,10 +663,10 @@ data = json.decode('{"foo":"bar}')
 print(data["foo"])
 
 def cb(ctx):
-  # Load a configuration from a json file in the tree, containing a
-  # dict with a "version" key.
-  decoded = ctx.io.read_file("config.json")
-  print(decoded["version"])
+    # Load a configuration from a json file in the tree, containing a
+    # dict with a "version" key.
+    decoded = ctx.io.read_file("config.json")
+    print(decoded["version"])
 
 shac.register_check(cb)
 ```
@@ -682,7 +687,7 @@ See the full documentation at https://bazel.build/rules/lib/json#encode.
 
 ```python
 config = struct(
-  foo = "bar",
+    foo = "bar",
 )
 print(json.encode(config))
 ```
@@ -701,7 +706,7 @@ See the full documentation at https://bazel.build/rules/lib/json#indent.
 
 ```python
 config = struct(
-  foo = "bar",
+    foo = "bar",
 )
 d = json.encode(config)
 print(json.indent(d))
@@ -819,11 +824,11 @@ instance.
 
 ```python
 def _do():
-  print("it works")
+    print("it works")
 
 obj = struct(
-  value = "a value",
-  do = _do,
+    value = "a value",
+    do = _do,
 )
 
 print(obj.value)
