@@ -503,6 +503,11 @@ func (g *gitCheckout) allFiles(ctx context.Context, includeDeleted bool) ([]file
 	// Paths are returned in POSIX style even on Windows.
 	// TODO(maruel): Extract more information.
 	o := g.run(ctx, "ls-files", "-z", "--cached", "--others", "--exclude-standard")
+	if g.err != nil {
+		// If an error occurred on this command or an earlier one, then the
+		// ls-files output may not be parseable and we should exit early.
+		return nil, g.err
+	}
 	items := strings.Split(o[:len(o)-1], "\x00")
 	all := make([]file, 0, len(items))
 	for _, path := range items {
@@ -555,6 +560,9 @@ func (g *gitCheckout) newLines(ctx context.Context, f file) (starlark.Value, err
 	}
 	o := g.run(ctx, "diff", "--no-prefix", "-C", "-U0", "--no-ext-diff", "--irreversible-delete", g.upstream.hash, "--", f.rootedpath())
 	if o == "" {
+		if g.err != nil {
+			return nil, g.err
+		}
 		// TODO(maruel): This is not normal. For now fallback to the whole file.
 		v, err := newLinesWhole(g.checkoutRoot, f.rootedpath())
 		if err != nil {
