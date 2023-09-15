@@ -280,12 +280,18 @@ func ctxOsExec(ctx context.Context, s *shacState, name string, args starlark.Tup
 		return nil, fmt.Errorf("for parameter \"cmd\": got %s, want sequence of str", argcmd.Type())
 	}
 
-	// nsjail doesn't do $PATH-based resolution of the command it's given. Do
-	// this resolution unconditionally for consistency across platforms even
-	// though it's not necessary when not using nsjail. This also ensures that
-	// relative file paths are interpreted relative to the root directory,
-	// rather than the directory from which shac is run.
-	if !filepath.IsAbs(fullCmd[0]) {
+	if filepath.IsAbs(fullCmd[0]) {
+		// Stat to make sure the entrypoint executable exists rather than
+		// letting nsjail fail, for consistency with the non-absolute path case.
+		if _, err = os.Stat(fullCmd[0]); err != nil {
+			return nil, err
+		}
+	} else {
+		// nsjail doesn't do $PATH-based resolution of the command it's given.
+		// Do this resolution unconditionally for consistency across platforms
+		// even though it's not necessary when not using nsjail. This also
+		// ensures that relative file paths are interpreted relative to the root
+		// directory, rather than the directory from which shac is run.
 		absPath := filepath.Join(s.root, s.subdir, fullCmd[0])
 		if _, err = os.Stat(absPath); err != nil {
 			// exec.LookPath() doesn't do $PATH-based lookup for paths
