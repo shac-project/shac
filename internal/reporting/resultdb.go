@@ -38,6 +38,8 @@ import (
 
 const (
 	resultSinkMaxBatchSize = 500
+	// https://source.chromium.org/chromium/infra/infra/+/main:go/src/go.chromium.org/luci/resultdb/pbutil/test_result.go;l=40;drc=1eaf63ee80de3e7de3139800ebe7d0d5497a42e2
+	resultDBMaxSummaryHTMLLength = 4 * 1024
 	// https://source.chromium.org/chromium/infra/infra/+/main:go/src/go.chromium.org/luci/resultdb/pbutil/test_result.go;l=41;drc=1eaf63ee80de3e7de3139800ebe7d0d5497a42e2
 	resultDBMaxFailureReasonLength = 1024
 )
@@ -150,10 +152,10 @@ func (l *luci) CheckCompleted(ctx context.Context, check string, start time.Time
 	r := l.getTestResult(check)
 	r.StartTime = timestamppb.New(start)
 	r.Duration = durationpb.New(d)
+	truncationNotice := "... (truncated)"
 	if err != nil {
 		r.Status = resultpb.TestStatus_CRASH
 		msg := err.Error()
-		truncationNotice := "... (truncated)"
 		if len(msg) > resultDBMaxFailureReasonLength {
 			msg = msg[:resultDBMaxFailureReasonLength-len(truncationNotice)]
 			msg = msg + truncationNotice
@@ -164,6 +166,11 @@ func (l *luci) CheckCompleted(ctx context.Context, check string, start time.Time
 	} else {
 		r.Status = resultpb.TestStatus_PASS
 		r.Expected = true
+	}
+	if len(r.SummaryHtml) > resultDBMaxSummaryHTMLLength {
+		// TODO(olivernewman): Be careful not to truncate in the middle of an
+		// HTML tag.
+		r.SummaryHtml = r.SummaryHtml[:resultDBMaxSummaryHTMLLength-len(truncationNotice)] + truncationNotice
 	}
 	// TODO(maruel): Tag r.Tags with "shac".
 	l.mu.Lock()

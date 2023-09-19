@@ -87,6 +87,10 @@ func TestResultDBReporter(t *testing.T) {
 	startTime := time.Now().Add(-time.Minute)
 	r.CheckCompleted(
 		ctx, "passing-check", startTime, time.Second, engine.Notice, nil)
+	msg := "found an issue"
+	for i := 0; i <= resultDBMaxSummaryHTMLLength; i += len(msg) {
+		r.EmitFinding(ctx, "failing-check", engine.Error, msg, "", "foo.py", engine.Span{}, nil)
+	}
 	r.CheckCompleted(
 		ctx, "failing-check", startTime.Add(5*time.Second), 2*time.Second, engine.Error, nil)
 	r.CheckCompleted(
@@ -118,6 +122,10 @@ func TestResultDBReporter(t *testing.T) {
 					Status:    resultpb.TestStatus_FAIL,
 					StartTime: timestamppb.New(startTime.Add(5 * time.Second)),
 					Duration:  durationpb.New(2 * time.Second),
+					SummaryHtml: strings.Repeat(
+						fmt.Sprintf("[failing-check/error] foo.py: %s<br>", msg),
+						86,
+					)[:resultDBMaxSummaryHTMLLength-15] + "... (truncated)",
 				},
 				{
 					TestId:        "shac/crashing-check",
