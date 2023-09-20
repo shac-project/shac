@@ -22,16 +22,18 @@ import (
 )
 
 type commandBase struct {
-	cwd       string
-	allFiles  bool
-	noRecurse bool
-	vars      stringMapFlag
+	cwd        string
+	allFiles   bool
+	entryPoint string
+	noRecurse  bool
+	vars       stringMapFlag
 }
 
 func (c *commandBase) SetFlags(f *flag.FlagSet) {
 	f.StringVarP(&c.cwd, "cwd", "C", ".", "directory in which to run shac")
 	f.BoolVar(&c.allFiles, "all", false, "checks all the files instead of guess the upstream to diff against")
 	f.BoolVar(&c.noRecurse, "no-recurse", false, "do not look for shac.star files recursively")
+	f.StringVar(&c.entryPoint, "entrypoint", engine.DefaultEntryPoint, "basename of Starlark files to run")
 	c.vars = stringMapFlag{}
 	f.Var(&c.vars, "var", "runtime variables to set, of the form key=value")
 }
@@ -41,10 +43,11 @@ func (c *commandBase) options(files []string) (engine.Options, error) {
 		return engine.Options{}, errors.New("--all cannot be set together with positional file arguments")
 	}
 	return engine.Options{
-		Dir:      c.cwd,
-		AllFiles: c.allFiles,
-		Files:    files,
-		Recurse:  !c.noRecurse,
-		Vars:     c.vars,
+		Dir:        c.cwd,
+		AllFiles:   c.allFiles,
+		Files:      files,
+		Recurse:    !c.noRecurse,
+		Vars:       c.vars,
+		EntryPoint: c.entryPoint,
 	}, nil
 }

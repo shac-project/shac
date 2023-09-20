@@ -59,6 +59,10 @@ type Cursor struct {
 	_ struct{}
 }
 
+// DefaultEntryPoint is the default basename of Starlark files to search for and
+// run.
+const DefaultEntryPoint = "shac.star"
+
 var errEmptyIgnore = errors.New("ignore fields cannot be empty strings")
 
 // Span represents a section in a source file or a change description.
@@ -177,9 +181,9 @@ type Options struct {
 	Filter CheckFilter
 	// Vars contains the user-specified runtime variables and their values.
 	Vars map[string]string
+	// EntryPoint is the main source file to run. Defaults to shac.star.
+	EntryPoint string
 
-	// main source file to run. Defaults to shac.star. Only used in unit tests.
-	main string
 	// config is the configuration file. Defaults to shac.textproto. Only used in
 	// unit tests.
 	config string
@@ -203,12 +207,12 @@ func runInner(ctx context.Context, o *Options, tmpdir string) error {
 	if err != nil {
 		return err
 	}
-	main := o.main
-	if main == "" {
-		main = "shac.star"
+	entryPoint := o.EntryPoint
+	if entryPoint == "" {
+		entryPoint = DefaultEntryPoint
 	}
-	if filepath.IsAbs(main) {
-		return errors.New("main file must not be an absolute path")
+	if filepath.IsAbs(entryPoint) {
+		return errors.New("entrypoint file must not be an absolute path")
 	}
 	config := o.config
 	if config == "" {
@@ -297,7 +301,7 @@ func runInner(ctx context.Context, o *Options, tmpdir string) error {
 			allowNetwork: doc.AllowNetwork,
 			env:          &env,
 			filter:       o.Filter,
-			main:         main,
+			entryPoint:   entryPoint,
 			r:            o.Report,
 			root:         root,
 			sandbox:      sb,
@@ -324,7 +328,7 @@ func runInner(ctx context.Context, o *Options, tmpdir string) error {
 		// discover shac.star files when files to analyze are specified on the
 		// command line, since `git ls-files` is slow on large repositories.
 		if v, ok := scm.(overridesShacFileDirs); ok {
-			subdirs, err = v.shacFileDirs(main)
+			subdirs, err = v.shacFileDirs(entryPoint)
 			if err != nil {
 				return err
 			}
@@ -335,14 +339,14 @@ func runInner(ctx context.Context, o *Options, tmpdir string) error {
 			}
 			for _, f := range files {
 				n := f.rootedpath()
-				if filepath.Base(n) == main {
+				if filepath.Base(n) == entryPoint {
 					subdir := strings.ReplaceAll(filepath.Dir(n), "\\", "/")
 					subdirs = append(subdirs, subdir)
 				}
 			}
 		}
 		if len(subdirs) == 0 {
-			return fmt.Errorf("no %s files found", main)
+			return fmt.Errorf("no %s files found", entryPoint)
 		}
 		for i, s := range subdirs {
 			shacStates = append(shacStates, newState(scm, s, i))
@@ -502,7 +506,7 @@ type shacState struct {
 	r            Report
 	allowNetwork bool
 	writableRoot bool
-	main         string
+	entryPoint   string
 	// root is the root for the root shac.star that was executed. Native path
 	// style.
 	root string
@@ -574,7 +578,7 @@ func (s *shacState) parse(ctx context.Context) error {
 		pos := th.CallFrame(1).Pos
 		s.r.Print(ctx, "", pos.Filename(), int(pos.Line), msg)
 	}
-	p := path.Join(s.subdir, s.main)
+	p := path.Join(s.subdir, s.entryPoint)
 	if _, err := s.env.load(ctx, sourceKey{orig: p, pkg: "__main__", relpath: p}, pi); err != nil {
 		var evalErr *starlark.EvalError
 		if errors.As(err, &evalErr) {

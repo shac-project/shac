@@ -59,16 +59,16 @@ func TestRun_Fail(t *testing.T) {
 			}(),
 		},
 		{
-			"absolute main path",
+			"absolute entrypoint path",
 			Options{
-				main: func() string {
+				EntryPoint: func() string {
 					if runtime.GOOS == "windows" {
 						return "c:\\invalid"
 					}
 					return "/dev/null"
 				}(),
 			},
-			"main file must not be an absolute path",
+			"entrypoint file must not be an absolute path",
 		},
 		{
 			"malformed config file",
@@ -371,7 +371,7 @@ func TestRun_SpecificFiles_Fail(t *testing.T) {
 		t.Run(data[i].name, func(t *testing.T) {
 			t.Parallel()
 			r := reportPrint{reportNoPrint: reportNoPrint{t: t}}
-			o := Options{Report: &r, Dir: root, main: "shac.star", Files: data[i].files}
+			o := Options{Report: &r, Dir: root, EntryPoint: "shac.star", Files: data[i].files}
 			err := Run(context.Background(), &o)
 			if err == nil {
 				t.Fatalf("Expected error: %q", data[i].wantErr)
@@ -454,7 +454,7 @@ func TestRun_Ignore(t *testing.T) {
 		}))
 
 		r := reportPrint{reportNoPrint: reportNoPrint{t: t}}
-		o := Options{Report: &r, Dir: root, AllFiles: false, main: "shac.star"}
+		o := Options{Report: &r, Dir: root, AllFiles: false, EntryPoint: "shac.star"}
 		err := Run(context.Background(), &o)
 		if err == nil {
 			t.Fatal("Expected empty ignore field to be rejected")
@@ -494,10 +494,10 @@ func TestRun_Vars(t *testing.T) {
 			copyFile(t, root, filepath.Join("testdata", main))
 			r := reportPrint{reportNoPrint: reportNoPrint{t: t}}
 			o := Options{
-				Report: &r,
-				Dir:    root,
-				Vars:   data[i].flagVars,
-				main:   main,
+				Report:     &r,
+				Dir:        root,
+				Vars:       data[i].flagVars,
+				EntryPoint: main,
 			}
 
 			config := &Document{}
@@ -959,7 +959,7 @@ func TestRun_SCM_Git_Broken(t *testing.T) {
 	}
 	// Git reports paths separated with "/" even on Windows.
 	dotGit = strings.ReplaceAll(dotGit, string(os.PathSeparator), "/")
-	o := Options{Report: &reportNoPrint{t: t}, Dir: root, main: "ctx-scm-affected_files.star"}
+	o := Options{Report: &reportNoPrint{t: t}, Dir: root, EntryPoint: "ctx-scm-affected_files.star"}
 	if err = Run(context.Background(), &o); err == nil {
 		t.Fatal("expected error")
 	}
@@ -1635,7 +1635,7 @@ func TestTestDataFailOrThrow(t *testing.T) {
 		i := i
 		t.Run(data[i].name, func(t *testing.T) {
 			t.Parallel()
-			o := Options{Report: &reportNoPrint{t: t}, Dir: root, main: data[i].name}
+			o := Options{Report: &reportNoPrint{t: t}, Dir: root, EntryPoint: data[i].name}
 			err := Run(context.Background(), &o)
 			if err == nil {
 				t.Fatal("expecting an error")
@@ -1841,7 +1841,7 @@ func TestTestDataEmit(t *testing.T) {
 		t.Run(data[i].name, func(t *testing.T) {
 			t.Parallel()
 			r := reportEmitNoPrint{reportNoPrint: reportNoPrint{t: t}}
-			o := Options{Report: &r, Dir: root, main: data[i].name, config: "../config/valid.textproto"}
+			o := Options{Report: &r, Dir: root, EntryPoint: data[i].name, config: "../config/valid.textproto"}
 			err := Run(context.Background(), &o)
 			if data[i].err != "" {
 				if err == nil {
@@ -2084,7 +2084,7 @@ func TestRun_Vendored(t *testing.T) {
 // testStarlarkPrint test a starlark file that calls print().
 func testStarlarkPrint(t testing.TB, root, name string, all bool, want string, files ...string) {
 	r := reportPrint{reportNoPrint: reportNoPrint{t: t}}
-	o := Options{Report: &r, Dir: root, AllFiles: all, main: name, Files: files}
+	o := Options{Report: &r, Dir: root, AllFiles: all, EntryPoint: name, Files: files}
 	if err := Run(context.Background(), &o); err != nil {
 		t.Helper()
 		t.Fatal(err)

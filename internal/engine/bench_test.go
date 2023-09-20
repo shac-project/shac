@@ -59,7 +59,7 @@ func BenchmarkCtxEmitFinding(b *testing.B) {
 	copyFile(b, root, "testdata/bench/ctx-emit-finding.star")
 	copyFile(b, root, "testdata/bench/file.txt")
 	r := reportEmitNoPrint{reportNoPrint: reportNoPrint{t: b}}
-	o := Options{Report: &r, Dir: root, main: "ctx-emit-finding.star"}
+	o := Options{Report: &r, Dir: root, EntryPoint: "ctx-emit-finding.star"}
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -76,7 +76,7 @@ func BenchmarkCtxEmitArtifact(b *testing.B) {
 	copyFile(b, root, "testdata/bench/ctx-emit-artifact.star")
 	copyFile(b, root, "testdata/bench/file.txt")
 	r := reportEmitNoPrint{reportNoPrint: reportNoPrint{t: b}}
-	o := Options{Report: &r, Dir: root, main: "ctx-emit-artifact.star"}
+	o := Options{Report: &r, Dir: root, EntryPoint: "ctx-emit-artifact.star"}
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -144,7 +144,7 @@ func BenchmarkCtxScmNewLines_Raw(b *testing.B) {
 // benchStarlarkPrint benchmarks a starlark file that calls print().
 func benchStarlarkPrint(b *testing.B, root, name string, all bool, want string) {
 	r := reportPrint{reportNoPrint: reportNoPrint{t: b}}
-	o := Options{Report: &r, Dir: root, AllFiles: all, main: name}
+	o := Options{Report: &r, Dir: root, AllFiles: all, EntryPoint: name}
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {

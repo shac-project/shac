@@ -123,9 +123,9 @@ func TestFix(t *testing.T) {
 			}
 
 			o := Options{
-				Dir:    root,
-				main:   data[i].name,
-				config: "../config/valid.textproto",
+				Dir:        root,
+				EntryPoint: data[i].name,
+				config:     "../config/valid.textproto",
 			}
 			if err := Fix(context.Background(), &o, true); err != nil {
 				t.Fatal(err)
