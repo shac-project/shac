@@ -22,6 +22,17 @@ load("//checks/check_doc.star", "check_docs")
 load("//checks/go.star", "gofmt", "gosec", "ineffassign", "no_fork_without_lock", "shadow", "staticcheck")
 load("//checks/licenses.star", "check_license_headers")
 
+def suggest_version_bump(ctx):
+    affected_files = set(ctx.scm.affected_files())
+    if any([f.endswith(".go") and not f.endswith("_test.go") for f in affected_files]):
+        version_file = "internal/engine/version.go"
+        if "internal/engine/version.go" not in affected_files:
+            ctx.emit.finding(
+                level = "notice",
+                message = "Consider updating the shac version when making API changes.",
+                filepath = version_file,
+            )
+
 def _is_todo_valid(ctx, s):
     """Returns True if the x part of "TODO(x): y" is valid."""
 
@@ -68,3 +79,4 @@ shac.register_check(new_todos)
 shac.register_check(no_fork_without_lock)
 shac.register_check(shadow)
 shac.register_check(staticcheck)
+shac.register_check(suggest_version_bump)

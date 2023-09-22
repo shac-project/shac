@@ -23,13 +23,6 @@ import (
 	"go.starlark.net/starlark"
 )
 
-var (
-	// Version is the current tool version.
-	//
-	// TODO(maruel): Add proper version, preferably from git tag.
-	Version = [...]int{0, 1, 5}
-)
-
 // getShac returns the global shac object.
 //
 // Make sure to update //doc/stdlib.star whenever this function is modified.
