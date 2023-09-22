@@ -179,7 +179,7 @@ func TestRun_DirOverridden(t *testing.T) {
 		i := i
 		t.Run(data[i].name, func(t *testing.T) {
 			t.Parallel()
-			testStarlarkPrint(t, data[i].dir, "", false, data[i].want)
+			testStarlarkPrint(t, data[i].dir, "", false, false, data[i].want)
 		})
 	}
 }
@@ -266,7 +266,7 @@ func TestRun_SpecificFiles(t *testing.T) {
 					t.Fatal(err)
 				}
 			}()
-			testStarlarkPrint(t, root, data[i].starlarkFile, false, data[i].want, data[i].files...)
+			testStarlarkPrint(t, root, data[i].starlarkFile, false, false, data[i].want, data[i].files...)
 		})
 	}
 
@@ -439,7 +439,7 @@ func TestRun_Ignore(t *testing.T) {
 		i := i
 		t.Run(data[i].name, func(t *testing.T) {
 			t.Parallel()
-			testStarlarkPrint(t, root, data[i].name, false, data[i].want)
+			testStarlarkPrint(t, root, data[i].name, false, false, data[i].want)
 		})
 	}
 
@@ -536,13 +536,13 @@ func TestRun_SCM_Raw(t *testing.T) {
 			"a.txt: \n" +
 			scmStarlarkFiles("") +
 			"\n"
-		testStarlarkPrint(t, root, "ctx-scm-affected_files.star", false, want)
+		testStarlarkPrint(t, root, "ctx-scm-affected_files.star", false, false, want)
 	})
 	t.Run("affected-new_lines", func(t *testing.T) {
 		t.Parallel()
 		want := "[//ctx-scm-affected_files-new_lines.star:33] a.txt\n" +
 			"1: First file\n"
-		testStarlarkPrint(t, root, "ctx-scm-affected_files-new_lines.star", false, want)
+		testStarlarkPrint(t, root, "ctx-scm-affected_files-new_lines.star", false, false, want)
 	})
 	t.Run("all", func(t *testing.T) {
 		t.Parallel()
@@ -550,7 +550,7 @@ func TestRun_SCM_Raw(t *testing.T) {
 			"a.txt: \n" +
 			scmStarlarkFiles("") +
 			"\n"
-		testStarlarkPrint(t, root, "ctx-scm-all_files.star", false, want)
+		testStarlarkPrint(t, root, "ctx-scm-all_files.star", false, false, want)
 	})
 }
 
@@ -611,7 +611,7 @@ func TestRun_SCM_Git_NoUpstream_Pristine(t *testing.T) {
 		}
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			testStarlarkPrint(t, root, data[i].name, data[i].all, data[i].want)
+			testStarlarkPrint(t, root, data[i].name, data[i].all, false, data[i].want)
 		})
 	}
 }
@@ -665,7 +665,7 @@ func TestRun_SCM_Git_NoUpstream_Staged(t *testing.T) {
 		}
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			testStarlarkPrint(t, root, data[i].name, data[i].all, data[i].want)
+			testStarlarkPrint(t, root, data[i].name, data[i].all, false, data[i].want)
 		})
 	}
 }
@@ -705,7 +705,7 @@ func TestRun_SCM_Git_Upstream_Staged(t *testing.T) {
 		i := i
 		t.Run(data[i].name, func(t *testing.T) {
 			t.Parallel()
-			testStarlarkPrint(t, root, data[i].name, false, data[i].want)
+			testStarlarkPrint(t, root, data[i].name, false, false, data[i].want)
 		})
 	}
 }
@@ -823,7 +823,7 @@ func TestRun_SCM_Git_Submodule(t *testing.T) {
 		i := i
 		t.Run(data[i].name, func(t *testing.T) {
 			t.Parallel()
-			testStarlarkPrint(t, root, data[i].name, false, data[i].want)
+			testStarlarkPrint(t, root, data[i].name, false, false, data[i].want)
 		})
 	}
 }
@@ -887,7 +887,7 @@ func TestRun_SCM_DeletedFile(t *testing.T) {
 		i := i
 		t.Run(data[i].name, func(t *testing.T) {
 			t.Parallel()
-			testStarlarkPrint(t, root, data[i].name, false, data[i].want)
+			testStarlarkPrint(t, root, data[i].name, false, false, data[i].want)
 		})
 	}
 }
@@ -938,7 +938,7 @@ func TestRun_SCM_Git_Binary_File(t *testing.T) {
 		}
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			testStarlarkPrint(t, root, data[i].name, data[i].all, data[i].want)
+			testStarlarkPrint(t, root, data[i].name, data[i].all, false, data[i].want)
 		})
 	}
 }
@@ -1549,6 +1549,21 @@ func TestTestDataFailOrThrow(t *testing.T) {
 			"  //load-recurse.star:15:1: in <toplevel>\n",
 		},
 		{
+			"shac-check-with_args-ctx.star",
+			"with_args: \"ctx\" argument cannot be overridden",
+			"  //shac-check-with_args-ctx.star:18:45: in <toplevel>\n",
+		},
+		{
+			"shac-check-with_args-nonexistent_kwarg.star",
+			"with_args: invalid argument \"nonexistent\", must be one of: (foo)",
+			"  //shac-check-with_args-nonexistent_kwarg.star:18:45: in <toplevel>\n",
+		},
+		{
+			"shac-check-with_args-positional_args.star",
+			"with_args: only keyword arguments are allowed",
+			"  //shac-check-with_args-positional_args.star:18:45: in <toplevel>\n",
+		},
+		{
 			"shac-immutable.star",
 			"can't assign to .key field of struct",
 			"  //shac-immutable.star:16:5: in <toplevel>\n",
@@ -1718,7 +1733,7 @@ func TestRun_NetworkSandbox(t *testing.T) {
 			if err := os.Chmod(filepath.Join(root, "http_get.sh"), 0o700); err != nil {
 				t.Fatal(err)
 			}
-			testStarlarkPrint(t, root, "shac.star", false, data[i].want)
+			testStarlarkPrint(t, root, "shac.star", false, false, data[i].want)
 		})
 	}
 }
@@ -1872,20 +1887,21 @@ func TestTestDataPrint(t *testing.T) {
 	p, got := enumDir(t, "print")
 	v := fmt.Sprintf("(%d, %d, %d)", Version[0], Version[1], Version[2])
 	data := []struct {
-		name string
-		want string
+		name        string
+		want        string
+		ignoreOrder bool
 	}{
 		{
-			"ctx-io-read_file-size.star",
-			"[//ctx-io-read_file-size.star:16] {\n  \"key\":\n",
+			name: "ctx-io-read_file-size.star",
+			want: "[//ctx-io-read_file-size.star:16] {\n  \"key\":\n",
 		},
 		{
-			"ctx-io-read_file.star",
-			"[//ctx-io-read_file.star:17] {\"key\": \"value\"}\n",
+			name: "ctx-io-read_file.star",
+			want: "[//ctx-io-read_file.star:17] {\"key\": \"value\"}\n",
 		},
 		{
-			"ctx-io-tempdir.star",
-			func() string {
+			name: "ctx-io-tempdir.star",
+			want: func() string {
 				if runtime.GOOS == "windows" {
 					return "[//ctx-io-tempdir.star:16] \\0\\0\n" +
 						"[//ctx-io-tempdir.star:17] \\0\\1\n" +
@@ -1897,17 +1913,17 @@ func TestTestDataPrint(t *testing.T) {
 			}(),
 		},
 		{
-			"ctx-io-tempfile.star",
-			"[//ctx-io-tempfile.star:18] first\nfile\ncontents\n\n" +
+			name: "ctx-io-tempfile.star",
+			want: "[//ctx-io-tempfile.star:18] first\nfile\ncontents\n\n" +
 				"[//ctx-io-tempfile.star:19] contents\nof\nsecond\nfile\n\n",
 		},
 		{
-			"ctx-os-exec-10Mib.star",
-			"[//ctx-os-exec-10Mib.star:17] 0\n",
+			name: "ctx-os-exec-10Mib.star",
+			want: "[//ctx-os-exec-10Mib.star:17] 0\n",
 		},
 		{
-			"ctx-os-exec-abspath.star",
-			func() string {
+			name: "ctx-os-exec-abspath.star",
+			want: func() string {
 				// TODO(maruel): Decide if we want to do CRLF translation automatically.
 				if runtime.GOOS == "windows" {
 					return "[//ctx-os-exec-abspath.star:17] Hello, world\r\n\n"
@@ -1916,8 +1932,8 @@ func TestTestDataPrint(t *testing.T) {
 			}(),
 		},
 		{
-			"ctx-os-exec-env.star",
-			func() string {
+			name: "ctx-os-exec-env.star",
+			want: func() string {
 				// TODO(maruel): Decide if we want to do CRLF translation automatically.
 				if runtime.GOOS == "windows" {
 					return "[//ctx-os-exec-env.star:24] FOO=foo-value\r\nBAR=bar-value\n"
@@ -1926,12 +1942,12 @@ func TestTestDataPrint(t *testing.T) {
 			}(),
 		},
 		{
-			"ctx-os-exec-parallel.star",
-			strings.Repeat("[//ctx-os-exec-parallel.star:27] Hello, world\n", 10),
+			name: "ctx-os-exec-parallel.star",
+			want: strings.Repeat("[//ctx-os-exec-parallel.star:27] Hello, world\n", 10),
 		},
 		{
-			"ctx-os-exec-relpath.star",
-			func() string {
+			name: "ctx-os-exec-relpath.star",
+			want: func() string {
 				// TODO(maruel): Decide if we want to do CRLF translation automatically.
 				if runtime.GOOS == "windows" {
 					return "[//ctx-os-exec-relpath.star:17] Hello from a nested file\r\n\n"
@@ -1940,8 +1956,8 @@ func TestTestDataPrint(t *testing.T) {
 			}(),
 		},
 		{
-			"ctx-os-exec-stdin.star",
-			"[//ctx-os-exec-stdin.star:30] stdout given NoneType for stdin:\n" +
+			name: "ctx-os-exec-stdin.star",
+			want: "[//ctx-os-exec-stdin.star:30] stdout given NoneType for stdin:\n" +
 				"\n" +
 				"[//ctx-os-exec-stdin.star:30] stdout given string for stdin:\n" +
 				"hello\nfrom\nstdin\nstring\n" +
@@ -1949,75 +1965,88 @@ func TestTestDataPrint(t *testing.T) {
 				"hello\nfrom\nstdin\nbytes\n",
 		},
 		{
-			"ctx-os-exec-success.star",
-			"[//ctx-os-exec-success.star:21] retcode: 0\n" +
+			name: "ctx-os-exec-success.star",
+			want: "[//ctx-os-exec-success.star:21] retcode: 0\n" +
 				"[//ctx-os-exec-success.star:22] stdout: hello from stdout\n" +
 				"[//ctx-os-exec-success.star:23] stderr: hello from stderr\n",
 		},
 		{
-			"ctx-platform.star",
-			"[//ctx-platform.star:16] OS: " + runtime.GOOS + "\n" +
+			name: "ctx-platform.star",
+			want: "[//ctx-platform.star:16] OS: " + runtime.GOOS + "\n" +
 				"[//ctx-platform.star:17] Arch: " + runtime.GOARCH + "\n",
 		},
 		{
-			"ctx-re-allmatches.star",
-			"[//ctx-re-allmatches.star:17] ()\n" +
+			name: "ctx-re-allmatches.star",
+			want: "[//ctx-re-allmatches.star:17] ()\n" +
 				"[//ctx-re-allmatches.star:20] (match(groups = (\"TODO(foo)\",), offset = 4), match(groups = (\"TODO(bar)\",), offset = 14))\n" +
 				"[//ctx-re-allmatches.star:23] (match(groups = (\"anc\", \"n\", \"c\"), offset = 0),)\n",
 		},
 		{
-			"ctx-re-match.star",
-			"[//ctx-re-match.star:17] None\n" +
+			name: "ctx-re-match.star",
+			want: "[//ctx-re-match.star:17] None\n" +
 				"[//ctx-re-match.star:20] match(groups = (\"TODO(foo)\",), offset = 4)\n" +
 				"[//ctx-re-match.star:23] match(groups = (\"anc\", \"n\", \"c\"), offset = 0)\n" +
 				"[//ctx-re-match.star:26] match(groups = (\"a\", None), offset = 0)\n",
 		},
 		{
-			"dir-ctx.star",
-			"[//dir-ctx.star:16] [\"emit\", \"io\", \"os\", \"platform\", \"re\", \"scm\", \"vars\"]\n",
+			name: "dir-ctx.star",
+			want: "[//dir-ctx.star:16] [\"emit\", \"io\", \"os\", \"platform\", \"re\", \"scm\", \"vars\"]\n",
 		},
 		{
-			"dir-shac.star",
-			"[//dir-shac.star:15] [\"check\", \"commit_hash\", \"register_check\", \"version\"]\n",
+			name: "dir-shac.star",
+			want: "[//dir-shac.star:15] [\"check\", \"commit_hash\", \"register_check\", \"version\"]\n",
 		},
 		{
-			"load-diamond_dependency.star",
-			"[//load-diamond_dependency.star:18] i am a constant\n" +
+			name: "load-diamond_dependency.star",
+			want: "[//load-diamond_dependency.star:18] i am a constant\n" +
 				"[//load-diamond_dependency.star:19] i am a constant #2\n",
 		},
 		{
-			"print-shac-version.star",
-			"[//print-shac-version.star:15] " + v + "\n",
+			name: "print-shac-version.star",
+			want: "[//print-shac-version.star:15] " + v + "\n",
 		},
 		{
-			"shac-check.star",
-			"[//shac-check.star:19] str(check): <check hello_world>\n" +
+			name: "shac-check-with_args.star",
+			want: "[//shac-check-with_args.star:33] print_hello_check: <check print_hello>\n" +
+				"[//shac-check-with_args.star:34] print_goodbye_check: <check print_goodbye>\n" +
+				"[//shac-check-with_args.star:35] print_hello_again_check: <check print_hello_again>\n" +
+				"[//shac-check-with_args.star:16] hello again\n" +
+				"[//shac-check-with_args.star:16] goodbye\n" +
+				"[//shac-check-with_args.star:16] hello\n",
+			// Ordering of output lines depends on the order in which checks are
+			// run, which is nondeterministic and doesn't matter for the
+			// purposes of this test.
+			ignoreOrder: true,
+		},
+		{
+			name: "shac-check.star",
+			want: "[//shac-check.star:19] str(check): <check hello_world>\n" +
 				"[//shac-check.star:20] type(check): shac.check\n" +
 				"[//shac-check.star:21] bool(check): True\n" +
 				"[//shac-check.star:26] hashed: set([<check hello_world>])\n",
 		},
 		{
-			"shac-register_check-object.star",
-			"[//shac-register_check-object.star:16] running from a check object\n",
+			name: "shac-register_check-object.star",
+			want: "[//shac-register_check-object.star:16] running from a check object\n",
 		},
 		{
-			"shac-register_check-optional_param.star",
-			"[//shac-register_check-optional_param.star:16] optional_param=\"optional-param-value\"\n",
+			name: "shac-register_check-optional_param.star",
+			want: "[//shac-register_check-optional_param.star:16] optional_param=\"optional-param-value\"\n",
 		},
 		{
-			"shac-register_check.star",
-			"[//shac-register_check.star:16] running\n",
+			name: "shac-register_check.star",
+			want: "[//shac-register_check.star:16] running\n",
 		},
 		{
-			"subprocess.star",
-			"[//subprocess.star:17] str(proc): <subprocess \"echo hello\">\n" +
+			name: "subprocess.star",
+			want: "[//subprocess.star:17] str(proc): <subprocess \"echo hello\">\n" +
 				"[//subprocess.star:18] type(proc): subprocess\n" +
 				"[//subprocess.star:19] bool(proc): True\n" +
 				"[//subprocess.star:20] dir(proc): [\"wait\"]\n",
 		},
 		{
-			"true.star",
-			"[//true.star:15] True\n",
+			name: "true.star",
+			want: "[//true.star:15] True\n",
 		},
 	}
 	want := make([]string, len(data))
@@ -2031,7 +2060,7 @@ func TestTestDataPrint(t *testing.T) {
 		i := i
 		t.Run(data[i].name, func(t *testing.T) {
 			t.Parallel()
-			testStarlarkPrint(t, p, data[i].name, false, data[i].want)
+			testStarlarkPrint(t, p, data[i].name, false, data[i].ignoreOrder, data[i].want)
 		})
 	}
 }
@@ -2069,30 +2098,42 @@ func TestRun_FilesystemSandbox(t *testing.T) {
 		"\n" +
 		"[//ctx-os-exec-filesystem_sandbox.star:21] sandbox_write.sh retcode: 1\n" +
 		"[//ctx-os-exec-filesystem_sandbox.star:22] touch: cannot touch 'file.txt': Read-only file system\n\n"
-	testStarlarkPrint(t, root, "ctx-os-exec-filesystem_sandbox.star", false, want)
+	testStarlarkPrint(t, root, "ctx-os-exec-filesystem_sandbox.star", false, false, want)
 }
 
 func TestRun_Vendored(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 	copyTree(t, dir, "testdata/vendored", nil)
-	testStarlarkPrint(t, dir, "shac.star", false, "[//shac.star:17] True\n")
+	testStarlarkPrint(t, dir, "shac.star", false, false, "[//shac.star:17] True\n")
 }
 
 // Utilities
 
 // testStarlarkPrint test a starlark file that calls print().
-func testStarlarkPrint(t testing.TB, root, name string, all bool, want string, files ...string) {
+func testStarlarkPrint(t testing.TB, root, name string, all bool, ignoreOrder bool, want string, files ...string) {
 	r := reportPrint{reportNoPrint: reportNoPrint{t: t}}
 	o := Options{Report: &r, Dir: root, AllFiles: all, EntryPoint: name, Files: files}
 	if err := Run(context.Background(), &o); err != nil {
 		t.Helper()
 		t.Fatal(err)
 	}
-	if diff := cmp.Diff(want, r.b.String()); diff != "" {
+	got := r.b.String()
+	if ignoreOrder {
+		want = sortLines(want)
+		got = sortLines(got)
+	}
+	if diff := cmp.Diff(want, got); diff != "" {
 		t.Helper()
 		t.Fatalf("mismatch (-want +got):\n%s", diff)
 	}
+}
+
+func sortLines(str string) string {
+	str = strings.TrimSuffix(str, "\n")
+	lines := strings.Split(str, "\n")
+	slices.Sort(lines)
+	return strings.Join(lines, "\n") + "\n"
 }
 
 func enumDir(t *testing.T, name string) (string, []string) {

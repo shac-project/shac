@@ -18,6 +18,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
+	"slices"
 	"strings"
 
 	"go.starlark.net/starlark"
@@ -77,9 +79,10 @@ type check struct {
 	name string
 	// Whether the check is an auto-formatter or not.
 	formatter bool
+	kwargs    []starlark.Tuple
 }
 
-var _ starlark.Value = (*check)(nil)
+var _ starlark.HasAttrs = (*check)(nil)
 
 func (c *check) String() string {
 	return fmt.Sprintf("<check %s>", c.name)
@@ -101,4 +104,91 @@ func (c *check) Hash() (uint32, error) {
 	// starlark.Function.Hash() returns the hash of the function name, so
 	// hashing just the name of the check seems reasonable.
 	return starlark.String(c.name).Hash()
+}
+
+func (c *check) Attr(name string) (starlark.Value, error) {
+	switch name {
+	case "with_args":
+		return checkWithArgsBuiltin.BindReceiver(c), nil
+	case "with_name":
+		return checkWithNameBuiltin.BindReceiver(c), nil
+	default:
+		return nil, nil
+	}
+}
+
+func (c *check) AttrNames() []string {
+	return []string{"with_args", "with_name"}
+}
+
+func (c *check) withName(name string) (starlark.Value, error) {
+	// Make a copy to modify.
+	res := *c
+	res.name = name
+	return &res, nil
+}
+
+func (c *check) withArgs(kwargs []starlark.Tuple) (starlark.Value, error) {
+	// Make a copy to modify.
+	res := *c
+
+	validParams := make([]string, 0, c.impl.NumParams()-1)
+	for i := 1; i < c.impl.NumParams(); i++ {
+		name, _ := c.impl.Param(i)
+		validParams = append(validParams, name)
+	}
+
+	newKwargs := kwargsMap(res.kwargs)
+	for k, v := range kwargsMap(kwargs) {
+		if k == "ctx" {
+			return nil, errors.New("\"ctx\" argument cannot be overridden")
+		}
+		if !slices.Contains(validParams, k) {
+			return nil, fmt.Errorf("invalid argument %q, must be one of: (%s)", k, strings.Join(validParams, ", "))
+		}
+		newKwargs[k] = v
+	}
+
+	res.kwargs = make([]starlark.Tuple, 0, len(newKwargs))
+	for k, v := range newKwargs {
+		res.kwargs = append(res.kwargs, starlark.Tuple{starlark.String(k), v})
+	}
+	return &res, nil
+}
+
+// checkWithArgsBuiltin implements the native function shac.check().with_args().
+//
+// Make sure to update //doc/stdlib.star whenever this function is modified.
+var checkWithArgsBuiltin = newBoundBuiltin("with_args", func(ctx context.Context, s *shacState, name string, self starlark.Value, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+	if len(args) != 0 {
+		return nil, fmt.Errorf("only keyword arguments are allowed")
+	}
+	return self.(*check).withArgs(kwargs)
+})
+
+// checkWithNameBuiltin implements the native function shac.check().with_name().
+//
+// Make sure to update //doc/stdlib.star whenever this function is modified.
+var checkWithNameBuiltin = newBoundBuiltin("with_name", func(ctx context.Context, s *shacState, name string, self starlark.Value, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+	var argname starlark.String
+	if err := starlark.UnpackArgs(name, args, kwargs,
+		"name?", &argname); err != nil {
+		return nil, err
+	}
+	return self.(*check).withName(string(argname))
+})
+
+func kwargsMap(kwargs []starlark.Tuple) map[string]starlark.Value {
+	res := make(map[string]starlark.Value, len(kwargs))
+	for _, item := range kwargs {
+		if len(item) != 2 {
+			log.Panicf("kwargs item does not have length 2: %+v", kwargs)
+		}
+		s, ok := item[0].(starlark.String)
+		if !ok {
+			log.Panicf("kwargs item does not have a string key: %+v", kwargs)
+		}
+		res[string(s)] = item[1]
+	}
+	return res
 }

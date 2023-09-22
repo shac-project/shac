@@ -126,19 +126,20 @@ func builtinWrapper(th *starlark.Thread, name string, f func(ctx context.Context
 	ctx := getContext(th)
 	s := ctxShacState(ctx)
 	val, err := f(ctx, s)
-	// starlark.UnpackArgs already adds the function name prefix to errors
-	// it returns, so make sure not to duplicate the prefix if it's already
-	// there.
-	if err != nil && !strings.HasPrefix(err.Error(), name+": ") {
-		err = fmt.Errorf("%s: %w", name, err)
+	if err != nil {
+		// starlark.UnpackArgs already adds the function name prefix to errors
+		// it returns, so make sure not to duplicate the prefix if it's already
+		// there.
+		if !strings.HasPrefix(err.Error(), name+": ") {
+			err = fmt.Errorf("%s: %w", name, err)
+		}
+		return nil, err
 	}
-	if val != nil {
-		// All values returned by builtins are immutable. This is not a hard
-		// requirement, and can be relaxed if there's a use case for mutable
-		// return values, but it's still a sensible default.
-		val.Freeze()
-	}
-	return val, err
+	// All values returned by builtins are immutable. This is not a hard
+	// requirement, and can be relaxed if there's a use case for mutable
+	// return values, but it's still a sensible default.
+	val.Freeze()
+	return val, nil
 }
 
 func newBuiltinNone(name string, f func(ctx context.Context, s *shacState, name string, args starlark.Tuple, kwargs []starlark.Tuple) error) *starlark.Builtin {

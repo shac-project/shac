@@ -668,7 +668,7 @@ func ctxCheck(ctx context.Context) *registeredCheck {
 func (c *registeredCheck) call(ctx context.Context, env *starlarkEnv, args starlark.Tuple, pi printImpl) error {
 	ctx = context.WithValue(ctx, &checkCtxKey, c)
 	th := env.thread(ctx, c.name, pi)
-	if r, err := starlark.Call(th, c.impl, args, nil); err != nil {
+	if r, err := starlark.Call(th, c.impl, args, c.kwargs); err != nil {
 		if c.failErr != nil {
 			// fail() was called, return this error since this is an abnormal failure.
 			return c.failErr

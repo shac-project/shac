@@ -12,15 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-load("//doc/stdlib.star", doc_ctx = "ctx", doc_shac = "shac")
+load("//doc/stdlib.star", doc_check = "check", doc_ctx = "ctx", doc_shac = "shac")
+
+a_check = shac.check(lambda ctx: None, name = "a_check")
 
 def check_docs(ctx):
-    """Validates that the `ctx` and `shac` structs in //doc/stdlib.star are
-    up-to-date.
+    """Validates that structs in //doc/stdlib.star are up-to-date.
 
-    Specifically, it should (recursively) have all the same fields with all the
-    same types as the `shac` global and the `ctx` object that gets passed to
-    checks.
+    Specifically, documented structs should (recursively) have all the same
+    fields with all the same types as the real objects.
 
     Function signatures are not validated.
 
@@ -28,25 +28,24 @@ def check_docs(ctx):
     Starlark interpreter to get function signatures.
 
     Args:
-      ctx: A ctx instance.
+        ctx: A ctx instance.
     """
-    want = _struct_signature(ctx)
-    got = _struct_signature(doc_ctx)
-    if want != got:
-        ctx.emit.finding(
-            level = "error",
-            message = "stdlib.star needs to be updated. Want:\n%s\nGot:\n%s" % (want, got),
-        )
-    want = _struct_signature(shac)
-    got = _struct_signature(doc_shac)
-    if want != got:
-        ctx.emit.finding(
-            level = "error",
-            message = "stdlib.star needs to be updated. Want:\n%s\nGot:\n%s" % (want, got),
-        )
+    pairs = [
+        (ctx, doc_ctx),
+        (shac, doc_shac),
+        (a_check, doc_check),
+    ]
+    for actual, documented in pairs:
+        want = _struct_signature(actual)
+        got = _struct_signature(documented)
+        if want != got:
+            ctx.emit.finding(
+                level = "error",
+                message = "stdlib.star needs to be updated. Want:\n%s\nGot:\n%s" % (want, got),
+            )
 
 def _struct_signature(s):
-    if type(s) != type(struct()):
+    if type(s) != type(struct()) and not type(s).startswith("shac."):
         # stdlib.star uses dummy functions instead of actual builtin functions, they
         # should be considered equivalent.
         if type(s) == "builtin_function_or_method":

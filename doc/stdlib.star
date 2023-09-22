@@ -104,6 +104,65 @@ shac = struct(
     version = (0, 0, 1),
 )
 
+## Methods on the shac.check object.
+
+def _check_with_args(**kwargs):
+    """Create a copy of the check with keyword arguments overridden.
+
+    Example:
+
+      ```python
+      def cb(ctx, level = "warning"):
+          ctx.emit.finding(
+              level = level,
+              message = "Found an issue",
+          )
+
+      warning_check = shac.check(cb)
+      error_check = warning_check.with_args(level = "error")
+      ```
+
+    Args:
+      **kwargs: Overridden keyword arguments.
+    """
+    pass
+
+def _check_with_name(name):
+    """Create a copy of the check with name overridden.
+
+    Useful for changing the name of checks provided by shared Starlark
+    libraries.
+
+    Example:
+
+      Shared library code:
+
+      ```python
+      def _check_with_bad_name(ctx):
+        pass
+
+      check_with_bad_name = shac.check(_check_with_bad_name)
+      ```
+
+      Downstream code:
+
+      ```
+      load("@library", "check_with_bad_name")
+
+      shac.register_check(check_with_bad_name.with_name("better_name"))
+      ```
+
+    Args:
+      name: The new name of the check.
+    """
+    pass
+
+# check is the object returned by shac.check().
+check = struct(
+    with_args = _check_with_args,
+    with_name = _check_with_name,
+)
+
 ## Methods inside ctx object.
 
 def _ctx_emit_finding(level, message, filepath = None, line = None, col = None, end_line = None, end_col = None, replacements = None):

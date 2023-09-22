@@ -20,6 +20,7 @@ features](https://pkg.go.dev/go.starlark.net/resolve#pkg-variables) are enabled:
 ## Table of contents
 
 - [shac](#shac)
+- [check](#check)
 - [ctx](#ctx)
 - [dir](#dir)
 - [fail](#fail)
@@ -100,6 +101,66 @@ shac.register_check(cb, fail_often)
 ### Arguments
 
 * **check**: `shac.check()` object or Starlark function that is called back to implement the check.
+
+## check
+
+check is the object returned by shac.check().
+
+Fields:
+
+- with_args
+- with_name
+
+## check.with_args
+
+Create a copy of the check with keyword arguments overridden.
+
+### Example
+
+```python
+def cb(ctx, level = "warning"):
+    ctx.emit.finding(
+        level = level,
+        message = "Found an issue",
+    )
+
+warning_check = shac.check(cb)
+error_check = warning_check.with_args(level = "error")
+```
+
+### Arguments
+
+* **\*\*kwargs**: Overridden keyword arguments.
+
+## check.with_name
+
+Create a copy of the check with name overridden.
+
+Useful for changing the name of checks provided by shared Starlark
+libraries.
+
+### Example
+
+Shared library code:
+
+```python
+def _check_with_bad_name(ctx):
+  pass
+
+check_with_bad_name = shac.check(_check_with_bad_name)
+```
+
+Downstream code:
+
+```
+load("@library", "check_with_bad_name")
+
+shac.register_check(check_with_bad_name.with_name("better_name"))
+```
+
+### Arguments
+
+* **name**: The new name of the check.
 
 ## ctx
 
