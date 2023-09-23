@@ -1549,6 +1549,16 @@ func TestTestDataFailOrThrow(t *testing.T) {
 			"  //load-recurse.star:15:1: in <toplevel>\n",
 		},
 		{
+			"shac-check-star_args.star",
+			"shac.check: \"impl\" must not accept *args",
+			"  //shac-check-star_args.star:18:31: in <toplevel>\n",
+		},
+		{
+			"shac-check-star_kwargs.star",
+			"shac.check: \"impl\" must not accept **kwargs",
+			"  //shac-check-star_kwargs.star:18:31: in <toplevel>\n",
+		},
+		{
 			"shac-check-with_args-ctx.star",
 			"with_args: \"ctx\" argument cannot be overridden",
 			"  //shac-check-with_args-ctx.star:18:45: in <toplevel>\n",
@@ -1605,7 +1615,7 @@ func TestTestDataFailOrThrow(t *testing.T) {
 		},
 		{
 			"shac-register_check-multiple_required_args.star",
-			"shac.register_check: \"impl\" can only have one required argument",
+			"shac.register_check: \"impl\" cannot have required arguments besides \"ctx\"",
 			"  //shac-register_check-multiple_required_args.star:18:20: in <toplevel>\n",
 		},
 		{

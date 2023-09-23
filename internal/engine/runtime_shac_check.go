@@ -55,11 +55,27 @@ func newCheck(impl starlark.Callable, name string, formatter bool) (*check, erro
 	if fun.ParamDefault(0) != nil {
 		return nil, errors.New("\"impl\" must not have a default value for the \"ctx\" parameter")
 	}
-	for i := 1; i < fun.NumParams(); i++ {
-		if fun.ParamDefault(i) == nil {
-			return nil, errors.New("\"impl\" can only have one required argument")
-		}
+
+	// Checks should not accept arbitrary positional or keyword arguments. This
+	// restriction can be reconsidered if there turns out to be a valid use
+	// case.
+	if fun.HasVarargs() {
+		return nil, errors.New("\"impl\" must not accept *args")
 	}
+	if fun.HasKwargs() {
+		return nil, errors.New("\"impl\" must not accept **kwargs")
+	}
+
+	// Check impl functions are called internally by shac without any arguments
+	// by default, so they will fail if they have any required arguments.
+	//
+	// It's only necessary to check the first parameter after "ctx" because it's
+	// illegal for any required parameters to come after optional ones, so if
+	// the first parameter is optional then the rest are as well.
+	if fun.NumParams() > 1 && fun.ParamDefault(1) == nil {
+		return nil, errors.New("\"impl\" cannot have required arguments besides \"ctx\"")
+	}
+
 	if name == "" {
 		if fun.Name() == "lambda" {
 			return nil, errors.New("\"name\" must be set when \"impl\" is a lambda")
