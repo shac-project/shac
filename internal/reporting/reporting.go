@@ -22,6 +22,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 
 	"github.com/mattn/go-colorable"
@@ -56,22 +57,62 @@ func Get(ctx context.Context) (*MultiReport, error) {
 	switch {
 	case os.Getenv("GITHUB_RUN_ID") != "":
 		// On GitHub Actions. Emits GitHub Workflows commands.
-		r.Reporters = append(r.Reporters, &github{out: os.Stdout})
+		r.Reporters = append(r.Reporters, &synchronized{r: &github{out: os.Stdout}})
 	case os.Getenv("TERM") != "dumb" && isatty.IsTerminal(os.Stderr.Fd()):
 		// Active terminal. Colors! This includes VSCode's integrated terminal.
-		r.Reporters = append(r.Reporters, &interactive{
+		r.Reporters = append(r.Reporters, &synchronized{r: &interactive{
 			out: colorable.NewColorableStdout(),
-		})
+		}})
 	case os.Getenv("VSCODE_GIT_IPC_HANDLE") != "":
 		// VSCode extension.
 		// TODO(maruel): Return SARIF.
-		r.Reporters = append(r.Reporters, &basic{out: os.Stdout})
+		r.Reporters = append(r.Reporters, &synchronized{r: &basic{out: os.Stdout}})
 	default:
 		// Anything else, e.g. redirected output.
-		r.Reporters = append(r.Reporters, &basic{out: os.Stdout})
+		r.Reporters = append(r.Reporters, &synchronized{r: &basic{out: os.Stdout}})
 	}
 
 	return r, nil
+}
+
+// synchronized wraps a Report object and adds synchronization of calls to
+// ensure that checks cannot emit potentially multi-line data simultaneously.
+// For example, we don't want two checks to simultaneously emit multi-line
+// chunks of output to the command line and have those chunks of output be
+// interleaved.
+//
+// It should be used to wrap any reporter that writes to stdout.
+type synchronized struct {
+	r  Report
+	mu sync.Mutex
+}
+
+func (s *synchronized) Close() error {
+	return s.r.Close()
+}
+
+func (s *synchronized) EmitFinding(ctx context.Context, check string, level engine.Level, message, root, file string, span engine.Span, replacements []string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.r.EmitFinding(ctx, check, level, message, root, file, span, replacements)
+}
+
+func (s *synchronized) EmitArtifact(ctx context.Context, check, root, file string, content []byte) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.r.EmitArtifact(ctx, check, root, file, content)
+}
+
+func (s *synchronized) CheckCompleted(ctx context.Context, check string, start time.Time, d time.Duration, level engine.Level, err error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.r.CheckCompleted(ctx, check, start, d, level, err)
+}
+
+func (s *synchronized) Print(ctx context.Context, check, file string, line int, message string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.r.Print(ctx, check, file, line, message)
 }
 
 type basic struct {
