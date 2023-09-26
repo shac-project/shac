@@ -24,21 +24,29 @@ import (
 	"strings"
 )
 
+func (doc *Document) CheckVersion() error {
+	if doc.MinShacVersion == "" {
+		return nil
+	}
+	v := parseVersion(doc.MinShacVersion)
+	if v == nil || len(v) > len(Version) {
+		return errors.New("min_shac_version is invalid")
+	}
+	for i := range v {
+		if v[i] > Version[i] {
+			return fmt.Errorf("min_shac_version specifies unsupported version %q, running %s", doc.MinShacVersion, Version)
+		}
+		if v[i] < Version[i] {
+			break
+		}
+	}
+	return nil
+}
+
 // Validate verifies a shac.textproto document is valid.
 func (doc *Document) Validate() error {
-	if doc.MinShacVersion != "" {
-		v := parseVersion(doc.MinShacVersion)
-		if v == nil || len(v) > len(Version) {
-			return errors.New("min_shac_version is invalid")
-		}
-		for i := range v {
-			if v[i] > Version[i] {
-				return fmt.Errorf("min_shac_version specifies unsupported version %q, running %d.%d.%d", doc.MinShacVersion, Version[0], Version[1], Version[2])
-			}
-			if v[i] < Version[i] {
-				break
-			}
-		}
+	if err := doc.CheckVersion(); err != nil {
+		return err
 	}
 	deps := map[string]string{}
 	aliases := map[string]struct{}{}

@@ -222,7 +222,20 @@ func runInner(ctx context.Context, o *Options, tmpdir string) error {
 	var b []byte
 	doc := Document{}
 	if b, err = os.ReadFile(p); err == nil {
-		if err = prototext.Unmarshal(b, &doc); err != nil {
+		// First parse the config file ignoring unknown fields and check only
+		// min_shac_version, so users get an "unsupported version" error if they
+		// set fields that are only available in a later version of shac (as
+		// long as min_shac_version is set appropriately).
+		opts := prototext.UnmarshalOptions{DiscardUnknown: true}
+		if err = opts.Unmarshal(b, &doc); err != nil {
+			return err
+		}
+		if err = doc.CheckVersion(); err != nil {
+			return err
+		}
+		// Parse the config file again, failing on any unknown fields.
+		opts.DiscardUnknown = false
+		if err = opts.Unmarshal(b, &doc); err != nil {
 			return err
 		}
 	} else if !errors.Is(err, fs.ErrNotExist) {
@@ -693,16 +706,4 @@ func (c *registeredCheck) call(ctx context.Context, env *starlarkEnv, args starl
 		}
 	}
 	return err
-}
-
-func parseVersion(s string) []int {
-	var out []int
-	for _, x := range strings.Split(s, ".") {
-		i, err := strconv.Atoi(x)
-		if err != nil {
-			return nil
-		}
-		out = append(out, i)
-	}
-	return out
 }

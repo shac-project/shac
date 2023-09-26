@@ -14,9 +14,33 @@
 
 package engine
 
+import (
+	"fmt"
+	"strconv"
+	"strings"
+)
+
+type shacVersion [3]int
+
 var (
 	// Version is the current tool version.
 	//
 	// TODO(maruel): Add proper version, preferably from git tag.
-	Version = [...]int{0, 1, 7}
+	Version = shacVersion{0, 1, 8}
 )
+
+func (v shacVersion) String() string {
+	return fmt.Sprintf("%d.%d.%d", v[0], v[1], v[2])
+}
+
+func parseVersion(s string) []int {
+	var out []int
+	for _, x := range strings.Split(s, ".") {
+		i, err := strconv.Atoi(x)
+		if err != nil {
+			return nil
+		}
+		out = append(out, i)
+	}
+	return out
+}

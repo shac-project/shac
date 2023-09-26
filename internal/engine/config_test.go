@@ -268,10 +268,8 @@ func TestDocument_Validate(t *testing.T) {
 			"min_shac_version: \"1000\"\n",
 			func() string {
 				return fmt.Sprintf(
-					"min_shac_version specifies unsupported version \"1000\", running %d.%d.%d",
-					Version[0],
-					Version[1],
-					Version[2],
+					"min_shac_version specifies unsupported version \"1000\", running %s",
+					Version,
 				)
 			}(),
 		},

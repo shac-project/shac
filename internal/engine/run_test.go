@@ -80,8 +80,34 @@ func TestRun_Fail(t *testing.T) {
 					Dir: root,
 				}
 			}(),
-			// The encoding is not deterministic.
-			"...: unknown field: bad",
+			//
+			"...unexpected EOF",
+		},
+		{
+			"config file with unknown field",
+			func() Options {
+				root := t.TempDir()
+				writeFile(t, root, "shac.star", ``)
+				writeFile(t, root, "shac.textproto", "unknown_field: true\n")
+				return Options{
+					Dir: root,
+				}
+			}(),
+			"...unknown field: unknown_field",
+		},
+		{
+			"config file with newer min_shac_version and unknown field",
+			func() Options {
+				root := t.TempDir()
+				writeFile(t, root, "shac.star", ``)
+				writeFile(t, root, "shac.textproto",
+					"min_shac_version: \"2000\"\n"+
+						"unknown_field: true\n")
+				return Options{
+					Dir: root,
+				}
+			}(),
+			fmt.Sprintf("min_shac_version specifies unsupported version \"2000\", running %s", Version),
 		},
 		{
 			"no shac.star file",
