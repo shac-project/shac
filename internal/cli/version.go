@@ -38,10 +38,6 @@ func (*versionCmd) SetFlags(f *flag.FlagSet) {
 }
 
 func (*versionCmd) Execute(ctx context.Context, args []string) error {
-	_, err := fmt.Fprintf(os.Stdout, "shac v%d.%d.%d\n",
-		engine.Version[0],
-		engine.Version[1],
-		engine.Version[2],
-	)
+	_, err := fmt.Fprintf(os.Stdout, "shac v%s\n", engine.Version)
 	return err
 }

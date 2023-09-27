@@ -27,7 +27,11 @@ require (
 	golang.org/x/mod v0.11.0
 	golang.org/x/sync v0.3.0
 	golang.org/x/tools v0.7.0
-	google.golang.org/protobuf v1.30.0
+	// Pinned to a non-tagged version to get commit
+	// https://github.com/protocolbuffers/protobuf-go/commit/6352deccdb59bcc074db0ab49f4d8ba8f3cdb7ee
+	// TODO(olivernewman): Switch back to using a tagged version after the first
+	// release containing 6352deccdb59bcc074db0ab49f4d8ba8f3cdb7ee.
+	google.golang.org/protobuf v1.31.1-0.20230927161544-6352deccdb59
 )
 
 require (

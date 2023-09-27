@@ -15,7 +15,7 @@
 # TODO(olivernewman): Build github.com/protocolbuffers/txtpbfmt into shac and
 # enforce formatting of shac.textproto files in all repos that use shac.
 
-min_shac_version: "0.1.7"
+min_shac_version: "0.1.9"
 allow_network: False
 ignore: "/vendor/"
 # Vendored code for test data only.
