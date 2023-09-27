@@ -138,7 +138,6 @@ func (s nsjailSandbox) Command(ctx context.Context, config *Config) *exec.Cmd {
 	}
 	args = append(args, "--")
 	args = append(args, config.Cmd...)
-	//#nosec G204
 	return exec.CommandContext(ctx, s.nsjailPath, args...)
 }
 

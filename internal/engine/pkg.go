@@ -193,7 +193,7 @@ func (p *PackageManager) ensureGitPkg(ctx context.Context, url, version string, 
 	}
 
 	parentdir := filepath.Dir(depdir)
-	if err = os.MkdirAll(parentdir, 0o777); err != nil {
+	if err = os.MkdirAll(parentdir, 0o700); err != nil {
 		return nil, err
 	}
 	if err = p.gitCommand(ctx, parentdir, "clone", fullURL, filepath.Base(depdir)); err != nil {

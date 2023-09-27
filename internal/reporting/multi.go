@@ -43,14 +43,14 @@ func (t *MultiReport) EmitArtifact(ctx context.Context, check, root, file string
 }
 
 func (t *MultiReport) CheckCompleted(ctx context.Context, check string, start time.Time, d time.Duration, level engine.Level, err error) {
-	t.do(func(r Report) error {
+	_ = t.do(func(r Report) error {
 		r.CheckCompleted(ctx, check, start, d, level, err)
 		return nil
 	})
 }
 
 func (t *MultiReport) Print(ctx context.Context, check, file string, line int, message string) {
-	t.do(func(r Report) error {
+	_ = t.do(func(r Report) error {
 		r.Print(ctx, check, file, line, message)
 		return nil
 	})

@@ -199,7 +199,7 @@ func ctxOsExec(ctx context.Context, s *shacState, name string, args starlark.Tup
 			// Ignore errors during cleanup because cleanupFuncs will only be
 			// populated if another error occurred prior to starting the
 			// subprocess.
-			f()
+			_ = f()
 		}
 	}()
 

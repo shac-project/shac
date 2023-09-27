@@ -41,7 +41,14 @@ def _gofmt(ctx, simplify = True):
 
 gofmt = shac.check(_gofmt, formatter = True)
 
-def _gosec(ctx, version = "v2.15.0", level = "error"):
+def _gosec(ctx, version = "v2.15.0", level = "error", exclude = [
+    # shac checks are allowed to run arbitrary subprocesses, so it's common for
+    # shac's source code to run non-constant subcommands.
+    "G204",
+    # shac checks are allowed to read arbitrary files, so it's common for shac's
+    # source code to read non-constant files.
+    "G304",
+]):
     """Runs gosec on a Go code base.
 
     See https://github.com/securego/gosec for more details.
@@ -52,29 +59,43 @@ def _gosec(ctx, version = "v2.15.0", level = "error"):
         be rolled from time to time.
       level: level at which issues should be emitted.
     """
+    affected_files = set(ctx.scm.affected_files())
     exe = go_install(ctx, "github.com/securego/gosec/v2/cmd/gosec", version)
-    res = ctx.os.exec([exe, "-fmt=json", "-quiet", "-exclude=G304", "-exclude-dir=.tools", "./..."], raise_on_failure = False).wait()
-    if res.retcode:
-        # Schema is https://pkg.go.dev/github.com/securego/gosec/v2#ReportInfo
-        d = json.decode(res.stdout)
-        o = len(ctx.scm.root) + 1
-        for file, data in d["Golang errors"]:
+    res = ctx.os.exec(
+        [exe, "-fmt=json", "-quiet", "-exclude=%s" % ",".join(exclude), "-exclude-dir=.tools", "./..."],
+        ok_retcodes = (0, 1),
+        env = go_env(ctx, "gosec"),
+    ).wait()
+    if not res.retcode:
+        return
+
+    # Schema is https://pkg.go.dev/github.com/securego/gosec/v2#ReportInfo
+    d = json.decode(res.stdout)
+    o = len(ctx.scm.root) + 1
+    for file, errs in d["Golang errors"].items():
+        filepath = file[o:]
+        if filepath not in affected_files:
+            continue
+        for e in errs:
             ctx.emit.finding(
                 level = "error",
-                message = i["error"],
-                filepath = file[o:],
-                line = int(i["line"]),
-                col = int(i["column"]),
+                message = e["error"],
+                filepath = filepath,
+                line = int(e["line"]),
+                col = int(e["column"]),
             )
-        for i in d["Issues"]:
-            line = i["line"].split("-")[0]
-            ctx.emit.finding(
-                level = level,
-                message = i["rule_id"] + ": " + i["details"],
-                filepath = i["file"][o:],
-                line = int(line),
-                col = int(i["column"]),
-            )
+    for i in d["Issues"]:
+        line = i["line"].split("-")[0]
+        filepath = i["file"][o:]
+        if filepath not in affected_files:
+            continue
+        ctx.emit.finding(
+            level = level,
+            message = i["rule_id"] + ": " + i["details"],
+            filepath = filepath,
+            line = int(line),
+            col = int(i["column"]),
+        )
 
 gosec = shac.check(_gosec)
 

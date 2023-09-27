@@ -63,7 +63,7 @@ func (c *checkCmd) Execute(ctx context.Context, files []string) error {
 	}
 
 	if c.jsonOutput != "" {
-		if err2 := os.WriteFile(c.jsonOutput, buf.Bytes(), 0o666); err == nil {
+		if err2 := os.WriteFile(c.jsonOutput, buf.Bytes(), 0o600); err == nil {
 			err = err2
 		}
 	}

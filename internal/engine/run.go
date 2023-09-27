@@ -576,8 +576,7 @@ func (s *shacState) parseAndBuffer(ctx context.Context, ch chan<- func() error) 
 		return errors.New("did you forget to call shac.register_check?")
 	}
 	// Last phase where checks are called.
-	s.bufferAllChecks(ctx, ch)
-	return nil
+	return s.bufferAllChecks(ctx, ch)
 }
 
 // parse parses a single shac.star file.
@@ -604,8 +603,12 @@ func (s *shacState) parse(ctx context.Context) error {
 }
 
 // bufferAllChecks adds all the checks to the channel for execution.
-func (s *shacState) bufferAllChecks(ctx context.Context, ch chan<- func() error) {
-	args := starlark.Tuple{getCtx(path.Join(s.root, s.subdir), s.vars)}
+func (s *shacState) bufferAllChecks(ctx context.Context, ch chan<- func() error) error {
+	shacCtx, err := getCtx(path.Join(s.root, s.subdir), s.vars)
+	if err != nil {
+		return err
+	}
+	args := starlark.Tuple{shacCtx}
 	args.Freeze()
 	for i := range s.checks {
 		if s.filter != nil && !s.filter(s.checks[i]) {
@@ -631,6 +634,7 @@ func (s *shacState) bufferAllChecks(ctx context.Context, ch chan<- func() error)
 			return err
 		}
 	}
+	return nil
 }
 
 func (s *shacState) newTempDir() (string, error) {
@@ -699,10 +703,10 @@ func (c *registeredCheck) call(ctx context.Context, env *starlarkEnv, args starl
 	var err error
 	for _, proc := range c.subprocesses {
 		if !proc.waitCalled {
-			proc.cleanup()
 			if err == nil {
 				err = fmt.Errorf("wait() was not called on %s", proc.String())
 			}
+			_ = proc.cleanup()
 		}
 	}
 	return err

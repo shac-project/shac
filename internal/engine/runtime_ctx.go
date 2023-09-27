@@ -23,10 +23,12 @@ import (
 // getCtx returns the ctx object to pass to a registered check callback.
 //
 // Make sure to update //doc/stdlib.star whenever this function is modified.
-func getCtx(root string, vars map[string]string) starlark.Value {
+func getCtx(root string, vars map[string]string) (starlark.Value, error) {
 	starlarkVars := starlark.NewDict(len(vars))
 	for k, v := range vars {
-		starlarkVars.SetKey(starlark.String(k), starlark.String(v))
+		if err := starlarkVars.SetKey(starlark.String(k), starlark.String(v)); err != nil {
+			return nil, err
+		}
 	}
 	return toValue("ctx", starlark.StringDict{
 		// Implemented in runtime_ctx_emit.go
@@ -61,5 +63,5 @@ func getCtx(root string, vars map[string]string) starlark.Value {
 		"vars": toValue("ctx.vars", starlark.StringDict{
 			"get": newBuiltin("ctx.vars.get", ctxVarsGet),
 		}),
-	})
+	}), nil
 }
