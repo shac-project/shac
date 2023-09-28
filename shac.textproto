@@ -15,7 +15,7 @@
 # TODO(olivernewman): Build github.com/protocolbuffers/txtpbfmt into shac and
 # enforce formatting of shac.textproto files in all repos that use shac.
 
-min_shac_version: "0.1.9"
+min_shac_version: "0.1.10"
 allow_network: False
 ignore: "/vendor/"
 # Vendored code for test data only.
@@ -30,5 +30,23 @@ vars: [
         name: "example_var"
         description: "An example runtime variable, not used anywhere"
         default: "foo"
+    }
+]
+passthrough_env: [
+    {
+        # Provide Go commands access to the Go cache to speed up compilation.
+        name: "GOCACHE",
+        is_path: true
+        writeable: true
+    },
+    {
+        # The Go cache directory is computed based on $HOME in the absence of
+        # $GOCACHE.
+        # TODO(olivernewman): Implement support for constructing pass-throughs
+        # using Starlark, and pass through the value returned by `go env
+        # GOCACHE` instead of all of $HOME.
+        name: "HOME",
+        is_path: true
+        writeable: true
     }
 ]

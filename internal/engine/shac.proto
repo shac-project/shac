@@ -40,6 +40,8 @@ message Document {
   // are implemented.
   bool writable_root = 7;
   repeated Var vars = 8;
+  // Environment variables to pass through the sandbox.
+  repeated PassthroughEnv passthrough_env = 9;
 }
 
 // Var specifies a variable that may be passed into checks at runtime by the
@@ -57,6 +59,18 @@ message Var {
   // default is the default value of the variable. It may be left unspecified,
   // in which case the default is the empty string.
   string default = 3;
+}
+
+// PassthroughEnv specifies an environment variable that should be passed
+// through into the sandbox.
+message PassthroughEnv {
+  // The name of the environment variable, e.g. "FOO".
+  string name = 1;
+  // Whether the environment variable's value is a file path that sandboxed
+  // processes should be granted access to.
+  bool is_path = 2;
+  // If is_path is true, whether to mount the file/directory as writeable.
+  bool writeable = 3;
 }
 
 // Requirements lists all the external dependencies, both direct and transitive

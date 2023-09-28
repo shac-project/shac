@@ -19,7 +19,6 @@ def cb(ctx):
 def _go_env(ctx):
     return {
         "CGO_ENABLED": "0",
-        "GOCACHE": ctx.io.tempdir() + "/gocache",
         "GOPACKAGESDRIVER": "off",
         # Explicitly set GOROOT to prevent warnings about GOROOT and GOPATH being
         # equal when they're both empty.

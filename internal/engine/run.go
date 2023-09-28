@@ -218,10 +218,13 @@ func runInner(ctx context.Context, o *Options, tmpdir string) error {
 	if config == "" {
 		config = "shac.textproto"
 	}
-	p := filepath.Join(root, config)
+	absConfig := config
+	if !filepath.IsAbs(absConfig) {
+		absConfig = filepath.Join(root, absConfig)
+	}
 	var b []byte
 	doc := Document{}
-	if b, err = os.ReadFile(p); err == nil {
+	if b, err = os.ReadFile(absConfig); err == nil {
 		// First parse the config file ignoring unknown fields and check only
 		// min_shac_version, so users get an "unsupported version" error if they
 		// set fields that are only available in a later version of shac (as
@@ -301,6 +304,9 @@ func runInner(ctx context.Context, o *Options, tmpdir string) error {
 		packages: packages,
 	}
 
+	if entryPoint == "ctx-os-exec-10Mib-exceed.star" {
+		fmt.Println(doc)
+	}
 	newState := func(scm scmCheckout, subdir string, idx int) *shacState {
 		if subdir != "" {
 			normalized := subdir + "/"
@@ -311,18 +317,19 @@ func runInner(ctx context.Context, o *Options, tmpdir string) error {
 			scm = &subdirSCM{s: scm, subdir: normalized}
 		}
 		return &shacState{
-			allowNetwork: doc.AllowNetwork,
-			env:          &env,
-			filter:       o.Filter,
-			entryPoint:   entryPoint,
-			r:            o.Report,
-			root:         root,
-			sandbox:      sb,
-			scm:          scm,
-			subdir:       subdir,
-			tmpdir:       filepath.Join(tmpdir, strconv.Itoa(idx)),
-			writableRoot: doc.WritableRoot,
-			vars:         vars,
+			allowNetwork:   doc.AllowNetwork,
+			env:            &env,
+			filter:         o.Filter,
+			entryPoint:     entryPoint,
+			r:              o.Report,
+			root:           root,
+			sandbox:        sb,
+			scm:            scm,
+			subdir:         subdir,
+			tmpdir:         filepath.Join(tmpdir, strconv.Itoa(idx)),
+			writableRoot:   doc.WritableRoot,
+			vars:           vars,
+			passthroughEnv: doc.PassthroughEnv,
 		}
 	}
 	var shacStates []*shacState
@@ -542,7 +549,8 @@ type shacState struct {
 	// mutated. They run checks and emit results (results and comments).
 	checks []registeredCheck
 	// filter controls which checks run. If nil, all checks will run.
-	filter CheckFilter
+	filter         CheckFilter
+	passthroughEnv []*PassthroughEnv
 
 	// Set when fail() is called. This happens only during the first phase, thus
 	// no mutex is needed.

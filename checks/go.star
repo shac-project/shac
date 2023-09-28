@@ -64,7 +64,7 @@ def _gosec(ctx, version = "v2.15.0", level = "error", exclude = [
     res = ctx.os.exec(
         [exe, "-fmt=json", "-quiet", "-exclude=%s" % ",".join(exclude), "-exclude-dir=.tools", "./..."],
         ok_retcodes = (0, 1),
-        env = go_env(ctx, "gosec"),
+        env = go_env(),
     ).wait()
     if not res.retcode:
         return
@@ -112,7 +112,7 @@ def _ineffassign(ctx, version = "v0.0.0-20230107090616-13ace0543b28"):
     exe = go_install(ctx, "github.com/gordonklaus/ineffassign", version)
     res = ctx.os.exec(
         [exe, "./..."],
-        env = go_env(ctx, "ineffassign"),
+        env = go_env(),
         # ineffassign's README claims that it emits a retcode of 1 if it returns any
         # findings, but it actually emits a retcode of 3.
         # https://github.com/gordonklaus/ineffassign/blob/4cc7213b9bc8b868b2990c372f6fa057fa88b91c/ineffassign.go#L70
@@ -143,8 +143,7 @@ def _staticcheck(ctx, version = "v0.4.3"):
       will be rolled from time to time.
     """
     exe = go_install(ctx, "honnef.co/go/tools/cmd/staticcheck", version)
-    env = go_env(ctx, "staticcheck")
-    env["STATICCHECK_CACHE"] = env["GOCACHE"]
+    env = go_env()
     res = ctx.os.exec(
         [exe, "-f=json", "./..."],
         ok_retcodes = [0, 1],
@@ -193,7 +192,7 @@ def _shadow(ctx, version = "v0.7.0"):
             "-json",
             "./...",
         ],
-        env = go_env(ctx, "shadow"),
+        env = go_env(),
     ).wait()
 
     # Example output:
@@ -242,7 +241,7 @@ def no_fork_without_lock(ctx):
             "-json",
             "./...",
         ],
-        env = go_env(ctx, "no_fork_without_lock"),
+        env = go_env(),
     ).wait().stdout)
 
     # Skip the "execsupport" package since it contains the wrappers around Run()

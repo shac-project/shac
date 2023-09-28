@@ -143,7 +143,6 @@ def no_trailing_whitespace(ctx):
                     # End column is exclusive.
                     end_col = len(line) + 1,
                     message = "Delete trailing whitespace.",
-                    replacements = [""],
                 )
 
 shac.register_check(no_trailing_whitespace)
@@ -276,6 +275,8 @@ Planned features/changes, in descending order by priority:
 - [ ] Built-in formatting of Starlark files
 - [ ] Configurable "pass-throughs" - non-default environment variables and
       mounts that can optionally be passed through to the sandbox
+  - [x] Passed-through environment variables statically declared in
+     shac.textproto
 - [ ] Add `glob` arguments to `ctx.scm.{all,affected}_files()` functions for
       easier filtering
 - [ ] Filesystem sandboxing on MacOS

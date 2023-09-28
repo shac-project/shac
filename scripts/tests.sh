@@ -39,12 +39,14 @@ if ! command -v "go" > /dev/null; then
 fi
 
 echo "- Testing with coverage"
-go test -cover ./...
-
-echo ""
-echo "- Benchmarks"
-go test -bench=. -run=^$ -cpu 1 ./...
+go test -count=1 -cover ./...
 
 echo ""
 echo "- Running 'shac check'"
 go run . check -v
+
+# Benchmarks are the slowest step, so run them last in case the user only cares
+# about previous steps and wants to ctrl-C.
+echo ""
+echo "- Benchmarks"
+go test -count=1 -benchtime=200ms -bench=. -run=^$ -cpu 1 ./...

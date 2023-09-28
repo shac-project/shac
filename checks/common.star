@@ -14,21 +14,27 @@
 
 def go_install(ctx, pkg, version):
     """Runs `go install`."""
-    tool_name = pkg.split("/")[-1]
-    env = go_env(ctx, tool_name)
+
+    env = go_env()
+
+    # TODO(olivernewman): Implement proper cache directories for shac instead of
+    # creating a `.tools` directory, which requires making the root directory
+    # writable.
+    env["GOBIN"] = ctx.scm.root + "/.tools/gobin"
+
+    # TODO(olivernewman): Stop using a separate GOPATH for each tool, and instead
+    # install the tools sequentially. Multiple concurrent `go install` runs on the
+    # same GOPATH results in race conditions.
     ctx.os.exec(
         ["go", "install", "%s@%s" % (pkg, version)],
         allow_network = True,
         env = env,
     ).wait()
 
+    tool_name = pkg.split("/")[-1]
     return "%s/%s" % (env["GOBIN"], tool_name)
 
-def go_env(ctx, key):
-    # TODO(olivernewman): Stop using a separate GOPATH for each tool, and instead
-    # install the tools sequentially. Multiple concurrent `go install` runs on the
-    # same GOPATH results in race conditions.
-    gopath = "%s/.tools/gopath/%s" % (ctx.scm.root, key)
+def go_env():
     return {
         # Disable cgo as it's not necessary and not all development platforms have
         # the necessary headers.
@@ -38,11 +44,6 @@ def go_env(ctx, key):
             # to fail on some machines.
             "-buildvcs=false",
         ]),
-        "GOPATH": gopath,
-        "GOBIN": "%s/bin" % gopath,
-        # Cache within the directory to avoid writing to $HOME/.cache.
-        # TODO(olivernewman): Implement named caches.
-        "GOCACHE": "%s/.tools/gocache" % ctx.scm.root,
         # TODO(olivernewman): The default gopackagesdriver is broken within an
         # nsjail.
         "GOPACKAGESDRIVER": "off",

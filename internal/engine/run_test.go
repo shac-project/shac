@@ -16,6 +16,7 @@ package engine
 
 import (
 	"context"
+	"crypto/md5"
 	"errors"
 	"fmt"
 	"io"
@@ -548,6 +549,89 @@ func TestRun_Vars(t *testing.T) {
 				t.Fatalf("mismatch (-want +got):\n%s", diff)
 			}
 		})
+	}
+}
+
+func TestRun_PassthroughEnv(t *testing.T) {
+	hash := fmt.Sprintf("%x", md5.Sum([]byte(t.Name())))
+
+	varPrefix := "TEST_" + hash + "_"
+	nonFileVarname := varPrefix + "VAR"
+	readOnlyDirVarname := varPrefix + "RO_DIR"
+	writeableDirVarname := varPrefix + "WRITEABLE_DIR"
+	env := map[string]string{
+		nonFileVarname:      "this is not a file",
+		readOnlyDirVarname:  filepath.Join(t.TempDir(), "readonly"),
+		writeableDirVarname: filepath.Join(t.TempDir(), "writeable"),
+	}
+	mkdirAll(t, env[readOnlyDirVarname])
+	mkdirAll(t, env[writeableDirVarname])
+
+	for k, v := range env {
+		t.Setenv(k, v)
+	}
+
+	config := &Document{
+		PassthroughEnv: []*PassthroughEnv{
+			{
+				Name: nonFileVarname,
+			},
+			{
+				Name:   readOnlyDirVarname,
+				IsPath: true,
+			},
+			{
+				Name:      writeableDirVarname,
+				IsPath:    true,
+				Writeable: true,
+			},
+			{
+				// Additionally give access to HOME, which contains the
+				// Go cache, so checks that run `go run` can use cached
+				// artifacts.
+				Name:      "HOME",
+				IsPath:    true,
+				Writeable: true,
+			},
+		},
+		Vars: []*Var{{Name: "VAR_PREFIX"}},
+	}
+	root := t.TempDir()
+	writeFile(t, root, "shac.textproto", prototext.Format(config))
+
+	main := "ctx-os-exec-passthrough_env.star"
+	copyFile(t, root, filepath.Join("testdata", main))
+	copyFile(t, root, filepath.Join("testdata", "ctx-os-exec-passthrough_env.go"))
+
+	r := reportPrint{reportNoPrint: reportNoPrint{t: t}}
+	o := Options{
+		Report:     &r,
+		Dir:        root,
+		EntryPoint: main,
+		Vars:       map[string]string{"VAR_PREFIX": varPrefix},
+	}
+
+	const filesystemSandboxed = runtime.GOOS == "linux" && (runtime.GOARCH == "amd64" || runtime.GOARCH == "arm64")
+
+	wantLines := []string{
+		"[//ctx-os-exec-passthrough_env.star:25] non-file env var: this is not a file",
+		"read-only dir env var: " + env[readOnlyDirVarname],
+		"writeable dir env var: " + env[writeableDirVarname],
+		"able to write to writeable dir",
+	}
+	if filesystemSandboxed {
+		wantLines = append(wantLines, fmt.Sprintf(
+			"error writing to read-only dir: open %s: read-only file system",
+			filepath.Join(env[readOnlyDirVarname], "foo.txt")))
+	} else {
+		wantLines = append(wantLines, "able to write to read-only dir")
+	}
+
+	if err := Run(context.Background(), &o); err != nil {
+		t.Fatal(err)
+	}
+	if diff := cmp.Diff(strings.Join(wantLines, "\n")+"\n", r.b.String()); diff != "" {
+		t.Fatalf("mismatch (-want +got):\n%s", diff)
 	}
 }
 

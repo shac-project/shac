@@ -237,6 +237,22 @@ func ctxOsExec(ctx context.Context, s *shacState, name string, args starlark.Tup
 			env["PATH"],
 		}, string(os.PathListSeparator))
 	}
+
+	var passthroughMounts []sandbox.Mount
+	for _, pte := range s.passthroughEnv {
+		val, ok := os.LookupEnv(pte.Name)
+		if !ok {
+			continue
+		}
+		env[pte.Name] = val
+		if pte.IsPath {
+			passthroughMounts = append(passthroughMounts, sandbox.Mount{
+				Path:     val,
+				Writable: pte.Writeable,
+			})
+		}
+	}
+
 	for _, item := range argenv.Items() {
 		k, ok := item[0].(starlark.String)
 		if !ok {
@@ -342,6 +358,7 @@ func ctxOsExec(ctx context.Context, s *shacState, name string, args starlark.Tup
 			// this executable.
 			{Path: filepath.Dir(tempDir), Writable: true},
 		}
+		config.Mounts = append(config.Mounts, passthroughMounts...)
 
 		// TODO(olivernewman): This is necessary because checks for shac itself
 		// assume Go is pre-installed. Switch to a hermetic Go installation that

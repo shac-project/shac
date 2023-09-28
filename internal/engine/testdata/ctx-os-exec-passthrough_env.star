@@ -13,26 +13,24 @@
 # limitations under the License.
 
 def cb(ctx):
-    cmd = ["go", "run", "ctx-os-exec-stdin.go"]
-    test_inputs = [
-        None,
-        "hello\nfrom\nstdin\nstring",
-        bytes("hello\nfrom\nstdin\nbytes"),
-    ]
-
-    procs = []
-    for stdin in test_inputs:
-        procs.append(ctx.os.exec(cmd, env = _go_env(ctx), stdin = stdin))
-
-    for i, proc in enumerate(procs):
-        res = proc.wait()
-        stdin = test_inputs[i]
-        print("stdout given %s for stdin:\n%s" % (type(stdin), res.stdout))
+    res = ctx.os.exec(
+        [
+            "go",
+            "run",
+            "ctx-os-exec-passthrough_env.go",
+            ctx.vars.get("VAR_PREFIX"),
+        ],
+        env = _go_env(ctx),
+    ).wait()
+    print(res.stdout.rstrip())
 
 def _go_env(ctx):
     return {
         "CGO_ENABLED": "0",
         "GOPACKAGESDRIVER": "off",
+        # Explicitly set GOROOT to prevent warnings about GOROOT and GOPATH being
+        # equal when they're both empty.
+        "GOROOT": ctx.os.exec(["go", "env", "GOROOT"]).wait().stdout.strip(),
     }
 
 shac.register_check(cb)
