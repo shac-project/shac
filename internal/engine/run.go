@@ -304,9 +304,6 @@ func runInner(ctx context.Context, o *Options, tmpdir string) error {
 		packages: packages,
 	}
 
-	if entryPoint == "ctx-os-exec-10Mib-exceed.star" {
-		fmt.Println(doc)
-	}
 	newState := func(scm scmCheckout, subdir string, idx int) *shacState {
 		if subdir != "" {
 			normalized := subdir + "/"
