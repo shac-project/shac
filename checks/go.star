@@ -262,3 +262,62 @@ def no_fork_without_lock(ctx):
                     col = int(match.groups[3]),
                     message = finding["message"],
                 )
+
+def govet(
+        ctx,
+        # `go vet` has a lot of overlap with other linters, only include
+        # analyzers that aren't enforced by the other linters.
+        analyzers = [
+            "copylocks",
+        ]):
+    """Checks that exec.Command Start() and Run() aren't called directly.
+
+    Instead, callers should use the `execsupport` package, which provides appropriate
+    locks to make sure forks are safe.
+
+    Args:
+      ctx: A ctx instance.
+      analyzers: Names of analyzers to run (run `go tool vet help` to see all
+        options).
+    """
+    output = ctx.os.exec(
+        [
+            "go",
+            "vet",
+            "-json",
+        ] +
+        ["-" + a for a in analyzers] +
+        ["./..."],
+        env = go_env(),
+    ).wait().stderr
+
+    # output is of the form:
+    # # pkg1
+    # {}
+    # # pkg2
+    # {
+    #   ...
+    # }
+    findings_by_package = {}
+    current_package_lines = []
+    lines = output.splitlines()
+    for i, line in enumerate(lines):
+        if not line.startswith("# "):
+            current_package_lines.append(line)
+            if i + 1 < len(lines):
+                continue
+        if current_package_lines:
+            findings_by_package.update(json.decode("\n".join(current_package_lines)))
+            current_package_lines = []
+
+    for pkg_findings in findings_by_package.values():
+        for check_findings in pkg_findings.values():
+            for finding in check_findings:
+                match = ctx.re.match(r"^%s/(.+):(\d+):(\d+)$" % ctx.scm.root, finding["posn"])
+                ctx.emit.finding(
+                    level = "error",
+                    filepath = match.groups[1],
+                    line = int(match.groups[2]),
+                    col = int(match.groups[3]),
+                    message = finding["message"],
+                )
