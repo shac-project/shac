@@ -635,6 +635,36 @@ func TestRun_PassthroughEnv(t *testing.T) {
 	}
 }
 
+func TestRun_Exec_InvalidPATHElements(t *testing.T) {
+	root := t.TempDir()
+
+	writeFile(t, root, "file.txt", "")
+
+	invalidPathElements := []string{
+		filepath.Join(t.TempDir(), "does-not-exist"),
+		"relative/path",
+		"./dot/relative/path",
+		filepath.Join(root, "file.txt"),
+	}
+
+	t.Setenv("PATH", strings.Join(
+		append(invalidPathElements, os.Getenv("PATH")),
+		string(os.PathListSeparator)))
+
+	// No need for a complicated test case, just make sure that the subprocess
+	// launching succeeds. If shac doesn't handle invalid PATH elements
+	// correctly, launching any subprocess should fail, at least on platforms
+	// where filesystem sandboxing is supported.
+	writeFile(t, root, "shac.star", ""+
+		"def cb(ctx):\n"+
+		"    ctx.os.exec([\"true\"]).wait()\n"+
+		"    print(\"success!\")\n"+
+		"shac.register_check(cb)\n")
+
+	want := "[//shac.star:3] success!\n"
+	testStarlarkPrint(t, root, "shac.star", false, false, want)
+}
+
 func TestRun_SCM_Raw(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()

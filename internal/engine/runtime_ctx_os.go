@@ -371,8 +371,14 @@ func ctxOsExec(ctx context.Context, s *shacState, name string, args starlark.Tup
 		// Mount all directories listed in $PATH.
 		for _, p := range strings.Split(env["PATH"], string(os.PathListSeparator)) {
 			// $PATH may contain invalid elements. Filter them out.
+			if !filepath.IsAbs(p) {
+				// Relative paths in $PATH are not allowed.
+				continue
+			}
 			var fi os.FileInfo
 			if fi, err = os.Stat(p); err != nil || !fi.IsDir() {
+				// Skip $PATH elements that don't exist or point to
+				// non-directories.
 				continue
 			}
 			config.Mounts = append(config.Mounts, sandbox.Mount{Path: p})
