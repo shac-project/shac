@@ -270,10 +270,7 @@ def govet(
         analyzers = [
             "copylocks",
         ]):
-    """Checks that exec.Command Start() and Run() aren't called directly.
-
-    Instead, callers should use the `execsupport` package, which provides appropriate
-    locks to make sure forks are safe.
+    """Enforces `go vet`.
 
     Args:
       ctx: A ctx instance.
