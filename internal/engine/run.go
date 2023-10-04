@@ -224,7 +224,9 @@ func runInner(ctx context.Context, o *Options, tmpdir string) error {
 	}
 	var b []byte
 	doc := Document{}
+	configExists := false
 	if b, err = os.ReadFile(absConfig); err == nil {
+		configExists = true
 		// First parse the config file ignoring unknown fields and check only
 		// min_shac_version, so users get an "unsupported version" error if they
 		// set fields that are only available in a later version of shac (as
@@ -277,17 +279,6 @@ func runInner(ctx context.Context, o *Options, tmpdir string) error {
 		scm = &cachingSCM{scm: scm}
 	}
 
-	vars := make(map[string]string)
-	for _, v := range doc.Vars {
-		vars[v.Name] = v.Default
-	}
-	for name, value := range o.Vars {
-		if _, ok := vars[name]; !ok {
-			return fmt.Errorf("var not declared in %s: %s", config, name)
-		}
-		vars[name] = value
-	}
-
 	pkgMgr := NewPackageManager(tmpdir)
 	packages, err := pkgMgr.RetrievePackages(ctx, root, &doc)
 	if err != nil {
@@ -304,7 +295,28 @@ func runInner(ctx context.Context, o *Options, tmpdir string) error {
 		packages: packages,
 	}
 
-	newState := func(scm scmCheckout, subdir string, idx int) *shacState {
+	var vars map[string]string
+
+	newState := func(scm scmCheckout, subdir string, idx int) (*shacState, error) {
+		// Lazy-load vars only once a shac.star file is detected, so that errors
+		// about missing shac.star files are prioritized over var validation
+		// errors.
+		if vars == nil {
+			vars = make(map[string]string)
+			for _, v := range doc.Vars {
+				vars[v.Name] = v.Default
+			}
+			for name, value := range o.Vars {
+				if _, ok := vars[name]; !ok {
+					if configExists {
+						return nil, fmt.Errorf("var not declared in %s: %s", config, name)
+					}
+					return nil, fmt.Errorf("var must be declared in a %s file: %s", config, name)
+				}
+				vars[name] = value
+			}
+		}
+
 		if subdir != "" {
 			normalized := subdir + "/"
 			if subdir == "." {
@@ -327,7 +339,7 @@ func runInner(ctx context.Context, o *Options, tmpdir string) error {
 			writableRoot:   doc.WritableRoot,
 			vars:           vars,
 			passthroughEnv: doc.PassthroughEnv,
-		}
+		}, nil
 	}
 	var shacStates []*shacState
 	if o.Recurse {
@@ -363,13 +375,27 @@ func runInner(ctx context.Context, o *Options, tmpdir string) error {
 			}
 		}
 		if len(subdirs) == 0 {
-			return fmt.Errorf("no %s files found", entryPoint)
+			return fmt.Errorf("no %s files found in %s", entryPoint, root)
 		}
 		for i, s := range subdirs {
-			shacStates = append(shacStates, newState(scm, s, i))
+			state, err := newState(scm, s, i)
+			if err != nil {
+				return err
+			}
+			shacStates = append(shacStates, state)
 		}
 	} else {
-		shacStates = []*shacState{newState(scm, "", 0)}
+		if _, err := os.Stat(filepath.Join(root, entryPoint)); err != nil {
+			if errors.Is(err, fs.ErrNotExist) {
+				return fmt.Errorf("no %s file in repository root: %s", entryPoint, root)
+			}
+			return err
+		}
+		state, err := newState(scm, "", 0)
+		if err != nil {
+			return err
+		}
+		shacStates = []*shacState{state}
 	}
 
 	// Parse the starlark files. Run everything from our errgroup.

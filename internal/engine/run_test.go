@@ -113,19 +113,32 @@ func TestRun_Fail(t *testing.T) {
 		{
 			"no shac.star file",
 			Options{
-				Dir: t.TempDir(),
+				Dir:        scratchDir,
+				EntryPoint: "entrypoint.star",
 			},
-			// TODO(olivernewman): This error should be more specific, like "no
-			// shac.star file found".
-			"shac.star not found",
+			fmt.Sprintf("no entrypoint.star file in repository root: %s", scratchDir),
+		},
+		{
+			"no shac.star file and invalid vars",
+			Options{
+				Dir:        scratchDir,
+				EntryPoint: "entrypoint.star",
+				Vars: map[string]string{
+					"this_is_an_invalid_var": "foo",
+				},
+			},
+			// Missing entrypoint file errors should be prioritized over invalid
+			// var errors.
+			fmt.Sprintf("no entrypoint.star file in repository root: %s", scratchDir),
 		},
 		{
 			"no shac.star files (recursive)",
 			Options{
-				Dir:     t.TempDir(),
-				Recurse: true,
+				Dir:        scratchDir,
+				Recurse:    true,
+				EntryPoint: "entrypoint.star",
 			},
-			"no shac.star files found",
+			fmt.Sprintf("no entrypoint.star files found in %s", scratchDir),
 		},
 		{
 			"nonexistent directory",
@@ -152,6 +165,20 @@ func TestRun_Fail(t *testing.T) {
 				},
 			},
 			"var not declared in shac.textproto: unknown_var",
+		},
+		{
+			"invalid var with no config file",
+			func() Options {
+				root := t.TempDir()
+				writeFile(t, root, "shac.star", ``)
+				return Options{
+					Dir: root,
+					Vars: map[string]string{
+						"unknown_var": "",
+					},
+				}
+			}(),
+			"var must be declared in a shac.textproto file: unknown_var",
 		},
 	}
 	for i := range data {
