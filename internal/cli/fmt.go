@@ -46,6 +46,6 @@ func (c *fmtCmd) Execute(ctx context.Context, files []string) error {
 	if err != nil {
 		return err
 	}
-	o.Filter = engine.OnlyFormatters
+	o.Filter.FormatterFiltering = engine.OnlyFormatters
 	return engine.Fix(ctx, &o, c.quiet)
 }

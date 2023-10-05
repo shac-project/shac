@@ -70,7 +70,7 @@ func shacRegisterCheck(ctx context.Context, s *shacState, name string, args star
 		return errors.New("can't register checks after done loading")
 	}
 	// Register the new callback.
-	s.checks = append(s.checks, registeredCheck{check: c})
+	s.checks = append(s.checks, &registeredCheck{check: c})
 	return nil
 }
 

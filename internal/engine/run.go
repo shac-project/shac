@@ -79,19 +79,88 @@ type Span struct {
 	_ struct{}
 }
 
-// CheckFilter controls which checks get run by `Run`. It returns true for
-// checks that should be run, false for checks that should be skipped.
-type CheckFilter func(registeredCheck) bool
+// FormatterFiltering specifies whether formatting or non-formatting checks will
+// be filtered out.
+type FormatterFiltering int
 
-// OnlyFormatters causes only checks marked with `formatter = True` to be run.
-func OnlyFormatters(c registeredCheck) bool {
-	return c.formatter
+const (
+	// AllChecks does not perform any filtering based on whether a check is a
+	// formatter or not.
+	AllChecks FormatterFiltering = iota
+	// OnlyFormatters causes only checks marked with `formatter = True` to be
+	// run.
+	OnlyFormatters
+	// OnlyNonFormatters causes only checks *not* marked with `formatter = True` to
+	// be run.
+	OnlyNonFormatters
+)
+
+// CheckFilter controls which checks are run.
+type CheckFilter struct {
+	FormatterFiltering FormatterFiltering
+	// AllowList specifies checks to run. If non-empty, all other checks will be
+	// skipped.
+	AllowList []string
 }
 
-// OnlyNonFormatters causes only checks *not* marked with `formatter = True` to
-// be run.
-func OnlyNonFormatters(c registeredCheck) bool {
-	return !c.formatter
+func (f *CheckFilter) filter(checks []*registeredCheck) ([]*registeredCheck, error) {
+	if len(checks) == 0 {
+		return checks, nil
+	}
+
+	// Keep track of the allowlist elements that correspond to valid checks so
+	// we can report any invalid allowlist elements at the end.
+	nonValidatedAllowList := make(map[string]struct{})
+	for _, name := range f.AllowList {
+		nonValidatedAllowList[name] = struct{}{}
+	}
+
+	var filtered []*registeredCheck
+	for _, check := range checks {
+		if len(f.AllowList) > 0 {
+			if _, ok := nonValidatedAllowList[check.name]; !ok {
+				// Check is not allow-listed.
+				continue
+			}
+			delete(nonValidatedAllowList, check.name)
+		}
+		switch f.FormatterFiltering {
+		case AllChecks:
+		case OnlyFormatters:
+			if !check.formatter {
+				continue
+			}
+		case OnlyNonFormatters:
+			if check.formatter {
+				continue
+			}
+		default:
+			return nil, fmt.Errorf("invalid FormatterFiltering value: %d", f.FormatterFiltering)
+		}
+		filtered = append(filtered, check)
+	}
+
+	if len(nonValidatedAllowList) > 0 {
+		var invalidChecks []string
+		for name := range nonValidatedAllowList {
+			invalidChecks = append(invalidChecks, name)
+		}
+		var msg string
+		if len(invalidChecks) == 1 {
+			msg = "check does not exist"
+		} else {
+			msg = "checks do not exist"
+		}
+		slices.Sort(invalidChecks)
+		return nil, fmt.Errorf("%s: %s", msg, strings.Join(invalidChecks, ", "))
+	}
+
+	if len(filtered) == 0 {
+		// Fail noisily if all checks are filtered out, it's probably user
+		// error.
+		return nil, errors.New("no checks to run")
+	}
+	return filtered, nil
 }
 
 // Level is one of "notice", "warning" or "error".
@@ -570,7 +639,7 @@ type shacState struct {
 	//
 	// Checks are executed sequentially after all Starlark code is loaded and not
 	// mutated. They run checks and emit results (results and comments).
-	checks []registeredCheck
+	checks []*registeredCheck
 	// filter controls which checks run. If nil, all checks will run.
 	filter         CheckFilter
 	passthroughEnv []*PassthroughEnv
@@ -641,18 +710,19 @@ func (s *shacState) bufferAllChecks(ctx context.Context, ch chan<- func() error)
 	}
 	args := starlark.Tuple{shacCtx}
 	args.Freeze()
-	for i := range s.checks {
-		if s.filter != nil && !s.filter(s.checks[i]) {
-			continue
-		}
-		i := i
+	checks, err := s.filter.filter(s.checks)
+	if err != nil {
+		return err
+	}
+	for _, check := range checks {
+		check := check
 		ch <- func() error {
 			start := time.Now()
 			pi := func(th *starlark.Thread, msg string) {
 				pos := th.CallFrame(1).Pos
-				s.r.Print(ctx, s.checks[i].name, pos.Filename(), int(pos.Line), msg)
+				s.r.Print(ctx, check.name, pos.Filename(), int(pos.Line), msg)
 			}
-			err := s.checks[i].call(ctx, s.env, args, pi)
+			err := check.call(ctx, s.env, args, pi)
 			if err != nil && ctx.Err() != nil {
 				// Don't report the check completion if the context was
 				// canceled. The error was probably caused by the context being
@@ -661,7 +731,7 @@ func (s *shacState) bufferAllChecks(ctx context.Context, ch chan<- func() error)
 				// check failures.
 				return ctx.Err()
 			}
-			s.r.CheckCompleted(ctx, s.checks[i].name, start, time.Since(start), s.checks[i].highestLevel, err)
+			s.r.CheckCompleted(ctx, check.name, start, time.Since(start), check.highestLevel, err)
 			return err
 		}
 	}

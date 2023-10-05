@@ -16,9 +16,14 @@ package cli
 
 import (
 	"bytes"
+	"fmt"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/google/go-cmp/cmp"
 )
 
 func TestMainHelp(t *testing.T) {
@@ -33,6 +38,7 @@ func TestMainHelp(t *testing.T) {
 		{[]string{"shac", "fix", "--help"}, "Usage of shac fix:\n"},
 		{[]string{"shac", "fmt", "--help"}, "Usage of shac fmt:\n"},
 		{[]string{"shac", "doc", "--help"}, "Usage of shac doc:\n"},
+		{[]string{"shac", "version", "--help"}, "Usage of shac version:\n"},
 	}
 	for i, line := range data {
 		t.Run(strconv.Itoa(i), func(t *testing.T) {
@@ -49,7 +55,7 @@ func TestMainHelp(t *testing.T) {
 
 type panicWrite struct{}
 
-func (panicWrite) Write(b []byte) (int, error) {
+func (panicWrite) Write([]byte) (int, error) {
 	panic("unexpected write!")
 }
 
@@ -65,4 +71,78 @@ func getBuf(t *testing.T) *bytes.Buffer {
 
 func init() {
 	helpOut = panicWrite{}
+}
+
+func TestMainErr(t *testing.T) {
+	t.Parallel()
+	data := map[string]func(t *testing.T) (args []string, wantErr string){
+		"no shac.star files": func(t *testing.T) ([]string, string) {
+			root := t.TempDir()
+			return []string{"check", "-C", root, "--only", "foocheck"},
+				fmt.Sprintf("no shac.star files found in %s", root)
+		},
+		"--all with positional arguments": func(t *testing.T) ([]string, string) {
+			return []string{"check", "--all", "foo.txt", "bar.txt"},
+				"--all cannot be set together with positional file arguments"
+		},
+		"--only flag without value": func(t *testing.T) ([]string, string) {
+			root := t.TempDir()
+			return []string{"check", "-C", root, "--only"},
+				"flag needs an argument: --only"
+		},
+		"allowlist with invalid check": func(t *testing.T) ([]string, string) {
+			root := t.TempDir()
+			writeFile(t, root, "shac.star", "def cb(ctx): pass\nshac.register_check(cb)")
+			return []string{"check", "-C", root, "--only", "does-not-exist"},
+				"check does not exist: does-not-exist"
+		},
+		// Simple check that `shac fmt` filters out non-formatter checks.
+		"fmt with no checks to run": func(t *testing.T) ([]string, string) {
+			root := t.TempDir()
+			writeFile(t, root, "shac.star", ""+
+				"def non_formatter(ctx):\n"+
+				"    pass\n"+
+				"shac.register_check(shac.check(non_formatter))\n")
+			return []string{"fmt", "-C", root, "--only", "non_formatter"},
+				"no checks to run"
+		},
+		// Simple check that `shac fix` filters out formatters.
+		"fix with no checks to run": func(t *testing.T) ([]string, string) {
+			root := t.TempDir()
+			writeFile(t, root, "shac.star", ""+
+				"def formatter(ctx):\n"+
+				"    pass\n"+
+				"shac.register_check(shac.check(formatter, formatter = True))\n")
+			return []string{"fix", "-C", root, "--only", "formatter"},
+				"no checks to run"
+		},
+	}
+	for name, f := range data {
+		f := f
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			args, wantErr := f(t)
+			cmd := append([]string{"shac"}, args...)
+			err := Main(cmd)
+			if err == nil {
+				t.Fatalf("Expected error from running %s", cmd)
+			}
+			if diff := cmp.Diff(wantErr, err.Error()); diff != "" {
+				t.Fatalf("Wrong error (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func writeFile(t testing.TB, root, path, content string) {
+	t.Helper()
+	writeFileBytes(t, root, path, []byte(content), 0o600)
+}
+
+func writeFileBytes(t testing.TB, root, path string, content []byte, perm os.FileMode) {
+	t.Helper()
+	abs := filepath.Join(root, path)
+	if err := os.WriteFile(abs, content, perm); err != nil {
+		t.Fatal(err)
+	}
 }

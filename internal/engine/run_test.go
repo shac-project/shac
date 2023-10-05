@@ -180,6 +180,74 @@ func TestRun_Fail(t *testing.T) {
 			}(),
 			"var must be declared in a shac.textproto file: unknown_var",
 		},
+		{
+			"invalid allowlist item",
+			func() Options {
+				root := t.TempDir()
+				writeFile(t, root, "shac.star", ""+
+					"def cb(ctx):\n"+
+					"    pass\n"+
+					"shac.register_check(cb)")
+				return Options{
+					Dir: root,
+					Filter: CheckFilter{
+						AllowList: []string{"does-not-exist"},
+					},
+				}
+			}(),
+			"check does not exist: does-not-exist",
+		},
+		{
+			"multiple invalid allowlist items",
+			func() Options {
+				root := t.TempDir()
+				writeFile(t, root, "shac.star", ""+
+					"def cb(ctx):\n"+
+					"    pass\n"+
+					"shac.register_check(cb)")
+				return Options{
+					Dir: root,
+					Filter: CheckFilter{
+						AllowList: []string{"does-not-exist", "cb", "also-does-not-exist"},
+					},
+				}
+			}(),
+			"checks do not exist: also-does-not-exist, does-not-exist",
+		},
+		{
+			"invalid FormatterFiltering",
+			func() Options {
+				root := t.TempDir()
+				writeFile(t, root, "shac.star", ""+
+					"def cb(ctx):\n"+
+					"    pass\n"+
+					"shac.register_check(cb)")
+				return Options{
+					Dir: root,
+					Filter: CheckFilter{
+						FormatterFiltering: FormatterFiltering(3),
+					},
+				}
+			}(),
+			"invalid FormatterFiltering value: 3",
+		},
+		{
+			"all checks filtered out",
+			func() Options {
+				root := t.TempDir()
+				writeFile(t, root, "shac.star", ""+
+					"def cb(ctx):\n"+
+					"    pass\n"+
+					"shac.register_check(cb)")
+				return Options{
+					Dir: root,
+					Filter: CheckFilter{
+						FormatterFiltering: OnlyFormatters,
+					},
+				}
+			}(),
+			"no checks to run",
+		},
 	}
 	for i := range data {
 		i := i
@@ -431,6 +499,77 @@ func TestRun_SpecificFiles_Fail(t *testing.T) {
 				t.Fatalf("Expected error: %q", data[i].wantErr)
 			} else if err.Error() != data[i].wantErr {
 				t.Fatalf("Expected error %q, got %q", data[i].wantErr, err)
+			}
+		})
+	}
+}
+
+func TestRun_Filtering(t *testing.T) {
+	t.Parallel()
+
+	root := resolvedTempDir(t)
+
+	writeFile(t, root, "shac.star", ""+
+		"def non_formatter(ctx):\n"+
+		"    print(\"non-formatter running\")\n"+
+		"def formatter(ctx):\n"+
+		"    print(\"formatter running\")\n"+
+		"shac.register_check(shac.check(formatter, formatter = True))\n"+
+		"shac.register_check(shac.check(non_formatter))\n")
+
+	data := []struct {
+		name   string
+		filter CheckFilter
+		want   string
+	}{
+		{
+			name: "all checks",
+			want: "[//shac.star:2] non-formatter running\n" +
+				"[//shac.star:4] formatter running\n",
+		},
+		{
+			name: "only formatters",
+			filter: CheckFilter{
+				FormatterFiltering: OnlyFormatters,
+			},
+			want: "[//shac.star:4] formatter running\n",
+		},
+		{
+			name: "only non-formatters",
+			filter: CheckFilter{
+				FormatterFiltering: OnlyNonFormatters,
+			},
+			want: "[//shac.star:2] non-formatter running\n",
+		},
+		{
+			name: "only specified checks (non-formatter)",
+			filter: CheckFilter{
+				AllowList: []string{"non_formatter"},
+			},
+			want: "[//shac.star:2] non-formatter running\n",
+		},
+		{
+			name: "only specified checks (formatter)",
+			filter: CheckFilter{
+				AllowList: []string{"formatter"},
+			},
+			want: "[//shac.star:4] formatter running\n",
+		},
+	}
+	for i := range data {
+		i := i
+		t.Run(data[i].name, func(t *testing.T) {
+			r := reportPrint{reportNoPrint: reportNoPrint{t: t}}
+			o := Options{Report: &r, Dir: root, Filter: data[i].filter}
+			if err := Run(context.Background(), &o); err != nil {
+				t.Helper()
+				t.Fatal(err)
+			}
+			got := sortLines(r.b.String())
+			want := sortLines(data[i].want)
+			if diff := cmp.Diff(want, got); diff != "" {
+				t.Helper()
+				t.Fatalf("mismatch (-want +got):\n%s", diff)
 			}
 		})
 	}
@@ -2037,7 +2176,7 @@ func TestTestDataEmit(t *testing.T) {
 			err := Run(context.Background(), &o)
 			if data[i].err != "" {
 				if err == nil {
-					t.Fatal("expected error")
+					t.Fatalf("expected error")
 				}
 				got := err.Error()
 				if data[i].err != got {

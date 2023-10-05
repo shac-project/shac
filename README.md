@@ -267,6 +267,7 @@ Planned features/changes, in descending order by priority:
 - [x] Include unstaged files in analysis, including respecting unstaged
       `shac.star` files
 - [x] Automatic fix application with handling for conflicting suggestions
+- [ ] Rerun formatting checks after a conflict is encountered
 - [ ] Provide a `.shac` cache directory that checks can write to
 - [ ] Mount checkout directory read-only
   - [x] By default
