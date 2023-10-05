@@ -248,13 +248,14 @@ func (r *resultSinkContext) sendData(ctx context.Context, client *http.Client, e
 
 // resultSinkCtx returns the rdb stream port if available.
 func resultSinkCtx() (*resultSinkContext, error) {
-	b, err := os.ReadFile(os.Getenv("LUCI_CONTEXT"))
+	path := os.Getenv("LUCI_CONTEXT")
+	b, err := os.ReadFile(path)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to load LUCI_CONTEXT=%q: %w", path, err)
 	}
 	var ctx luciContext
 	if err = json.Unmarshal(b, &ctx); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to load LUCI_CONTEXT=%q: %w", path, err)
 	}
 	// We are clearly running inside a LUCI_CONTEXT luciexe environment but rdb
 	// stream was not started. Hard fail since it means we need to fix the recipe.
