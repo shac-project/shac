@@ -71,16 +71,14 @@ func getBuf(t *testing.T) *bytes.Buffer {
 
 func init() {
 	helpOut = panicWrite{}
+	// Clear all environment variables to prevent automatic reporting mode
+	// selection, which can lead to inconsistent behavior depending on the
+	// environment.
+	os.Clearenv()
 }
 
 func TestMainErr(t *testing.T) {
-	// Override various env vars probed by `reporting.Get()` to prevent
-	// automatic selection of the reporter, which can lead to inconsistent
-	// behavior depending on the environment.
-	t.Setenv("LUCI_CONTEXT", "")
-	t.Setenv("GITHUB_RUN_ID", "")
-	t.Setenv("VSCODE_GIT_IPC_HANDLE", "")
-	t.Setenv("TERM", "dumb")
+	t.Parallel()
 
 	data := map[string]func(t *testing.T) (args []string, wantErr string){
 		"no shac.star files": func(t *testing.T) ([]string, string) {
