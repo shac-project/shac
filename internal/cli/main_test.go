@@ -74,7 +74,14 @@ func init() {
 }
 
 func TestMainErr(t *testing.T) {
-	t.Parallel()
+	// Override various env vars probed by `reporting.Get()` to prevent
+	// automatic selection of the reporter, which can lead to inconsistent
+	// behavior depending on the environment.
+	t.Setenv("LUCI_CONTEXT", "")
+	t.Setenv("GITHUB_RUN_ID", "")
+	t.Setenv("VSCODE_GIT_IPC_HANDLE", "")
+	t.Setenv("TERM", "dumb")
+
 	data := map[string]func(t *testing.T) (args []string, wantErr string){
 		"no shac.star files": func(t *testing.T) ([]string, string) {
 			root := t.TempDir()
