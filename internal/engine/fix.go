@@ -15,6 +15,7 @@
 package engine
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -31,8 +32,9 @@ import (
 // in it, then applies suggested fixes to files on disk.
 func Fix(ctx context.Context, o *Options, quiet bool) error {
 	fc := findingCollector{
-		countsByCheck: map[string]int{},
-		quiet:         quiet,
+		countsByCheck:  map[string]int{},
+		quiet:          quiet,
+		findingsByFile: make(map[findingFile][]findingToFix),
 	}
 	if o.Report != nil {
 		return fmt.Errorf("cannot overwrite reporter")
@@ -42,21 +44,18 @@ func Fix(ctx context.Context, o *Options, quiet bool) error {
 		return err
 	}
 
-	findingsByFile := make(map[string][]findingToFix)
-	for _, f := range fc.findings {
-		findingsByFile[f.file] = append(findingsByFile[f.file], f)
-	}
-
-	orderedFiles := make([]string, 0, len(findingsByFile))
-	for f := range findingsByFile {
+	orderedFiles := make([]findingFile, 0, len(fc.findingsByFile))
+	for f := range fc.findingsByFile {
 		orderedFiles = append(orderedFiles, f)
 	}
 	// Sort for determinism.
-	sort.Strings(orderedFiles)
+	slices.SortFunc(orderedFiles, func(a, b findingFile) int {
+		return cmp.Compare(a.path, b.path)
+	})
 
-	for _, path := range orderedFiles {
-		findings := findingsByFile[path]
-		numFixed, err := fixFindings(path, findings)
+	for _, f := range orderedFiles {
+		findings := fc.findingsByFile[f]
+		numFixed, err := fixFindings(filepath.Join(f.root, f.path), findings)
 		if err != nil {
 			return err
 		}
@@ -65,7 +64,7 @@ func Fix(ctx context.Context, o *Options, quiet bool) error {
 			noun += "s"
 		}
 		if !quiet {
-			fmt.Fprintf(os.Stderr, "Fixed %d %s in %s\n", numFixed, noun, path)
+			fmt.Fprintf(os.Stderr, "Fixed %d %s in %s\n", numFixed, noun, f.path)
 		}
 	}
 	return nil
@@ -139,8 +138,12 @@ func fixFindings(path string, findings []findingToFix) (int, error) {
 	return numFixed, nil
 }
 
+type findingFile struct {
+	root string
+	path string
+}
+
 type findingToFix struct {
-	file        string
 	span        Span
 	replacement string
 }
@@ -170,10 +173,10 @@ func (f *findingToFix) normalize(fileLines []string) {
 }
 
 type findingCollector struct {
-	mu            sync.Mutex
-	findings      []findingToFix
-	countsByCheck map[string]int
-	quiet         bool
+	mu             sync.Mutex
+	findingsByFile map[findingFile][]findingToFix
+	countsByCheck  map[string]int
+	quiet          bool
 }
 
 var _ Report = (*findingCollector)(nil)
@@ -188,8 +191,8 @@ func (c *findingCollector) EmitFinding(ctx context.Context, check string, level 
 	if len(replacements) == 1 {
 		c.mu.Lock()
 		defer c.mu.Unlock()
-		c.findings = append(c.findings, findingToFix{
-			file:        filepath.Join(root, filepath.FromSlash(file)),
+		key := findingFile{root: root, path: filepath.FromSlash(file)}
+		c.findingsByFile[key] = append(c.findingsByFile[key], findingToFix{
 			span:        s,
 			replacement: replacements[0],
 		})
