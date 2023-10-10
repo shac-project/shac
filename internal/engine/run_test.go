@@ -2103,6 +2103,20 @@ func TestTestDataEmit(t *testing.T) {
 			"a check failed",
 		},
 		{
+			"ctx-emit-finding-none.star",
+			[]finding{
+				{
+					Check:   "cb",
+					Level:   Error,
+					Message: "bad code",
+					Root:    root,
+					File:    "file.txt",
+				},
+			},
+			nil,
+			"a check failed",
+		},
+		{
 			"ctx-emit-finding.star",
 			[]finding{
 				{

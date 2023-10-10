@@ -41,11 +41,15 @@ func ctxEmitFinding(ctx context.Context, s *shacState, name string, args starlar
 		"level", &arglevel,
 		"message?", &argmessage,
 		"filepath?", &argfilepath,
-		"line?", &argline,
-		"col?", &argcol,
-		"end_line?", &argendLine,
-		"end_col?", &argendCol,
-		"replacements?", &argreplacements,
+		// The following arguments all use ?? so that None is interpreted the
+		// same as the argument being unset. This makes it easier to implement
+		// checks that run tools that emit JSON output that may contain null
+		// fields.
+		"line??", &argline,
+		"col??", &argcol,
+		"end_line??", &argendLine,
+		"end_col??", &argendCol,
+		"replacements??", &argreplacements,
 	); err != nil {
 		return err
 	}
