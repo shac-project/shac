@@ -16,6 +16,7 @@ package engine
 
 import (
 	"bytes"
+	"log"
 	"sync"
 )
 
@@ -23,26 +24,31 @@ import (
 //
 // Fill up 3 large buffers to accelerate the bootstrap.
 var buffers = buffersImpl{
-	b: []*bytes.Buffer{
-		bytes.NewBuffer(make([]byte, 0, 16*1024)),
-		bytes.NewBuffer(make([]byte, 0, 16*1024)),
-		bytes.NewBuffer(make([]byte, 0, 16*1024)),
+	b: map[*bytes.Buffer]struct{}{
+		bytes.NewBuffer(make([]byte, 0, 16*1024)): {},
+		bytes.NewBuffer(make([]byte, 0, 16*1024)): {},
+		bytes.NewBuffer(make([]byte, 0, 16*1024)): {},
 	},
 }
 
 type buffersImpl struct {
 	mu sync.Mutex
-	b  []*bytes.Buffer
+	// Track buffers in a map to prevent storing duplicates in the pool.
+	b map[*bytes.Buffer]struct{}
 }
 
 func (i *buffersImpl) get() *bytes.Buffer {
 	var b *bytes.Buffer
 	i.mu.Lock()
-	if l := len(i.b); l == 0 {
+	if len(i.b) == 0 {
 		b = &bytes.Buffer{}
 	} else {
-		b = i.b[l-1]
-		i.b = i.b[:l-1]
+		// Choose a random element from the pool by taking whatever buffer is
+		// returned first when iterating over the pool.
+		for b = range i.b {
+			break
+		}
+		delete(i.b, b)
 	}
 	i.mu.Unlock()
 	return b
@@ -52,6 +58,10 @@ func (i *buffersImpl) push(b *bytes.Buffer) {
 	// Reset keeps the buffer, so that the next execution will reuse the same allocation.
 	b.Reset()
 	i.mu.Lock()
-	i.b = append(i.b, b)
+	if _, ok := i.b[b]; ok {
+		i.mu.Unlock()
+		log.Panicf("buffer at %p has already been returned to the pool", b)
+	}
+	i.b[b] = struct{}{}
 	i.mu.Unlock()
 }
