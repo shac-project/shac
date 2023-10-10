@@ -2273,7 +2273,7 @@ func TestTestDataPrint(t *testing.T) {
 		},
 		{
 			name: "ctx-os-exec-parallel.star",
-			want: strings.Repeat("[//ctx-os-exec-parallel.star:28] Hello, world\n", 1000),
+			want: strings.Repeat("[//ctx-os-exec-parallel.star:27] Hello, world\n", 10),
 		},
 		{
 			name: "ctx-os-exec-relpath.star",

@@ -42,7 +42,6 @@ type subprocess struct {
 	raiseOnFailure bool
 	okRetcodes     []int
 	tempDir        string
-	startErrs      <-chan error
 
 	waitCalled bool
 }
@@ -81,27 +80,15 @@ func (s *subprocess) AttrNames() []string {
 	return []string{"wait"}
 }
 
-func (s *subprocess) wait(state *shacState) (starlark.Value, error) {
+func (s *subprocess) wait() (starlark.Value, error) {
 	if s.waitCalled {
 		return nil, fmt.Errorf("wait was already called")
 	}
 	s.waitCalled = true
-	val, err := s.waitInner(state)
-	if err2 := s.cleanup(); err == nil {
-		err = err2
-	}
-	return val, err
-}
 
-func (s *subprocess) waitInner(state *shacState) (starlark.Value, error) {
-	if err := <-s.startErrs; err != nil {
-		// If cmd.Start() failed the semaphore will already have been released,
-		// no need to release it.
-		return nil, err
-	}
+	defer s.cleanup()
 
 	err := s.cmd.Wait()
-	state.subprocessSem.Release(1)
 	retcode := 0
 	if err != nil {
 		var errExit *exec.ExitError
@@ -140,25 +127,16 @@ func (s *subprocess) waitInner(state *shacState) (starlark.Value, error) {
 }
 
 func (s *subprocess) cleanup() error {
-	// Wait for the subprocess to launch before trying to kill it. s.startErrs
-	// gets closed after the subprocess starts, so even if the error has already
-	// been received by `wait()`, this receive will return due to the channel
-	// being closed.
-	<-s.startErrs
 	// Kill the process before doing any other cleanup steps to ensure resources
-	// are no longer in use before cleaning them up.
-	var err error
-	if s.cmd.ProcessState == nil {
-		err = s.cmd.Process.Kill()
-		// Kill() is non-blocking, so it's necessary to wait for the process to
-		// exit before cleaning up resources.
-		_ = s.cmd.Wait()
-	}
+	// are no longer in use.
+	err := s.cmd.Process.Kill()
+	// Kill() doesn't block until the process actually completes, so we need to
+	// wait before cleaning up resources.
+	_ = s.cmd.Wait()
 
 	if err2 := os.RemoveAll(s.tempDir); err == nil {
 		err = err2
 	}
-
 	buffers.push(s.stdout)
 	buffers.push(s.stderr)
 	s.stdout, s.stderr = nil, nil
@@ -170,7 +148,7 @@ var subprocessWaitBuiltin = newBoundBuiltin("wait", func(ctx context.Context, s 
 	if err := starlark.UnpackArgs(name, args, kwargs); err != nil {
 		return nil, err
 	}
-	return self.(*subprocess).wait(s)
+	return self.(*subprocess).wait()
 })
 
 // ctxOsExec implements the native function ctx.os.exec().
@@ -232,6 +210,15 @@ func ctxOsExec(ctx context.Context, s *shacState, name string, args starlark.Tup
 
 	cleanupFuncs = append(cleanupFuncs, func() error {
 		return os.RemoveAll(tempDir)
+	})
+
+	stdout := buffers.get()
+	stderr := buffers.get()
+
+	cleanupFuncs = append(cleanupFuncs, func() error {
+		buffers.push(stdout)
+		buffers.push(stderr)
+		return nil
 	})
 
 	env := map[string]string{
@@ -400,31 +387,15 @@ func ctxOsExec(ctx context.Context, s *shacState, name string, args starlark.Tup
 
 	cmd := s.sandbox.Command(ctx, config)
 
-	stdout, stderr := buffers.get(), buffers.get()
+	cmd.Stdin = stdin
 	// TODO(olivernewman): Also handle commands that may output non-utf-8 bytes.
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr
-	cmd.Stdin = stdin
 
-	startErrs := make(chan error, 1)
-	go func() {
-		// Signals to subprocess.cleanup() that starting the subprocess is done,
-		// whether or not it was successful.
-		defer close(startErrs)
-
-		err := s.subprocessSem.Acquire(ctx, 1)
-		if err != nil {
-			startErrs <- err
-			return
-		}
-		err = execsupport.Start(cmd)
-		if err != nil {
-			// Release early if the process failed to start, no point in
-			// delaying until wait() is called.
-			s.subprocessSem.Release(1)
-		}
-		startErrs <- err
-	}()
+	err = execsupport.Start(cmd)
+	if err != nil {
+		return nil, err
+	}
 
 	proc := &subprocess{
 		cmd:            cmd,
@@ -434,9 +405,7 @@ func ctxOsExec(ctx context.Context, s *shacState, name string, args starlark.Tup
 		raiseOnFailure: bool(argraiseOnFailure),
 		okRetcodes:     okRetcodes,
 		tempDir:        tempDir,
-		startErrs:      startErrs,
 	}
-
 	// Only clean up now if starting the subprocess failed; otherwise it will
 	// get cleaned up by wait().
 	cleanupFuncs = cleanupFuncs[:0]
