@@ -18,9 +18,10 @@ def cb(ctx):
     else:
         cmd = ["./hello_world.sh"]
 
-    procs = []
-    for _ in range(10):
-        procs.append(ctx.os.exec(cmd))
+    # Launch more parallel subprocesses than any realistic host machine will
+    # have cores (but not too many, or the test will be very slow).
+    num_procs = 1000
+    procs = [ctx.os.exec(cmd) for _ in range(num_procs)]
 
     for proc in procs:
         res = proc.wait()
