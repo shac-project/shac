@@ -64,9 +64,7 @@ type subcommand interface {
 }
 
 // Main implements shac executable.
-func Main(args []string) error {
-	ctx := context.Background()
-
+func Main(ctx context.Context, args []string) error {
 	subcommands := [...]subcommand{
 		// Ordered roughly by importance, because ordering here corresponds to
 		// the order in which subcommands will be listed in `shac help`.

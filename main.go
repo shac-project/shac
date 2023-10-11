@@ -16,9 +16,13 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
+	"os/signal"
+	"runtime/pprof"
+	"syscall"
 
 	"github.com/mattn/go-isatty"
 	flag "github.com/spf13/pflag"
@@ -27,17 +31,36 @@ import (
 )
 
 func main() {
-	if err := cli.Main(os.Args); err != nil && !errors.Is(err, flag.ErrHelp) {
+	signalChannel := make(chan os.Signal, 2)
+	signal.Notify(signalChannel, syscall.SIGTERM, syscall.SIGINT)
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() {
+		sig := <-signalChannel
+		cancel()
+		// Print a goroutine stacktrace only on SIGTERM - we only want to see a
+		// stack trace when shac gets canceled by automation, which may indicate
+		// a timeout due to a hang. If shac gets Ctrl-C'd (SIGINT) by a human
+		// user it's not helpful to print a stacktrace.
+		if sig == syscall.SIGTERM {
+			_ = pprof.Lookup("goroutine").WriteTo(os.Stderr, 1)
+		}
+	}()
+
+	if err := cli.Main(ctx, os.Args); err != nil && !errors.Is(err, flag.ErrHelp) {
 		var stackerr engine.BacktraceableError
 		if errors.As(err, &stackerr) {
 			_, _ = os.Stderr.WriteString(stackerr.Backtrace())
 		}
-		// If a check failed and stderr is a terminal, appropriate information
-		// should have already been emitted by the reporter. If stderr is not a
-		// terminal then it may still be useful to print the "check failed"
-		// error message since the reporter output may not show up in the same
-		// stream as stderr.
-		if !errors.Is(err, engine.ErrCheckFailed) || !isatty.IsTerminal(os.Stderr.Fd()) {
+		// If stderr is not a terminal, always print the error.
+		//
+		// If stderr is a terminal:
+		// - If a check failed, appropriate information should have already been
+		//   emitted by the reporter.
+		// - A context cancellation will likely be because the user Ctrl-C'd
+		//   shac, so the exit will be expected and there's no need to print
+		//   anything.
+		if !isatty.IsTerminal(os.Stderr.Fd()) ||
+			(!errors.Is(err, engine.ErrCheckFailed) && !errors.Is(err, context.Canceled)) {
 			_, _ = fmt.Fprintf(os.Stderr, "shac: %s\n", err)
 		}
 		os.Exit(1)

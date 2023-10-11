@@ -16,6 +16,7 @@ package cli
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -43,7 +44,7 @@ func TestMainHelp(t *testing.T) {
 	for i, line := range data {
 		t.Run(strconv.Itoa(i), func(t *testing.T) {
 			b := getBuf(t)
-			if Main(line.args) == nil {
+			if Main(context.Background(), line.args) == nil {
 				t.Fatal("expected error")
 			}
 			if s := b.String(); !strings.HasPrefix(s, line.want) {
@@ -128,7 +129,7 @@ func TestMainErr(t *testing.T) {
 			t.Parallel()
 			args, wantErr := f(t)
 			cmd := append([]string{"shac"}, args...)
-			err := Main(cmd)
+			err := Main(context.Background(), cmd)
 			if err == nil {
 				t.Fatalf("Expected error from running %s", cmd)
 			}
