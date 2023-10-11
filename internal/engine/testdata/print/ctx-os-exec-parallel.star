@@ -18,11 +18,16 @@ def cb(ctx):
     else:
         cmd = ["./hello_world.sh"]
 
-    procs = []
-    for _ in range(10):
-        procs.append(ctx.os.exec(cmd))
+    # Launch more parallel subprocesses than shac will actually allow to run in
+    # parallel, i.e. more than any realistic machine will have cores (but not
+    # too many, or the test will be very slow).
+    num_procs = 1000
+    procs = [ctx.os.exec(cmd) for _ in range(num_procs)]
 
-    for proc in procs:
+    # It should be possible to wait on the subprocesses in the reverse of the
+    # order in which they were started without causing a deadlock; the lock
+    # should be released asynchronously, not by calling wait().
+    for proc in reversed(procs):
         res = proc.wait()
         print(res.stdout.strip())
 

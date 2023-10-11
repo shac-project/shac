@@ -42,6 +42,7 @@ type subprocess struct {
 	raiseOnFailure bool
 	okRetcodes     []int
 	tempDir        string
+	errs           <-chan error
 
 	waitCalled bool
 }
@@ -85,12 +86,16 @@ func (s *subprocess) wait() (starlark.Value, error) {
 		return nil, fmt.Errorf("wait was already called")
 	}
 	s.waitCalled = true
+	val, err := s.waitInner()
+	if err2 := s.cleanup(); err == nil {
+		err = err2
+	}
+	return val, err
+}
 
-	defer s.cleanup()
-
-	err := s.cmd.Wait()
+func (s *subprocess) waitInner() (starlark.Value, error) {
 	retcode := 0
-	if err != nil {
+	if err := <-s.errs; err != nil {
 		var errExit *exec.ExitError
 		if errors.As(err, &errExit) {
 			retcode = errExit.ExitCode()
@@ -127,16 +132,27 @@ func (s *subprocess) wait() (starlark.Value, error) {
 }
 
 func (s *subprocess) cleanup() error {
+	// Wait for the subprocess to launch before trying to kill it. s.startErrs
+	// gets closed after the subprocess starts, so even if the error has already
+	// been received by `wait()`, this receive will return due to the channel
+	// being closed.
+	<-s.errs
 	// Kill the process before doing any other cleanup steps to ensure resources
-	// are no longer in use.
-	err := s.cmd.Process.Kill()
-	// Kill() doesn't block until the process actually completes, so we need to
-	// wait before cleaning up resources.
-	_ = s.cmd.Wait()
+	// are no longer in use before cleaning them up.
+	var err error
+	// If Process is not nil then the command successfully started. If
+	// ProcessState is nil then the command hasn't yet completed.
+	if s.cmd.Process != nil && s.cmd.ProcessState == nil {
+		err = s.cmd.Process.Kill()
+		// Kill() is non-blocking, so it's necessary to wait for the process to
+		// exit before cleaning up resources.
+		_ = s.cmd.Wait()
+	}
 
 	if err2 := os.RemoveAll(s.tempDir); err == nil {
 		err = err2
 	}
+
 	buffers.push(s.stdout)
 	buffers.push(s.stderr)
 	s.stdout, s.stderr = nil, nil
@@ -210,15 +226,6 @@ func ctxOsExec(ctx context.Context, s *shacState, name string, args starlark.Tup
 
 	cleanupFuncs = append(cleanupFuncs, func() error {
 		return os.RemoveAll(tempDir)
-	})
-
-	stdout := buffers.get()
-	stderr := buffers.get()
-
-	cleanupFuncs = append(cleanupFuncs, func() error {
-		buffers.push(stdout)
-		buffers.push(stderr)
-		return nil
 	})
 
 	env := map[string]string{
@@ -387,15 +394,29 @@ func ctxOsExec(ctx context.Context, s *shacState, name string, args starlark.Tup
 
 	cmd := s.sandbox.Command(ctx, config)
 
-	cmd.Stdin = stdin
+	stdout, stderr := buffers.get(), buffers.get()
 	// TODO(olivernewman): Also handle commands that may output non-utf-8 bytes.
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr
+	cmd.Stdin = stdin
 
-	err = execsupport.Start(cmd)
-	if err != nil {
-		return nil, err
-	}
+	errs := make(chan error, 1)
+	go func() {
+		errs <- func() error {
+			if err := s.subprocessSem.Acquire(ctx, 1); err != nil {
+				return err
+			}
+			defer s.subprocessSem.Release(1)
+
+			if err := execsupport.Start(cmd); err != nil {
+				return err
+			}
+			return cmd.Wait()
+		}()
+		// Signals to subprocess.wait() that the subprocess is done, whether or
+		// not it was successful.
+		close(errs)
+	}()
 
 	proc := &subprocess{
 		cmd:            cmd,
@@ -405,7 +426,9 @@ func ctxOsExec(ctx context.Context, s *shacState, name string, args starlark.Tup
 		raiseOnFailure: bool(argraiseOnFailure),
 		okRetcodes:     okRetcodes,
 		tempDir:        tempDir,
+		errs:           errs,
 	}
+
 	// Only clean up now if starting the subprocess failed; otherwise it will
 	// get cleaned up by wait().
 	cleanupFuncs = cleanupFuncs[:0]

@@ -40,6 +40,7 @@ import (
 	"go.starlark.net/resolve"
 	"go.starlark.net/starlark"
 	"golang.org/x/sync/errgroup"
+	"golang.org/x/sync/semaphore"
 	"google.golang.org/protobuf/encoding/prototext"
 )
 
@@ -364,6 +365,8 @@ func runInner(ctx context.Context, o *Options, tmpdir string) error {
 		packages: packages,
 	}
 
+	subprocessSem := semaphore.NewWeighted(int64(runtime.NumCPU()) + 2)
+
 	var vars map[string]string
 
 	newState := func(scm scmCheckout, subdir string, idx int) (*shacState, error) {
@@ -404,6 +407,7 @@ func runInner(ctx context.Context, o *Options, tmpdir string) error {
 			sandbox:        sb,
 			scm:            scm,
 			subdir:         subdir,
+			subprocessSem:  subprocessSem,
 			tmpdir:         filepath.Join(tmpdir, strconv.Itoa(idx)),
 			writableRoot:   doc.WritableRoot,
 			vars:           vars,
@@ -464,7 +468,7 @@ func runInner(ctx context.Context, o *Options, tmpdir string) error {
 		if err != nil {
 			return err
 		}
-		shacStates = []*shacState{state}
+		shacStates = append(shacStates, state)
 	}
 
 	// Parse the starlark files. Run everything from our errgroup.
@@ -488,6 +492,7 @@ func runInner(ctx context.Context, o *Options, tmpdir string) error {
 			if cb == nil {
 				loop = false
 			} else {
+				// Actually run the check.
 				eg.Go(cb)
 			}
 		case <-done:
@@ -643,6 +648,9 @@ type shacState struct {
 	// filter controls which checks run. If nil, all checks will run.
 	filter         CheckFilter
 	passthroughEnv []*PassthroughEnv
+
+	// Limits the number of concurrent subprocesses launched by ctx.os.exec().
+	subprocessSem *semaphore.Weighted
 
 	// Set when fail() is called. This happens only during the first phase, thus
 	// no mutex is needed.
