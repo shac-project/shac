@@ -751,11 +751,16 @@ func TestRun_PassthroughEnv(t *testing.T) {
 				IsPath:    true,
 				Writeable: true,
 			},
+			// Additionally give access to HOME (or LocalAppData on Windows),
+			// which contains the Go cache, so checks that run `go run` can use
+			// cached artifacts.
 			{
-				// Additionally give access to HOME, which contains the
-				// Go cache, so checks that run `go run` can use cached
-				// artifacts.
 				Name:      "HOME",
+				IsPath:    true,
+				Writeable: true,
+			},
+			{
+				Name:      "LocalAppData",
 				IsPath:    true,
 				Writeable: true,
 			},

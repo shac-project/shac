@@ -12,17 +12,23 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Give access to $GOCACHE (and $HOME so $GOCACHE can be inferred if unset), so
-# checks that run `go run` can use cached artifacts.
+# Give access to $GOCACHE, as well as $HOME and $LocalAppData (for Windows) so
+# $GOCACHE can be inferred if unset, so checks that run `go run` can use cached
+# artifacts.
 passthrough_env: [
     {
-        name: "HOME",
-        is_path: true,
+        name: "HOME"
+        is_path: true
         writeable: true
     },
     {
-        name: "GOCACHE",
-        is_path: true,
+       name: "LocalAppData"
+       is_path: true
+       writeable: true
+    },
+    {
+        name: "GOCACHE"
+        is_path: true
         writeable: true
     }
 ]

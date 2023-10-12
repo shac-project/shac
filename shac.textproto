@@ -35,17 +35,22 @@ vars: [
 passthrough_env: [
     {
         # Provide Go commands access to the Go cache to speed up compilation.
-        name: "GOCACHE",
+        name: "GOCACHE"
+        is_path: true
+        writeable: true
+    },
+    # The Go cache directory is computed based on $HOME (or $LocalAppData) on
+    # Windows in the absence of $GOCACHE.
+    # TODO(olivernewman): Implement support for constructing pass-throughs using
+    # Starlark, and pass through the value returned by `go env GOCACHE` instead
+    # of all of $HOME/$LocalAppData.
+    {
+        name: "HOME"
         is_path: true
         writeable: true
     },
     {
-        # The Go cache directory is computed based on $HOME in the absence of
-        # $GOCACHE.
-        # TODO(olivernewman): Implement support for constructing pass-throughs
-        # using Starlark, and pass through the value returned by `go env
-        # GOCACHE` instead of all of $HOME.
-        name: "HOME",
+        name: "LocalAppData"
         is_path: true
         writeable: true
     }
