@@ -159,6 +159,23 @@ func (s *DecoratedResultDB) QueryTestResultStatistics(ctx context.Context, req *
 	return
 }
 
+func (s *DecoratedResultDB) QueryNewTestVariants(ctx context.Context, req *QueryNewTestVariantsRequest) (rsp *QueryNewTestVariantsResponse, err error) {
+	if s.Prelude != nil {
+		var newCtx context.Context
+		newCtx, err = s.Prelude(ctx, "QueryNewTestVariants", req)
+		if err == nil {
+			ctx = newCtx
+		}
+	}
+	if err == nil {
+		rsp, err = s.Service.QueryNewTestVariants(ctx, req)
+	}
+	if s.Postlude != nil {
+		err = s.Postlude(ctx, "QueryNewTestVariants", rsp, err)
+	}
+	return
+}
+
 func (s *DecoratedResultDB) GetArtifact(ctx context.Context, req *GetArtifactRequest) (rsp *Artifact, err error) {
 	if s.Prelude != nil {
 		var newCtx context.Context
@@ -240,6 +257,23 @@ func (s *DecoratedResultDB) BatchGetTestVariants(ctx context.Context, req *Batch
 	}
 	if s.Postlude != nil {
 		err = s.Postlude(ctx, "BatchGetTestVariants", rsp, err)
+	}
+	return
+}
+
+func (s *DecoratedResultDB) QueryTestMetadata(ctx context.Context, req *QueryTestMetadataRequest) (rsp *QueryTestMetadataResponse, err error) {
+	if s.Prelude != nil {
+		var newCtx context.Context
+		newCtx, err = s.Prelude(ctx, "QueryTestMetadata", req)
+		if err == nil {
+			ctx = newCtx
+		}
+	}
+	if err == nil {
+		rsp, err = s.Service.QueryTestMetadata(ctx, req)
+	}
+	if s.Postlude != nil {
+		err = s.Postlude(ctx, "QueryTestMetadata", rsp, err)
 	}
 	return
 }

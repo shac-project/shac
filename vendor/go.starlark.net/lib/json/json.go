@@ -11,7 +11,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"log"
 	"math"
 	"math/big"
 	"reflect"
@@ -27,42 +26,45 @@ import (
 
 // Module json is a Starlark module of JSON-related functions.
 //
-//   json = module(
-//      encode,
-//      decode,
-//      indent,
-//   )
+//	json = module(
+//	   encode,
+//	   decode,
+//	   indent,
+//	)
 //
 // def encode(x):
 //
 // The encode function accepts one required positional argument,
 // which it converts to JSON by cases:
-// - A Starlark value that implements Go's standard json.Marshal
-//   interface defines its own JSON encoding.
-// - None, True, and False are converted to null, true, and false, respectively.
-// - Starlark int values, no matter how large, are encoded as decimal integers.
-//   Some decoders may not be able to decode very large integers.
-// - Starlark float values are encoded using decimal point notation,
-//   even if the value is an integer.
-//   It is an error to encode a non-finite floating-point value.
-// - Starlark strings are encoded as JSON strings, using UTF-16 escapes.
-// - a Starlark IterableMapping (e.g. dict) is encoded as a JSON object.
-//   It is an error if any key is not a string.
-// - any other Starlark Iterable (e.g. list, tuple) is encoded as a JSON array.
-// - a Starlark HasAttrs (e.g. struct) is encoded as a JSON object.
+//   - A Starlark value that implements Go's standard json.Marshal
+//     interface defines its own JSON encoding.
+//   - None, True, and False are converted to null, true, and false, respectively.
+//   - Starlark int values, no matter how large, are encoded as decimal integers.
+//     Some decoders may not be able to decode very large integers.
+//   - Starlark float values are encoded using decimal point notation,
+//     even if the value is an integer.
+//     It is an error to encode a non-finite floating-point value.
+//   - Starlark strings are encoded as JSON strings, using UTF-16 escapes.
+//   - a Starlark IterableMapping (e.g. dict) is encoded as a JSON object.
+//     It is an error if any key is not a string.
+//   - any other Starlark Iterable (e.g. list, tuple) is encoded as a JSON array.
+//   - a Starlark HasAttrs (e.g. struct) is encoded as a JSON object.
+//
 // It an application-defined type matches more than one the cases describe above,
 // (e.g. it implements both Iterable and HasFields), the first case takes precedence.
 // Encoding any other value yields an error.
 //
-// def decode(x):
+// def decode(x[, default]):
 //
-// The decode function accepts one positional parameter, a JSON string.
+// The decode function has one required positional parameter, a JSON string.
 // It returns the Starlark value that the string denotes.
-// - Numbers are parsed as int or float, depending on whether they
-//   contain a decimal point.
-// - JSON objects are parsed as new unfrozen Starlark dicts.
-// - JSON arrays are parsed as new unfrozen Starlark lists.
-// Decoding fails if x is not a valid JSON string.
+//   - Numbers are parsed as int or float, depending on whether they
+//     contain a decimal point.
+//   - JSON objects are parsed as new unfrozen Starlark dicts.
+//   - JSON arrays are parsed as new unfrozen Starlark lists.
+//
+// If x is not a valid JSON string, the behavior depends on the "default"
+// parameter: if present, Decode returns its value; otherwise, Decode fails.
 //
 // def indent(str, *, prefix="", indent="\t"):
 //
@@ -71,7 +73,6 @@ import (
 // It accepts one required positional parameter, the JSON string,
 // and two optional keyword-only string parameters, prefix and indent,
 // that specify a prefix of each new line, and the unit of indentation.
-//
 var Module = &starlarkstruct.Module{
 	Name: "json",
 	Members: starlark.StringDict{
@@ -200,8 +201,13 @@ func encode(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, k
 			sort.Strings(names)
 			for i, name := range names {
 				v, err := x.Attr(name)
-				if err != nil || v == nil {
-					log.Fatalf("internal error: dir(%s) includes %q but value has no .%s field", x.Type(), name, name)
+				if err != nil {
+					return fmt.Errorf("cannot access attribute %s.%s: %w", x.Type(), name, err)
+				}
+				if v == nil {
+					// x.AttrNames() returned name, but x.Attr(name) returned nil, stating
+					// that the field doesn't exist.
+					return fmt.Errorf("missing attribute %s.%s (despite %q appearing in dir()", x.Type(), name, name)
 				}
 				if i > 0 {
 					buf.WriteByte(',')
@@ -230,7 +236,8 @@ func pointer(i interface{}) unsafe.Pointer {
 	v := reflect.ValueOf(i)
 	switch v.Kind() {
 	case reflect.Ptr, reflect.Chan, reflect.Map, reflect.UnsafePointer, reflect.Slice:
-		return v.UnsafePointer()
+		// TODO(adonovan): use v.Pointer() when we drop go1.17.
+		return unsafe.Pointer(v.Pointer())
 	default:
 		return nil
 	}
@@ -283,10 +290,16 @@ func indent(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, k
 	return starlark.String(buf.String()), nil
 }
 
-func decode(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (_ starlark.Value, err error) {
+func decode(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (v starlark.Value, err error) {
 	var s string
-	if err := starlark.UnpackPositionalArgs(b.Name(), args, kwargs, 1, &s); err != nil {
+	var d starlark.Value
+	if err := starlark.UnpackArgs(b.Name(), args, kwargs, "x", &s, "default?", &d); err != nil {
 		return nil, err
+	}
+	if len(args) < 1 {
+		// "x" parameter is positional only; UnpackArgs does not allow us to
+		// directly express "def decode(x, *, default)"
+		return nil, fmt.Errorf("%s: unexpected keyword argument x", b.Name())
 	}
 
 	// The decoder necessarily makes certain representation choices
@@ -295,6 +308,11 @@ func decode(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, k
 	// control the returned types, but there's no compelling need yet.
 
 	// Use panic/recover with a distinguished type (failure) for error handling.
+	// If "default" is set, we only want to return it when encountering invalid
+	// json - not for any other possible causes of panic.
+	// In particular, if we ever extend the json.decode API to take a callback,
+	// a distinguished, private failure type prevents the possibility of
+	// json.decode with "default" becoming abused as a try-catch mechanism.
 	type failure string
 	fail := func(format string, args ...interface{}) {
 		panic(failure(fmt.Sprintf(format, args...)))
@@ -496,18 +514,22 @@ func decode(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, k
 		x := recover()
 		switch x := x.(type) {
 		case failure:
-			err = fmt.Errorf("json.decode: at offset %d, %s", i, x)
+			if d != nil {
+				v = d
+			} else {
+				err = fmt.Errorf("json.decode: at offset %d, %s", i, x)
+			}
 		case nil:
 			// nop
 		default:
 			panic(x) // unexpected panic
 		}
 	}()
-	x := parse()
+	v = parse()
 	if skipSpace() {
 		fail("unexpected character %q after value", s[i])
 	}
-	return x, nil
+	return v, nil
 }
 
 func isdigit(b byte) bool {

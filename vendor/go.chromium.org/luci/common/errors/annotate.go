@@ -250,8 +250,8 @@ var maxLogEntrySize = 64 * 1024
 //
 // If resulting log message is large, splits it into log entries of at most
 // 64KiB.
-func Log(c context.Context, err error, excludePkgs ...string) {
-	log := logging.Get(c)
+func Log(ctx context.Context, err error, excludePkgs ...string) {
+	log := logging.Get(ctx)
 	r := renderStack(err)
 	buf := strings.Builder{}
 	_, _ = r.dumpTo(&buf, excludePkgs...) // no errors can happen, only panics.
@@ -617,7 +617,7 @@ func Annotate(err error, reason string, args ...any) *Annotator {
 //
 //	errors.Reason("something bad: %d", value).Tag(transient.Tag).Err()
 //
-// Prefer this form to errors.New(fmt.Sprintf("..."))
+// Prefer this form to errors.New(fmt.Sprintf("...")) or fmt.Errorf("...")
 func Reason(reason string, args ...any) *Annotator {
 	currentStack := captureStack(1)
 	frameInfo := stackFrameInfo{0, currentStack}
