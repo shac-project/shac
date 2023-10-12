@@ -2337,6 +2337,11 @@ func TestTestDataPrint(t *testing.T) {
 				"[//load-diamond_dependency.star:19] i am a constant #2\n",
 		},
 		{
+			name: "optional-features.star",
+			want: "[//optional-features.star:17] recursion complete\n" +
+				"[//optional-features.star:23] set([\"foo\"])\n",
+		},
+		{
 			name: "print-shac-version.star",
 			want: "[//print-shac-version.star:15] " + v + "\n",
 		},

@@ -71,8 +71,8 @@ go.chromium.org/luci/starlark/docgen
 go.chromium.org/luci/starlark/docgen/ast
 go.chromium.org/luci/starlark/docgen/docstring
 go.chromium.org/luci/starlark/docgen/symbols
-# go.starlark.net v0.0.0-20230807144010-2aa75752d1da
-## explicit; go 1.16
+# go.starlark.net v0.0.0-20230925163745-10651d5192ab
+## explicit; go 1.18
 go.starlark.net/internal/compile
 go.starlark.net/internal/spell
 go.starlark.net/lib/json

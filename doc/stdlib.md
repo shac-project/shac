@@ -11,11 +11,12 @@ available](https://github.com/google/starlark-go/blob/HEAD/doc/spec.md#built-in-
 a few are explicitly documented here to highlight them.
 
 These [experimental
-features](https://pkg.go.dev/go.starlark.net/resolve#pkg-variables) are enabled:
+options](https://pkg.go.dev/go.starlark.net/syntax#FileOptions) are enabled:
 
-- AllowSet: "set" built-in is enabled.
-- AllowRecursion: allow while statements and recursion. This allows potentially
-  unbounded runtime.
+- Set: "set" built-in is enabled.
+- While: while statements are allowed. This allows potentially unbounded
+  runtime.
+- Recursion: recursive function calls are allowed.
 
 ## Table of contents
 

@@ -22,7 +22,8 @@ require (
 	github.com/mattn/go-colorable v0.1.13
 	github.com/mattn/go-isatty v0.0.19
 	github.com/spf13/pflag v1.0.5
-	go.starlark.net v0.0.0-20230807144010-2aa75752d1da
+	go.chromium.org/luci v0.0.0-20231012044737-639b0ba8e396
+	go.starlark.net v0.0.0-20230925163745-10651d5192ab
 	golang.org/x/mod v0.13.0
 	golang.org/x/sync v0.4.0
 	golang.org/x/tools v0.14.0
@@ -32,8 +33,6 @@ require (
 	// release containing 6352deccdb59bcc074db0ab49f4d8ba8f3cdb7ee.
 	google.golang.org/protobuf v1.31.1-0.20230927161544-6352deccdb59
 )
-
-require go.chromium.org/luci v0.0.0-20231012044737-639b0ba8e396
 
 require (
 	github.com/golang/mock v1.6.0 // indirect

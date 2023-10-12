@@ -37,17 +37,20 @@ import (
 	"github.com/go-git/go-git/plumbing/format/gitignore"
 	flag "github.com/spf13/pflag"
 	"go.fuchsia.dev/shac-project/shac/internal/sandbox"
-	"go.starlark.net/resolve"
 	"go.starlark.net/starlark"
+	"go.starlark.net/syntax"
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/sync/semaphore"
 	"google.golang.org/protobuf/encoding/prototext"
 )
 
-func init() {
-	// Enable not-yet-standard Starlark features.
-	resolve.AllowRecursion = true
-	resolve.AllowSet = true
+func starlarkOptions() *syntax.FileOptions {
+	return &syntax.FileOptions{
+		// Enable not-yet-standard Starlark features.
+		Set:       true,
+		While:     true,
+		Recursion: true,
+	}
 }
 
 // Cursor represents a point in a content; generally a source file but it can
@@ -363,6 +366,7 @@ func runInner(ctx context.Context, o *Options, tmpdir string) error {
 		globals:  getPredeclared(),
 		sources:  map[string]*loadedSource{},
 		packages: packages,
+		opts:     starlarkOptions(),
 	}
 
 	subprocessSem := semaphore.NewWeighted(int64(runtime.NumCPU()) + 2)

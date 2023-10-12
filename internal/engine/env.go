@@ -113,6 +113,8 @@ type starlarkEnv struct {
 	globals starlark.StringDict
 	// packages are all the available packages. It must include __main__.
 	packages map[string]fs.FS
+	// Options for parsing Starlark.
+	opts *syntax.FileOptions
 
 	// Mutable.
 	mu sync.Mutex
@@ -200,7 +202,7 @@ func (e *starlarkEnv) loadInner(th *starlark.Thread, sk sourceKey) (starlark.Str
 				oldsk := th.Local("shac.pkg").(sourceKey)
 				th.SetLocal("shac.pkg", sk)
 				fp := syntax.FilePortion{Content: d, FirstLine: 1, FirstCol: 1}
-				source.globals, source.err = starlark.ExecFile(th, sk.String(), fp, e.globals)
+				source.globals, source.err = starlark.ExecFileOptions(e.opts, th, sk.String(), fp, e.globals)
 				th.SetLocal("shac.pkg", oldsk)
 				var errl resolve.ErrorList
 				if errors.As(source.err, &errl) {
