@@ -401,17 +401,16 @@ func ctxOsExec(ctx context.Context, s *shacState, name string, args starlark.Tup
 	cmd.Stdin = stdin
 
 	errs := make(chan error, 1)
+	// Run the command in a non-blocking goroutine so exec() calls don't block
+	// if there's already the maximum number of subprocesses running. wait()
+	// will block until the subprocess starts *and* finishes.
 	go func() {
 		errs <- func() error {
 			if err := s.subprocessSem.Acquire(ctx, 1); err != nil {
 				return err
 			}
 			defer s.subprocessSem.Release(1)
-
-			if err := execsupport.Start(cmd); err != nil {
-				return err
-			}
-			return cmd.Wait()
+			return execsupport.Run(cmd)
 		}()
 		// Signals to subprocess.wait() that the subprocess is done, whether or
 		// not it was successful.
