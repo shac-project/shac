@@ -826,9 +826,13 @@ func TestRun_Exec_InvalidPATHElements(t *testing.T) {
 	// launching succeeds. If shac doesn't handle invalid PATH elements
 	// correctly, launching any subprocess should fail, at least on platforms
 	// where filesystem sandboxing is supported.
+	cmd := "true"
+	if runtime.GOOS == "windows" {
+		cmd = "rundll32.exe"
+	}
 	writeFile(t, root, "shac.star", ""+
 		"def cb(ctx):\n"+
-		"    ctx.os.exec([\"true\"]).wait()\n"+
+		"    ctx.os.exec([\""+cmd+"\"]).wait()\n"+
 		"    print(\"success!\")\n"+
 		"shac.register_check(cb)\n")
 
@@ -1473,11 +1477,6 @@ func TestRun_SCM_Git_Recursive_Shared(t *testing.T) {
 // These test cases call fail() or throw an exception.
 func TestTestDataFailOrThrow(t *testing.T) {
 	t.Parallel()
-	// When running on Windows, the git installation may not have added the git
-	// environment. This is the case on M-A's personal workstation. In this case,
-	// some tests fail. Defaults to true since this is the case on GitHub Actions
-	// Windows worker.
-	isBashAvail := true
 	root, got := enumDir(t, "fail_or_throw")
 	data := []struct {
 		name  string
@@ -1694,17 +1693,17 @@ func TestTestDataFailOrThrow(t *testing.T) {
 		{
 			"ctx-os-exec-double_wait.star",
 			"wait: wait was already called",
-			"  //ctx-os-exec-double_wait.star:18:14: in cb\n",
+			"  //ctx-os-exec-double_wait.star:21:14: in cb\n",
 		},
 		{
 			"ctx-os-exec-false.star",
 			func() string {
-				if !isBashAvail && runtime.GOOS == "windows" {
-					return "ctx.os.exec: exec: \"false\": executable file not found in %PATH%"
+				if runtime.GOOS == "windows" {
+					return "wait: command failed with exit code 1: [cmd.exe /c exit 1]"
 				}
 				return "wait: command failed with exit code 1: [false]"
 			}(),
-			"  //ctx-os-exec-false.star:16:32: in cb\n",
+			"  //ctx-os-exec-false.star:19:26: in cb\n",
 		},
 		{
 			"ctx-os-exec-invalid_cwd.star",
@@ -1713,18 +1712,8 @@ func TestTestDataFailOrThrow(t *testing.T) {
 		},
 		{
 			"ctx-os-exec-mutate_result.star",
-			func() string {
-				if !isBashAvail && runtime.GOOS == "windows" {
-					return "ctx.os.exec: exec: \"echo\": executable file not found in %PATH%"
-				}
-				return "can't assign to .retcode field of struct"
-			}(),
-			func() string {
-				if !isBashAvail && runtime.GOOS == "windows" {
-					return "  //ctx-os-exec-mutate_result.star:16:22: in cb\n"
-				}
-				return "  //ctx-os-exec-mutate_result.star:17:8: in cb\n"
-			}(),
+			"can't assign to .retcode field of struct",
+			"  //ctx-os-exec-mutate_result.star:20:8: in cb\n",
 		},
 		{
 			"ctx-os-exec-no_cmd.star",
@@ -1733,7 +1722,13 @@ func TestTestDataFailOrThrow(t *testing.T) {
 		},
 		{
 			"ctx-os-exec-no_wait.star",
-			"wait() was not called on <subprocess \"echo hello world\">",
+			func() string {
+				cmd := "echo hello world"
+				if runtime.GOOS == "windows" {
+					cmd = "cmd.exe /c " + cmd
+				}
+				return "wait() was not called on <subprocess \"" + cmd + "\">"
+			}(),
 			"",
 		},
 		{
@@ -1759,7 +1754,7 @@ func TestTestDataFailOrThrow(t *testing.T) {
 		{
 			"ctx-os-exec-result_unhashable.star",
 			"unhashable type: subprocess",
-			"  //ctx-os-exec-result_unhashable.star:17:16: in cb\n",
+			"  //ctx-os-exec-result_unhashable.star:20:16: in cb\n",
 		},
 		{
 			"ctx-re-allmatches-no_arg.star",
@@ -2379,10 +2374,16 @@ func TestTestDataPrint(t *testing.T) {
 		},
 		{
 			name: "subprocess.star",
-			want: "[//subprocess.star:17] str(proc): <subprocess \"echo hello\">\n" +
-				"[//subprocess.star:18] type(proc): subprocess\n" +
-				"[//subprocess.star:19] bool(proc): True\n" +
-				"[//subprocess.star:20] dir(proc): [\"wait\"]\n",
+			want: func() string {
+				cmd := "echo hello world"
+				if runtime.GOOS == "windows" {
+					cmd = "cmd.exe /c " + cmd
+				}
+				return "[//subprocess.star:20] str(proc): <subprocess \"" + cmd + "\">\n" +
+					"[//subprocess.star:21] type(proc): subprocess\n" +
+					"[//subprocess.star:22] bool(proc): True\n" +
+					"[//subprocess.star:23] dir(proc): [\"wait\"]\n"
+			}(),
 		},
 		{
 			name: "true.star",

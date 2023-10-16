@@ -74,8 +74,12 @@ func init() {
 	helpOut = panicWrite{}
 	// Clear all environment variables to prevent automatic reporting mode
 	// selection, which can lead to inconsistent behavior depending on the
-	// environment.
-	os.Clearenv()
+	// environment. We cannot use os.Clearenv() since it breaks testing on
+	// Windows because TEMP is necessary for tests to succeed.
+	os.Unsetenv("GITHUB_RUN_ID")
+	os.Unsetenv("LUCI_CONTEXT")
+	os.Unsetenv("TERM")
+	os.Unsetenv("VSCODE_GIT_IPC_HANDLE")
 }
 
 func TestMainErr(t *testing.T) {

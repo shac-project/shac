@@ -13,7 +13,10 @@
 # limitations under the License.
 
 def cb(ctx):
-    proc = ctx.os.exec(["echo", "hello world"])
+    cmd = ["echo", "hello world"]
+    if ctx.platform.os == "windows":
+        cmd = ["cmd.exe", "/c"] + cmd
+    proc = ctx.os.exec(cmd)
     print({proc: "should not be hashable"})
 
 shac.register_check(cb)

@@ -13,6 +13,9 @@
 # limitations under the License.
 
 def cb(ctx):
-    ctx.os.exec(["false"]).wait()
+    cmd = ["false"]
+    if ctx.platform.os == "windows":
+        cmd = ["cmd.exe", "/c", "exit", "1"]
+    ctx.os.exec(cmd).wait()
 
 shac.register_check(cb)

@@ -13,7 +13,10 @@
 # limitations under the License.
 
 def cb(ctx):
-    res = ctx.os.exec(["echo", "hello world"]).wait()
+    cmd = ["echo", "hello world"]
+    if ctx.platform.os == "windows":
+        cmd = ["cmd.exe", "/c"] + cmd
+    res = ctx.os.exec(cmd).wait()
     res.retcode = 1
 
 shac.register_check(cb)

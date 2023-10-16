@@ -13,7 +13,10 @@
 # limitations under the License.
 
 def cb(ctx):
-    proc = ctx.os.exec(["echo", "hello"])
+    cmd = ["echo", "hello world"]
+    if ctx.platform.os == "windows":
+        cmd = ["cmd.exe", "/c"] + cmd
+    proc = ctx.os.exec(cmd)
     print("str(proc): %s" % str(proc))
     print("type(proc): %s" % type(proc))
     print("bool(proc): %s" % bool(proc))
