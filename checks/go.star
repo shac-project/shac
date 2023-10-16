@@ -62,9 +62,9 @@ def _gosec(ctx, version = "v2.15.0", level = "error", exclude = [
     affected_files = set(ctx.scm.affected_files())
     exe = go_install(ctx, "github.com/securego/gosec/v2/cmd/gosec", version)
     res = ctx.os.exec(
-        [exe, "-fmt=json", "-quiet", "-exclude=%s" % ",".join(exclude), "-exclude-dir=.tools", "./..."],
+        [exe, "-fmt=json", "-quiet", "-exclude=%s" % ",".join(exclude), "-exclude-dir=.tools", "-exclude-dir=internal/engine/testdata", "./..."],
         ok_retcodes = (0, 1),
-        env = go_env(),
+        env = go_env(ctx),
     ).wait()
     if not res.retcode:
         return
@@ -112,7 +112,7 @@ def _ineffassign(ctx, version = "v0.0.0-20230107090616-13ace0543b28"):
     exe = go_install(ctx, "github.com/gordonklaus/ineffassign", version)
     res = ctx.os.exec(
         [exe, "./..."],
-        env = go_env(),
+        env = go_env(ctx),
         # ineffassign's README claims that it emits a retcode of 1 if it returns any
         # findings, but it actually emits a retcode of 3.
         # https://github.com/gordonklaus/ineffassign/blob/4cc7213b9bc8b868b2990c372f6fa057fa88b91c/ineffassign.go#L70
@@ -143,7 +143,7 @@ def _staticcheck(ctx, version = "v0.4.3"):
       will be rolled from time to time.
     """
     exe = go_install(ctx, "honnef.co/go/tools/cmd/staticcheck", version)
-    env = go_env()
+    env = go_env(ctx)
     res = ctx.os.exec(
         [exe, "-f=json", "./..."],
         ok_retcodes = [0, 1],
@@ -192,7 +192,7 @@ def _shadow(ctx, version = "v0.7.0"):
             "-json",
             "./...",
         ],
-        env = go_env(),
+        env = go_env(ctx),
     ).wait()
 
     # Example output:
@@ -241,7 +241,7 @@ def no_fork_without_lock(ctx):
             "-json",
             "./...",
         ],
-        env = go_env(),
+        env = go_env(ctx),
     ).wait().stdout)
 
     # Skip the "execsupport" package since it contains the wrappers around Run()
@@ -285,7 +285,7 @@ def govet(
         ] +
         ["-" + a for a in analyzers] +
         ["./..."],
-        env = go_env(),
+        env = go_env(ctx),
     ).wait().stderr
 
     # output is of the form:
@@ -299,6 +299,9 @@ def govet(
     current_package_lines = []
     lines = output.splitlines()
     for i, line in enumerate(lines):
+        if line.startswith("warning: "):
+            # warning: GOPATH set to GOROOT () has no effect
+            continue
         if not line.startswith("# "):
             current_package_lines.append(line)
             if i + 1 < len(lines):

@@ -14,27 +14,33 @@
 
 def go_install(ctx, pkg, version):
     """Runs `go install`."""
+    env = go_env(ctx)
+    cache = _go_cache(ctx)
 
-    env = go_env()
+    # Save executables in a common directory.
+    env["GOBIN"] = cache + "/gobin"
 
-    # TODO(olivernewman): Implement proper cache directories for shac instead of
-    # creating a `.tools` directory, which requires making the root directory
-    # writable.
-    env["GOBIN"] = ctx.scm.root + "/.tools/gobin"
+    tool_name = pkg.split("/")[-1]
 
-    # TODO(olivernewman): Stop using a separate GOPATH for each tool, and instead
-    # install the tools sequentially. Multiple concurrent `go install` runs on the
-    # same GOPATH results in race conditions.
+    # Setting GOPATH is necessary on Windows when USERPROFILE is not set.
+    # Use one GOPATH per tool. Since both GOBIN and GOMODCACHE are redirected,
+    # in practice only sumdb is going to be unique
+    env["GOPATH"] = cache + "/" + tool_name
+
     ctx.os.exec(
         ["go", "install", "%s@%s" % (pkg, version)],
         allow_network = True,
         env = env,
     ).wait()
 
-    tool_name = pkg.split("/")[-1]
-    return "%s/%s" % (env["GOBIN"], tool_name)
+    tool_exec = tool_name
+    if ctx.platform.os == "windows":
+        tool_exec += ".exe"
+    return "%s/%s" % (env["GOBIN"], tool_exec)
 
-def go_env():
+def go_env(ctx):
+    """Returns environment variables to use when running Go tooling."""
+    cache = _go_cache(ctx)
     return {
         # Disable cgo as it's not necessary and not all development platforms have
         # the necessary headers.
@@ -44,7 +50,17 @@ def go_env():
             # to fail on some machines.
             "-buildvcs=false",
         ]),
+        # Share the Go module cache to reduce downloads.
+        "GOMODCACHE": cache + "/mod",
         # TODO(olivernewman): The default gopackagesdriver is broken within an
         # nsjail.
         "GOPACKAGESDRIVER": "off",
     }
+
+def _go_cache(ctx):
+    """Returns the shared Go cache."""
+
+    # TODO(olivernewman): Implement proper cache directories for shac instead of
+    # creating a `.tools` directory, which requires making the root directory
+    # writable.
+    return ctx.scm.root + "/.tools"
