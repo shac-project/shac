@@ -1528,7 +1528,7 @@ func TestTestDataFailOrThrow(t *testing.T) {
 		},
 		{
 			"ctx-emit-finding-end_col-col-equal.star",
-			"ctx.emit.finding: for parameter \"end_col\": must be greater than \"col\"",
+			"ctx.emit.finding: for parameter \"end_col\": \"end_col\" (2) must be greater than \"col\" (2)",
 			"  //ctx-emit-finding-end_col-col-equal.star:16:21: in cb\n",
 		},
 		{
@@ -1543,7 +1543,7 @@ func TestTestDataFailOrThrow(t *testing.T) {
 		},
 		{
 			"ctx-emit-finding-end_line-line-reverse.star",
-			"ctx.emit.finding: for parameter \"end_line\": must be greater than or equal to \"line\"",
+			"ctx.emit.finding: for parameter \"end_line\": \"end_line\" (1) must be greater than or equal to \"line\" (2)",
 			"  //ctx-emit-finding-end_line-line-reverse.star:16:21: in cb\n",
 		},
 		{
