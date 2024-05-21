@@ -259,6 +259,45 @@ $ shac check
 - black (success in 540ms)
 ```
 
+With a couple minor changes we can configure `no_trailing_whitespace` to work
+with `shac fmt` too. We need to rename the function from
+`no_trailing_whitespace` to `_no_trailing_whitespace`, add a `replacements`
+argument to `ctx.emit.finding()`, and register the check as a formatter. The
+`replacements` argument only applies to the characters between `col` and
+`end_col`. Since we want to remove those characters, we replace them with an
+empty string.
+
+```python
+def _no_trailing_whitespace(ctx):
+    """Check that no source files contain lines with trailing whitespace."""
+    for f in ctx.scm.affected_files():
+        contents = str(ctx.io.read_file(f))
+        for i, line in enumerate(contents.splitlines()):
+            stripped = line.rstrip()
+            if stripped != line:
+                ctx.emit.finding(
+                    level = "error",
+                    filepath = f,
+                    # Finding lines and columns are 1-indexed.
+                    line = i + 1,
+                    col = len(stripped) + 1,
+                    # End column is exclusive.
+                    end_col = len(line) + 1,
+                    message = "Delete trailing whitespace.",
+                    replacements = [""]
+                )
+
+no_trailing_whitespace = shac.check(_no_trailing_whitespace, formatter = True)
+shac.register_check(no_trailing_whitespace)
+```
+
+Now `no_trailing_whitespace` will run in `shac fmt`:
+
+```shell
+$ shac fmt
+- no_trailing_whitespace (all good!)
+```
+
 ## Road map
 
 Planned features/changes, in descending order by priority:
