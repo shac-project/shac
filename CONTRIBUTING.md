@@ -18,7 +18,7 @@ For more information about the Google CLA, see [Contributor License Agreements](
 All changes require review, including changes by project members.
 
 For detailed instructions on how to contribute changes,
-see [Contribute changes](/docs/development/source_code/contribute_changes.md).
+see [the Gerrit docs](https://gerrit-review.googlesource.com/Documentation/intro-user.html).
 
 ## Community guidelines
 
