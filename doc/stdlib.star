@@ -229,7 +229,7 @@ def _ctx_emit_finding(level, message, filepath = None, line = None, col = None, 
                       message="Do not use bad_word",
                       filepath=path,
                       line=num,
-                      start_col=idx+1,
+                      col=idx+1,
                       end_col=idx+1+len("bad_word"),
                       replacements=["best_word", "good_word"],
                   )
