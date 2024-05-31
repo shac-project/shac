@@ -1,6 +1,18 @@
-# github.com/go-git/go-git v4.7.0+incompatible
-## explicit
-github.com/go-git/go-git/plumbing/format/gitignore
+# github.com/go-git/gcfg v1.5.1-0.20230307220236-3a3c6141e376
+## explicit; go 1.13
+github.com/go-git/gcfg
+github.com/go-git/gcfg/scanner
+github.com/go-git/gcfg/token
+github.com/go-git/gcfg/types
+# github.com/go-git/go-billy/v5 v5.5.0
+## explicit; go 1.19
+github.com/go-git/go-billy/v5
+# github.com/go-git/go-git/v5 v5.12.0
+## explicit; go 1.19
+github.com/go-git/go-git/v5/internal/path_util
+github.com/go-git/go-git/v5/plumbing/format/config
+github.com/go-git/go-git/v5/plumbing/format/gitignore
+github.com/go-git/go-git/v5/utils/ioutil
 # github.com/golang/mock v1.6.0
 ## explicit; go 1.11
 github.com/golang/mock/gomock
@@ -26,8 +38,6 @@ github.com/julienschmidt/httprouter
 ## explicit; go 1.20
 github.com/klauspost/compress/flate
 github.com/klauspost/compress/gzip
-# github.com/kr/text v0.2.0
-## explicit
 # github.com/mattn/go-colorable v0.1.13
 ## explicit; go 1.15
 github.com/mattn/go-colorable
@@ -39,12 +49,6 @@ github.com/mattn/go-isatty
 # github.com/spf13/pflag v1.0.5
 ## explicit; go 1.12
 github.com/spf13/pflag
-# github.com/src-d/gcfg v1.4.0
-## explicit
-github.com/src-d/gcfg
-github.com/src-d/gcfg/scanner
-github.com/src-d/gcfg/token
-github.com/src-d/gcfg/types
 # go.chromium.org/luci v0.0.0-20240531181147-0c7c729b2fcf
 ## explicit; go 1.22
 go.chromium.org/luci/common/clock
@@ -241,15 +245,6 @@ google.golang.org/protobuf/types/known/emptypb
 google.golang.org/protobuf/types/known/fieldmaskpb
 google.golang.org/protobuf/types/known/structpb
 google.golang.org/protobuf/types/known/timestamppb
-# gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c
-## explicit; go 1.11
-# gopkg.in/src-d/go-billy.v4 v4.3.2
-## explicit
-gopkg.in/src-d/go-billy.v4
-# gopkg.in/src-d/go-git.v4 v4.13.1
-## explicit
-gopkg.in/src-d/go-git.v4/plumbing/format/config
-gopkg.in/src-d/go-git.v4/utils/ioutil
 # gopkg.in/warnings.v0 v0.1.2
 ## explicit
 gopkg.in/warnings.v0

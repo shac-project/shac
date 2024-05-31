@@ -34,7 +34,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/go-git/go-git/plumbing/format/gitignore"
+	"github.com/go-git/go-git/v5/plumbing/format/gitignore"
 	flag "github.com/spf13/pflag"
 	"go.fuchsia.dev/shac-project/shac/internal/sandbox"
 	"go.starlark.net/starlark"
