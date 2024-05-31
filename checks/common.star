@@ -14,7 +14,7 @@
 
 def go_install(ctx, pkg, version):
     """Runs `go install`."""
-    env = go_env(ctx)
+    env = go_env(ctx, allow_network = True)
     cache = _go_cache(ctx)
 
     # Save executables in a common directory.
@@ -38,13 +38,17 @@ def go_install(ctx, pkg, version):
         tool_exec += ".exe"
     return "%s/%s" % (env["GOBIN"], tool_exec)
 
-def go_env(ctx):
+def go_env(ctx, allow_network = False):
     """Returns environment variables to use when running Go tooling."""
     cache = _go_cache(ctx)
     return {
         # Disable cgo as it's not necessary and not all development platforms have
         # the necessary headers.
         "CGO_ENABLED": "0",
+        # Don't use the go workspace modules, always use the vendor directory.
+        "GOWORK": "off",
+        # GOPROXY=off disables network access for downloading Go code.
+        "GOPROXY": "" if allow_network else "off",
         "GOFLAGS": " ".join([
             # Disable embedding VCS information because it causes ineffassign builds
             # to fail on some machines.

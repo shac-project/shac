@@ -738,5 +738,6 @@ func newLinesWhole(root, path string) (starlark.Value, error) {
 }
 
 func unsafeString(b []byte) string {
+	// #nosec G103
 	return unsafe.String(unsafe.SliceData(b), len(b))
 }

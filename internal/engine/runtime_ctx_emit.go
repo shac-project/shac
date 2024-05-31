@@ -222,5 +222,6 @@ func intToInt(i starlark.Int) int {
 }
 
 func unsafeByteSlice(s string) []byte {
+	// #nosec G103
 	return unsafe.Slice(unsafe.StringData(s), len(s))
 }
