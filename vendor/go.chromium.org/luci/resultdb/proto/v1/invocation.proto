@@ -20,6 +20,7 @@ import "google/api/field_behavior.proto";
 import "google/protobuf/struct.proto";
 import "google/protobuf/timestamp.proto";
 import "go.chromium.org/luci/resultdb/proto/v1/common.proto";
+import "go.chromium.org/luci/resultdb/proto/v1/instruction.proto";
 import "go.chromium.org/luci/resultdb/proto/v1/predicate.proto";
 
 option go_package = "go.chromium.org/luci/resultdb/proto/v1;resultpb";
@@ -29,9 +30,10 @@ option go_package = "go.chromium.org/luci/resultdb/proto/v1;resultpb";
 // buildbucket build, CQ attempt.
 // Composable: can include other invocations, see inclusion.proto.
 //
-// Next id: 17.
+// Next id: 24.
 message Invocation {
   reserved 3; // bool interrupted, crbug.com/1078696.
+  reserved 17,18; // step and test instructions.
 
   // Can be used to refer to this invocation, e.g. in ResultDB.GetInvocation
   // RPC.
@@ -82,8 +84,18 @@ message Invocation {
 
   // == Finalization ===========================================================
 
+  // When the invocation started to finalize, i.e. transitioned to FINALIZING
+  // state. This means the invocation is immutable but directly or indirectly
+  // included invocations may not be.
+  //
+  // Output only.
+  google.protobuf.Timestamp finalize_start_time = 19
+      [ (google.api.field_behavior) = OUTPUT_ONLY ];
+
   // When the invocation was finalized, i.e. transitioned to FINALIZED state.
-  // If this field is set, implies that the invocation is finalized.
+  // If this field is set, implies that the invocation is finalized. This
+  // means the invocation and directly or indirectly included invocations
+  // are immutable.
   //
   // Output only.
   google.protobuf.Timestamp finalize_time = 6
@@ -118,8 +130,26 @@ message Invocation {
   // all other cases.
   repeated string included_invocations = 8;
 
+  // Whether this invocation is a root of the invocation graph for export purposes.
+  //
+  // To help downstream systems (like LUCI Analysis) make sense of test results,
+  // and gather overall context for a result, ResultDB data export is centered
+  // around export roots.
+  // The export roots typically represent a top-level buildbucket build, like a
+  // postsubmit build or presubmit tryjob. Test results are only exported if
+  // they are included from a root. They may be exported multiple times of they
+  // are included by multiple roots (e.g. in case of re-used test results).
+  // Re-used test results can be identified because the parent invocation of the
+  // test result will be the same even though the export root will be different.
+  //
+  // N.B. Export roots do not affect legacy BigQuery exports configured by the
+  // BigQueryExports field.
+  bool is_export_root = 21;
+
   // bigquery_exports indicates what BigQuery table(s) that results in this
   // invocation should export to.
+  //
+  // Legacy feature: Prefer to use LUCI Analysis exports instead.
   repeated BigQueryExport bigquery_exports = 9;
 
   // LUCI identity (e.g. "user:<email>") who created the invocation.
@@ -147,7 +177,7 @@ message Invocation {
   // Arbitrary JSON object that contains structured, domain-specific properties
   // of the invocation.
   //
-  // The serialized size must be <= 4096 bytes.
+  // The serialized size must be <= 16 KB.
   google.protobuf.Struct properties = 14;
 
   // The code sources which were tested by this invocation.
@@ -157,14 +187,33 @@ message Invocation {
   // The sources specified here applies only to:
   // - the test results directly contained in this invocation, and
   // - any directly included invocations which set their source_spec.inherit to
-  // true.
+  //   true.
   //
   // Clients should be careful to ensure the uploaded source spec is consistent
   // between included invocations that upload the same test variants.
   // Verdicts are associated with the sources of *any* of their constituent
   // test results, so if there is inconsistency between included invocations,
   // the position of the verdict becomes not well defined.
+  //
+  // Note that the sources specified here are shared with included invocations
+  // regardless of the realm of those included invocations.
+  //
+  // Attempting to update this field to a value other than its current value
+  // after is_source_spec_final is set will generate an error.
   SourceSpec source_spec = 15;
+
+  // Whether the code sources specified by source_spec are final (immutable).
+  //
+  // To facilitate rapid export of invocations inheriting sources from this
+  // invocation, this property should be set to true as soon as possible
+  // after the invocation's sources are fixed. In most cases, clients
+  // will want to set this property to true at the same time as they set
+  // source_spec.
+  //
+  // This field is client owned. Consistent with https://google.aip.dev/129,
+  // it will not be forced to true when the invocation starts to finalize, even
+  // if its effective value will always be true at that point.
+  bool is_source_spec_final = 20;
 
   // A user-specified baseline identifier that maps to a set of test variants.
   // Often, this will be the source that generated the test result, such as the
@@ -183,6 +232,36 @@ message Invocation {
   // The caller must have `resultdb.baselines.put` to be able to
   // modify this field.
   string baseline_id = 16;
+
+  // Instructions for the steps and test results in this invocation.
+  // It may also contain instructions for test results in included invocations.
+  Instructions instructions = 23;
+
+  // Additional JSON object(s) that contain additional structured data about the
+  // invocation. Unlike `properties` this field is not included (denormalized)
+  // in the test results export, it is only available in the finalized
+  // invocations BigQuery export.
+  //
+  // All google.protobuf.Struct values must contain a field '@type' which is
+  // a URL/resource name that uniquely identifies the type of the source
+  // protocol buffer message. This string must contain at least
+  // one "/" character. The last segment of the URL's path must represent the
+  // fully qualified name of the type (e.g. foo.com/x/some.package.MyMessage)
+  //
+  // ResultDB will not validate the contents with respect to this schema, but
+  // downstream systems may depend on the '@type' field to inform how the
+  // contents are interpreted.
+  //
+  // Each key is limited to 63 characters matching
+  // ^[a-z]([a-z0-9_]{0,61}[a-z0-9])?$.
+  // The size of each value is limited to <= 20,000 bytes.
+  // The total size of the map (as measured by proto.Size())
+  // is limited to <= 100,000 bytes.
+  //
+  // The following paths can be used for field masks:
+  // * "extended_properties" to target the whole extended_properties,
+  // * "extended_properties.some_key" to target one key of extended_properties.
+  map<string, google.protobuf.Struct> extended_properties = 22;
 }
 
 // BigQueryExport indicates that results in this invocation should be exported

@@ -1,0 +1,133 @@
+// Copyright 2024 The LUCI Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+package luci.resultdb.v1;
+
+option go_package = "go.chromium.org/luci/resultdb/proto/v1;resultpb";
+
+// A collection of instructions.
+// Used for step and test result instructions.
+// Instructions may mixed between step and test instructions.
+// This has a size limit of 1MB.
+message Instructions {
+  repeated Instruction instructions = 1;
+}
+
+// Instruction is one failure reproduction instruction for a step or test result.
+// Instruction can have different targets, like "local" or "remote".
+// Instructions are stored in invocation level.
+message Instruction {
+  // ID of the instruction. Required.
+  // It is consumer-defined and is unique within the an invocation.
+  // The tuple (invocation_id, instruction_id) can uniquely identify an instruction.
+  // At this moment, we only has use cases for instruction ID for step instructions,
+  // but we also require test instruction to have ID, for possible features
+  // or enhancements in the future.
+  // Format [a-z][a-z0-9_\-:.]{0,99}
+  // Limit: 100 bytes.
+  string id = 1;
+
+  // Either step or test instruction.
+  InstructionType type = 2;
+
+  // List of instruction for different targets.
+  // There is at most 1 instruction per target.
+  // If there is more than 1, an error will be returned.
+  repeated TargetedInstruction targeted_instructions = 3;
+
+  // Specified the collection of test results that this instruction applies to.
+  // For example, we can target all test results within a child invocation.
+  // The consumer needs to make sure that any test result only has at most 1 instruction.
+  // Otherwise, the behavior is undeterministic.
+  // If no filter is applied, assume this applies to all test results contained
+  // in this invocation and included invocations.
+  // Only applicable for test instructions. This field will be ignored for step instructions.
+  InstructionFilter instruction_filter = 4;
+}
+
+// InstructionFilter specifies the test results that this instruction applies to.
+message InstructionFilter{
+  // TODO (nqmtuan): We may support filter by invocation tags if requested.
+  oneof filter_type {
+    InstructionFilterByInvocationID invocation_ids = 1;
+  }
+}
+
+message InstructionFilterByInvocationID {
+  // Only test results contained in these invocation IDs will be selected.
+  repeated string invocation_ids = 1;
+
+  // Whether the check is recursive (i.e. whether it applies to test results
+  // in included invocation).
+  bool recursive = 2;
+}
+
+
+// Instruction for specific targets.
+// Instruction for different targets may have the same or different dependency
+// and content.
+message TargetedInstruction {
+  // The targets that this instruction is for, like "LOCAL", "REMOTE" or "PREBUILT".
+  // A targeted instruction can only depend on another instruction with the same target.
+  // For example, a "LOCAL" instruction can only depend on another "LOCAL" instruction.
+  repeated InstructionTarget targets = 1;
+
+  // Another instruction that this instruction depends on.
+  // At the moment, one instruction can have at most 1 dependency.
+  // Make this repeated for forward compatibility.
+  repeated InstructionDependency dependencies = 2;
+
+  // The content of the instruction, in markdown format.
+  // Placeholders may be used and will be populated with real
+  // information when displayed in the UI.
+  // This will be limit to 10KB. If the content is longer than 10KB,
+  // an error will be returned.
+  // See go/luci-failure-reproduction-instructions-dd for details.
+  string content = 3;
+}
+
+// Specifies a dependency for instruction.
+// An instruction being depended on needs to be step instruction, not test result instruction.
+// If the dependency cannot be found, or the user does not have the ACL,
+// the dependency chain will stop and Milo will not display the dependency.
+// If a dependency cycle is detected, we will stop showing dependency once we detected the cycle.
+message InstructionDependency {
+  // The invocation ID of the instruction being depended on.
+  // Limit: 100 bytes
+  string invocation_id = 1;
+
+  // The instruction ID of the instruction being depended on.
+  // (invocation_id, instruction_id) uniquely identify an invocation.
+  string instruction_id = 2;
+}
+
+enum InstructionTarget {
+  INSTRUCTION_TARGET_UNSPECIFIED = 0;
+  // For running in a local machine.
+  LOCAL = 1;
+  // For running remotely.
+  REMOTE = 2;
+  // For prebuilt images.
+  PREBUILT = 3;
+}
+
+enum InstructionType {
+  INSTRUCTION_TYPE_UNSPECIFIED = 0;
+  // Instruction for step.
+  STEP_INSTRUCTION = 1;
+  // Instruction for test result.
+  TEST_RESULT_INSTRUCTION = 2;
+}

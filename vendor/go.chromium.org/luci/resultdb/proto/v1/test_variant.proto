@@ -24,6 +24,7 @@ import "go.chromium.org/luci/resultdb/proto/v1/test_result.proto";
 option go_package = "go.chromium.org/luci/resultdb/proto/v1;resultpb";
 
 // Represents a matching test variant with its outcomes.
+// Also known as a test verdict.
 message TestVariant {
   // A unique identifier of the test in a LUCI project.
   // Regex: ^[[::print::]]{1,256}$
@@ -73,6 +74,19 @@ message TestVariant {
   //
   // If the code sources tested are not available, this field is blank.
   string sources_id = 9;
+
+  // Contain the data for instruction for the test verdict.
+  // To find out the instruction for a test verdict, we select an *arbitrary*
+  // test result in the test verdict and get its instruction.
+  // Note: If in this test verdict, if there are different instructions for
+  // test result, the result may be undeterministic.
+  VerdictInstruction instruction = 10;
+}
+
+message VerdictInstruction {
+  // Name of the instruction.
+  // Format: invocations/<invocation id>/instructions/<instruction id>
+  string instruction = 1;
 }
 
 // Outcomes of an execution of the test variant.
@@ -108,4 +122,32 @@ enum TestVariantStatus {
 message TestVariantPredicate {
   // A test variant must have this status.
   TestVariantStatus status = 1;
+}
+
+// The outcome of a test variant in a test run (a single invocation,
+// excluding any included invocations).
+message RunTestVerdict {
+  // A unique identifier of the test in a LUCI project.
+  // Regex: ^[[::print::]]{1,256}$
+  //
+  // Refer to TestResult.test_id for details.
+  string test_id = 1;
+
+  // Description of one specific way of running the test,
+  // e.g. a specific bucket, builder and a test suite.
+  Variant variant = 2;
+
+  // Hash of the variant.
+  // hex(sha256(sorted(''.join('%s:%s\n' for k, v in variant.items())))).
+  string variant_hash = 3;
+
+  // Outcomes of the test variant.
+  repeated TestResultBundle results = 4;
+
+  // Information about the test at the time of its execution.
+  //
+  // All test results of the same test variant should report the same test
+  // metadata. This RPC relies on this rule and returns test metadata from
+  // *arbitrary* result of the test variant.
+  TestMetadata test_metadata = 5;
 }

@@ -41,7 +41,16 @@ def go_install(ctx, pkg, version):
 def go_env(ctx, allow_network = False):
     """Returns environment variables to use when running Go tooling."""
     cache = _go_cache(ctx)
+
+    # Will be of the form "go version go1.22.3 linux/amd64".
+    go_version_output = ctx.os.exec(["go", "version"]).wait().stdout.strip()
+    go_version = go_version_output.split(" ")[2]
+
     return {
+        # Force Go to use the current toolchain version rather than lazily
+        # downloading the toolchain version specified in go.mod if it differs
+        # from what's currently installed.
+        "GOTOOLCHAIN": go_version,
         # Disable cgo as it's not necessary and not all development platforms have
         # the necessary headers.
         "CGO_ENABLED": "0",

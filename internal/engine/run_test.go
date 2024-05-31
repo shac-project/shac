@@ -1946,7 +1946,7 @@ func TestTestDataFailOrThrow(t *testing.T) {
 		},
 		{
 			"syntax_error.star",
-			"//syntax_error.star:15:3: got '//', want primary expression",
+			"//syntax_error.star:15:1: got '//', want primary expression",
 			"",
 		},
 		{

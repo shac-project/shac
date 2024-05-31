@@ -74,6 +74,26 @@ func (mr *MockResultDBClientMockRecorder) GetArtifact(ctx, in interface{}, opts 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetArtifact", reflect.TypeOf((*MockResultDBClient)(nil).GetArtifact), varargs...)
 }
 
+// GetInstruction mocks base method.
+func (m *MockResultDBClient) GetInstruction(ctx context.Context, in *GetInstructionRequest, opts ...grpc.CallOption) (*Instruction, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "GetInstruction", varargs...)
+	ret0, _ := ret[0].(*Instruction)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetInstruction indicates an expected call of GetInstruction.
+func (mr *MockResultDBClientMockRecorder) GetInstruction(ctx, in interface{}, opts ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetInstruction", reflect.TypeOf((*MockResultDBClient)(nil).GetInstruction), varargs...)
+}
+
 // GetInvocation mocks base method.
 func (m *MockResultDBClient) GetInvocation(ctx context.Context, in *GetInvocationRequest, opts ...grpc.CallOption) (*Invocation, error) {
 	m.ctrl.T.Helper()
@@ -132,6 +152,26 @@ func (mr *MockResultDBClientMockRecorder) GetTestResult(ctx, in interface{}, opt
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]interface{}{ctx, in}, opts...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTestResult", reflect.TypeOf((*MockResultDBClient)(nil).GetTestResult), varargs...)
+}
+
+// ListArtifactLines mocks base method.
+func (m *MockResultDBClient) ListArtifactLines(ctx context.Context, in *ListArtifactLinesRequest, opts ...grpc.CallOption) (*ListArtifactLinesResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "ListArtifactLines", varargs...)
+	ret0, _ := ret[0].(*ListArtifactLinesResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListArtifactLines indicates an expected call of ListArtifactLines.
+func (mr *MockResultDBClientMockRecorder) ListArtifactLines(ctx, in interface{}, opts ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListArtifactLines", reflect.TypeOf((*MockResultDBClient)(nil).ListArtifactLines), varargs...)
 }
 
 // ListArtifacts mocks base method.
@@ -194,6 +234,26 @@ func (mr *MockResultDBClientMockRecorder) ListTestResults(ctx, in interface{}, o
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListTestResults", reflect.TypeOf((*MockResultDBClient)(nil).ListTestResults), varargs...)
 }
 
+// QueryArtifactFailureOnlyLines mocks base method.
+func (m *MockResultDBClient) QueryArtifactFailureOnlyLines(ctx context.Context, in *QueryArtifactFailureOnlyLinesRequest, opts ...grpc.CallOption) (*QueryArtifactFailureOnlyLinesResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "QueryArtifactFailureOnlyLines", varargs...)
+	ret0, _ := ret[0].(*QueryArtifactFailureOnlyLinesResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// QueryArtifactFailureOnlyLines indicates an expected call of QueryArtifactFailureOnlyLines.
+func (mr *MockResultDBClientMockRecorder) QueryArtifactFailureOnlyLines(ctx, in interface{}, opts ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "QueryArtifactFailureOnlyLines", reflect.TypeOf((*MockResultDBClient)(nil).QueryArtifactFailureOnlyLines), varargs...)
+}
+
 // QueryArtifacts mocks base method.
 func (m *MockResultDBClient) QueryArtifacts(ctx context.Context, in *QueryArtifactsRequest, opts ...grpc.CallOption) (*QueryArtifactsResponse, error) {
 	m.ctrl.T.Helper()
@@ -232,6 +292,26 @@ func (mr *MockResultDBClientMockRecorder) QueryNewTestVariants(ctx, in interface
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]interface{}{ctx, in}, opts...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "QueryNewTestVariants", reflect.TypeOf((*MockResultDBClient)(nil).QueryNewTestVariants), varargs...)
+}
+
+// QueryRunTestVerdicts mocks base method.
+func (m *MockResultDBClient) QueryRunTestVerdicts(ctx context.Context, in *QueryRunTestVerdictsRequest, opts ...grpc.CallOption) (*QueryRunTestVerdictsResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "QueryRunTestVerdicts", varargs...)
+	ret0, _ := ret[0].(*QueryRunTestVerdictsResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// QueryRunTestVerdicts indicates an expected call of QueryRunTestVerdicts.
+func (mr *MockResultDBClientMockRecorder) QueryRunTestVerdicts(ctx, in interface{}, opts ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "QueryRunTestVerdicts", reflect.TypeOf((*MockResultDBClient)(nil).QueryRunTestVerdicts), varargs...)
 }
 
 // QueryTestExonerations mocks base method.
@@ -387,6 +467,21 @@ func (mr *MockResultDBServerMockRecorder) GetArtifact(arg0, arg1 interface{}) *g
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetArtifact", reflect.TypeOf((*MockResultDBServer)(nil).GetArtifact), arg0, arg1)
 }
 
+// GetInstruction mocks base method.
+func (m *MockResultDBServer) GetInstruction(arg0 context.Context, arg1 *GetInstructionRequest) (*Instruction, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetInstruction", arg0, arg1)
+	ret0, _ := ret[0].(*Instruction)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetInstruction indicates an expected call of GetInstruction.
+func (mr *MockResultDBServerMockRecorder) GetInstruction(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetInstruction", reflect.TypeOf((*MockResultDBServer)(nil).GetInstruction), arg0, arg1)
+}
+
 // GetInvocation mocks base method.
 func (m *MockResultDBServer) GetInvocation(arg0 context.Context, arg1 *GetInvocationRequest) (*Invocation, error) {
 	m.ctrl.T.Helper()
@@ -430,6 +525,21 @@ func (m *MockResultDBServer) GetTestResult(arg0 context.Context, arg1 *GetTestRe
 func (mr *MockResultDBServerMockRecorder) GetTestResult(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTestResult", reflect.TypeOf((*MockResultDBServer)(nil).GetTestResult), arg0, arg1)
+}
+
+// ListArtifactLines mocks base method.
+func (m *MockResultDBServer) ListArtifactLines(arg0 context.Context, arg1 *ListArtifactLinesRequest) (*ListArtifactLinesResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListArtifactLines", arg0, arg1)
+	ret0, _ := ret[0].(*ListArtifactLinesResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListArtifactLines indicates an expected call of ListArtifactLines.
+func (mr *MockResultDBServerMockRecorder) ListArtifactLines(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListArtifactLines", reflect.TypeOf((*MockResultDBServer)(nil).ListArtifactLines), arg0, arg1)
 }
 
 // ListArtifacts mocks base method.
@@ -477,6 +587,21 @@ func (mr *MockResultDBServerMockRecorder) ListTestResults(arg0, arg1 interface{}
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListTestResults", reflect.TypeOf((*MockResultDBServer)(nil).ListTestResults), arg0, arg1)
 }
 
+// QueryArtifactFailureOnlyLines mocks base method.
+func (m *MockResultDBServer) QueryArtifactFailureOnlyLines(arg0 context.Context, arg1 *QueryArtifactFailureOnlyLinesRequest) (*QueryArtifactFailureOnlyLinesResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "QueryArtifactFailureOnlyLines", arg0, arg1)
+	ret0, _ := ret[0].(*QueryArtifactFailureOnlyLinesResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// QueryArtifactFailureOnlyLines indicates an expected call of QueryArtifactFailureOnlyLines.
+func (mr *MockResultDBServerMockRecorder) QueryArtifactFailureOnlyLines(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "QueryArtifactFailureOnlyLines", reflect.TypeOf((*MockResultDBServer)(nil).QueryArtifactFailureOnlyLines), arg0, arg1)
+}
+
 // QueryArtifacts mocks base method.
 func (m *MockResultDBServer) QueryArtifacts(arg0 context.Context, arg1 *QueryArtifactsRequest) (*QueryArtifactsResponse, error) {
 	m.ctrl.T.Helper()
@@ -505,6 +630,21 @@ func (m *MockResultDBServer) QueryNewTestVariants(arg0 context.Context, arg1 *Qu
 func (mr *MockResultDBServerMockRecorder) QueryNewTestVariants(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "QueryNewTestVariants", reflect.TypeOf((*MockResultDBServer)(nil).QueryNewTestVariants), arg0, arg1)
+}
+
+// QueryRunTestVerdicts mocks base method.
+func (m *MockResultDBServer) QueryRunTestVerdicts(arg0 context.Context, arg1 *QueryRunTestVerdictsRequest) (*QueryRunTestVerdictsResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "QueryRunTestVerdicts", arg0, arg1)
+	ret0, _ := ret[0].(*QueryRunTestVerdictsResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// QueryRunTestVerdicts indicates an expected call of QueryRunTestVerdicts.
+func (mr *MockResultDBServerMockRecorder) QueryRunTestVerdicts(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "QueryRunTestVerdicts", reflect.TypeOf((*MockResultDBServer)(nil).QueryRunTestVerdicts), arg0, arg1)
 }
 
 // QueryTestExonerations mocks base method.

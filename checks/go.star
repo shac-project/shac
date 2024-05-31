@@ -299,8 +299,8 @@ def govet(
     current_package_lines = []
     lines = output.splitlines()
     for i, line in enumerate(lines):
-        if line.startswith("warning: "):
-            # warning: GOPATH set to GOROOT () has no effect
+        if line.startswith(("warning: ", "go: ")):
+            # E.g. "warning: GOPATH set to GOROOT () has no effect"
             continue
         if not line.startswith("# "):
             current_package_lines.append(line)

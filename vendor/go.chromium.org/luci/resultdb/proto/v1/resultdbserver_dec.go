@@ -227,6 +227,57 @@ func (s *DecoratedResultDB) QueryArtifacts(ctx context.Context, req *QueryArtifa
 	return
 }
 
+func (s *DecoratedResultDB) QueryRunTestVerdicts(ctx context.Context, req *QueryRunTestVerdictsRequest) (rsp *QueryRunTestVerdictsResponse, err error) {
+	if s.Prelude != nil {
+		var newCtx context.Context
+		newCtx, err = s.Prelude(ctx, "QueryRunTestVerdicts", req)
+		if err == nil {
+			ctx = newCtx
+		}
+	}
+	if err == nil {
+		rsp, err = s.Service.QueryRunTestVerdicts(ctx, req)
+	}
+	if s.Postlude != nil {
+		err = s.Postlude(ctx, "QueryRunTestVerdicts", rsp, err)
+	}
+	return
+}
+
+func (s *DecoratedResultDB) ListArtifactLines(ctx context.Context, req *ListArtifactLinesRequest) (rsp *ListArtifactLinesResponse, err error) {
+	if s.Prelude != nil {
+		var newCtx context.Context
+		newCtx, err = s.Prelude(ctx, "ListArtifactLines", req)
+		if err == nil {
+			ctx = newCtx
+		}
+	}
+	if err == nil {
+		rsp, err = s.Service.ListArtifactLines(ctx, req)
+	}
+	if s.Postlude != nil {
+		err = s.Postlude(ctx, "ListArtifactLines", rsp, err)
+	}
+	return
+}
+
+func (s *DecoratedResultDB) QueryArtifactFailureOnlyLines(ctx context.Context, req *QueryArtifactFailureOnlyLinesRequest) (rsp *QueryArtifactFailureOnlyLinesResponse, err error) {
+	if s.Prelude != nil {
+		var newCtx context.Context
+		newCtx, err = s.Prelude(ctx, "QueryArtifactFailureOnlyLines", req)
+		if err == nil {
+			ctx = newCtx
+		}
+	}
+	if err == nil {
+		rsp, err = s.Service.QueryArtifactFailureOnlyLines(ctx, req)
+	}
+	if s.Postlude != nil {
+		err = s.Postlude(ctx, "QueryArtifactFailureOnlyLines", rsp, err)
+	}
+	return
+}
+
 func (s *DecoratedResultDB) QueryTestVariants(ctx context.Context, req *QueryTestVariantsRequest) (rsp *QueryTestVariantsResponse, err error) {
 	if s.Prelude != nil {
 		var newCtx context.Context
@@ -274,6 +325,23 @@ func (s *DecoratedResultDB) QueryTestMetadata(ctx context.Context, req *QueryTes
 	}
 	if s.Postlude != nil {
 		err = s.Postlude(ctx, "QueryTestMetadata", rsp, err)
+	}
+	return
+}
+
+func (s *DecoratedResultDB) GetInstruction(ctx context.Context, req *GetInstructionRequest) (rsp *Instruction, err error) {
+	if s.Prelude != nil {
+		var newCtx context.Context
+		newCtx, err = s.Prelude(ctx, "GetInstruction", req)
+		if err == nil {
+			ctx = newCtx
+		}
+	}
+	if err == nil {
+		rsp, err = s.Service.GetInstruction(ctx, req)
+	}
+	if s.Postlude != nil {
+		err = s.Postlude(ctx, "GetInstruction", rsp, err)
 	}
 	return
 }
