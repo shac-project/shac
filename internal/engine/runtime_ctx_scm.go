@@ -429,6 +429,10 @@ func (g *gitCheckout) affectedFiles(ctx context.Context, includeDeleted bool) ([
 	}
 	g.mu.Lock()
 	defer g.mu.Unlock()
+	modified := g.affectedFilesImpl(ctx, includeDeleted)
+	if g.err != nil {
+		return nil, g.err
+	}
 	// Untracked files are always considered affected (as long as they're not
 	// ignored).
 	o := g.run(ctx, "ls-files", "-z", "--others", "--exclude-standard")
@@ -436,10 +440,15 @@ func (g *gitCheckout) affectedFiles(ctx context.Context, includeDeleted bool) ([
 	if len(o) > 0 {
 		items = strings.Split(o[:len(o)-1], "\x00")
 	}
-	modified := make([]file, 0, len(items))
 	for _, path := range items {
 		modified = append(modified, &fileImpl{a: "A", path: filepath.ToSlash(path)})
 	}
+	sort.Slice(modified, func(i, j int) bool { return modified[i].rootedpath() < modified[j].rootedpath() })
+	return modified, g.err
+}
+
+func (g *gitCheckout) affectedFilesImpl(ctx context.Context, includeDeleted bool) []file {
+	var modified []file
 	// Each line has a variable number of NUL character, so process one at a time.
 	for o := g.run(ctx, "diff", "--name-status", "-z", "-C", g.upstream.hash); len(o) != 0; {
 		var action, path string
@@ -486,12 +495,10 @@ func (g *gitCheckout) affectedFiles(ctx context.Context, includeDeleted bool) ([
 		// TODO(olivernewman): Omit deleted submodules. For now they're
 		// treated the same as deleted regular files.
 		if action == "D" || !g.isSubmodule(path) {
-			// TODO(maruel): Share with allFiles.
 			modified = append(modified, &fileImpl{a: action, path: filepath.ToSlash(path)})
 		}
 	}
-	sort.Slice(modified, func(i, j int) bool { return modified[i].rootedpath() < modified[j].rootedpath() })
-	return modified, g.err
+	return modified
 }
 
 // allFiles returns all the files in this checkout.
@@ -508,6 +515,14 @@ func (g *gitCheckout) allFiles(ctx context.Context, includeDeleted bool) ([]file
 		// ls-files output may not be parseable and we should exit early.
 		return nil, g.err
 	}
+	affected := g.affectedFilesImpl(ctx, includeDeleted)
+	if g.err != nil {
+		return nil, g.err
+	}
+	affectedFileActions := make(map[string]string, len(affected))
+	for _, f := range affected {
+		affectedFileActions[f.rootedpath()] = f.action()
+	}
 	items := strings.Split(o[:len(o)-1], "\x00")
 	all := make([]file, 0, len(items))
 	for _, path := range items {
@@ -521,9 +536,11 @@ func (g *gitCheckout) allFiles(ctx context.Context, includeDeleted bool) ([]file
 			return nil, err
 		}
 		if !fi.IsDir() { // Not a submodule.
-			// TODO(maruel): Still include action from affectedFiles()?
-			// TODO(maruel): Share with affectedFiles.
-			all = append(all, &fileImpl{a: "A", path: filepath.ToSlash(path)})
+			p := filepath.ToSlash(path)
+			// action will be an empty string if the file has not changed
+			// relative to the upstream commit.
+			action := affectedFileActions[p]
+			all = append(all, &fileImpl{a: action, path: p})
 		}
 	}
 	sort.Slice(all, func(i, j int) bool { return all[i].rootedpath() < all[j].rootedpath() })

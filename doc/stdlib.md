@@ -540,6 +540,10 @@ shac.register_check(new_todos)
 A map of {path: struct()} where the struct has a string field action and a
 function new_lines().
 
+The action field's value is a single letter corresponding to the
+`--diff-filter` representation of the action per
+https://git-scm.com/docs/git-diff#Documentation/git-diff.txt---diff-filterACDMRTUXB82308203
+
 ## ctx.scm.all_files
 
 Returns all files found in the current workspace.
@@ -567,6 +571,13 @@ shac.register_check(all_todos)
 
 A map of {path: struct()} where the struct has a string field action and a
 function new_lines().
+
+The action field's value is a single letter corresponding to the
+`--diff-filter` representation of the action per
+https://git-scm.com/docs/git-diff#Documentation/git-diff.txt---diff-filterACDMRTUXB82308203
+
+If a file was not modified relative to the upstream commit, the action
+field will be an empty string.
 
 ## ctx.vars
 

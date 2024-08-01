@@ -903,18 +903,18 @@ func TestRun_SCM_Git_NoUpstream_Pristine(t *testing.T) {
 			"ctx-scm-affected_files.star",
 			true,
 			"[//ctx-scm-affected_files.star:19] \n" +
-				"a.txt: A\n" +
+				"a.txt: \n" +
 				scmStarlarkFiles("A") +
-				"z.txt: A\n" +
+				"z.txt: \n" +
 				"\n",
 		},
 		{
 			"ctx-scm-all_files.star",
 			false,
 			"[//ctx-scm-all_files.star:19] \n" +
-				"a.txt: A\n" +
+				"a.txt: \n" +
 				scmStarlarkFiles("A") +
-				"z.txt: A\n" +
+				"z.txt: \n" +
 				"\n",
 		},
 	}
@@ -966,9 +966,9 @@ func TestRun_SCM_Git_NoUpstream_Staged(t *testing.T) {
 			"ctx-scm-all_files.star",
 			false,
 			"[//ctx-scm-all_files.star:19] \n" +
-				"a.txt: A\n" +
+				"a.txt: \n" +
 				scmStarlarkFiles("A") +
-				"z.txt: A\n" +
+				"z.txt: \n" +
 				"\n",
 		},
 	}
@@ -1010,7 +1010,7 @@ func TestRun_SCM_Git_Upstream_Staged(t *testing.T) {
 		{
 			"ctx-scm-all_files.star",
 			"[//ctx-scm-all_files.star:19] \n" +
-				"a.txt: A\n" +
+				"a.txt: R\n" +
 				scmStarlarkFiles("A") +
 				"z.txt: A\n" +
 				"\n",
@@ -1044,12 +1044,12 @@ func TestRun_SCM_Git_Untracked(t *testing.T) {
 		{
 			"ctx-scm-all_files.star",
 			"[//shac.star:19] \n" +
-				".gitignore: A\n" +
-				"a.txt: A\n" +
-				"shac.star: A\n" +
+				".gitignore: \n" +
+				"a.txt: \n" +
+				"shac.star: \n" +
 				"staged.txt: A\n" +
-				"untracked.txt: A\n" +
-				"z.txt: A\n" +
+				"untracked.txt: \n" +
+				"z.txt: \n" +
 				"\n",
 		},
 	}
@@ -1128,9 +1128,9 @@ func TestRun_SCM_Git_Submodule(t *testing.T) {
 			"ctx-scm-all_files.star",
 			"[//ctx-scm-all_files.star:19] \n" +
 				".gitmodules: A\n" +
-				"a.txt: A\n" +
+				"a.txt: \n" +
 				scmStarlarkFiles("A") +
-				"z.txt: A\n" +
+				"z.txt: \n" +
 				"\n",
 		},
 	}
@@ -1178,24 +1178,24 @@ func TestRun_SCM_DeletedFile(t *testing.T) {
 		{
 			"ctx-scm-all_files.star",
 			"[//ctx-scm-all_files.star:19] \n" +
-				"a.txt: A\n" +
-				scmStarlarkFiles("A") +
-				"z.txt: A\n" +
+				"a.txt: \n" +
+				scmStarlarkFiles("") +
+				"z.txt: \n" +
 				"\n",
 		},
 		{
 			"ctx-scm-all_files-include_deleted.star",
 			"[//ctx-scm-all_files-include_deleted.star:26] \n" +
 				"With deleted:\n" +
-				"a.txt: A\n" +
-				scmStarlarkFiles("A") +
+				"a.txt: \n" +
+				scmStarlarkFiles("") +
 				"file-to-delete.txt: D\n" +
-				"z.txt: A\n" +
+				"z.txt: \n" +
 				"\n" +
 				"Without deleted:\n" +
-				"a.txt: A\n" +
-				scmStarlarkFiles("A") +
-				"z.txt: A\n" +
+				"a.txt: \n" +
+				scmStarlarkFiles("") +
+				"z.txt: \n" +
 				"\n"},
 	}
 	for i := range data {

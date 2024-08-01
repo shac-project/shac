@@ -468,6 +468,10 @@ def _ctx_scm_affected_files(glob = None, include_deleted = False):
     Returns:
       A map of {path: struct()} where the struct has a string field action and a
       function new_lines().
+
+      The action field's value is a single letter corresponding to the
+      `--diff-filter` representation of the action per
+      https://git-scm.com/docs/git-diff#Documentation/git-diff.txt---diff-filterACDMRTUXB82308203
     """
     pass
 
@@ -495,6 +499,13 @@ def _ctx_scm_all_files(glob = None, include_deleted = False):
     Returns:
       A map of {path: struct()} where the struct has a string field action and a
       function new_lines().
+
+      The action field's value is a single letter corresponding to the
+      `--diff-filter` representation of the action per
+      https://git-scm.com/docs/git-diff#Documentation/git-diff.txt---diff-filterACDMRTUXB82308203
+
+      If a file was not modified relative to the upstream commit, the action
+      field will be an empty string.
     """
     pass
 
