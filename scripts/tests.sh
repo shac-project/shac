@@ -18,6 +18,9 @@ set -eu -o pipefail
 # Disable cgo as it's not necessary and not all development platforms have the
 # necessary headers.
 export CGO_ENABLED=0
+# Use whatever toolchain is locally installed, rather than trying to download
+# the toolchain version specified in go.mod.
+export GOTOOLCHAIN=local
 
 cd "$(dirname "${BASH_SOURCE[0]}")"
 cd ..

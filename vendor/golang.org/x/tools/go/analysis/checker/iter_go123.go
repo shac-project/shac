@@ -2,13 +2,10 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-//go:build go1.19
-// +build go1.19
+//go:build go1.23
 
-package versions
+package checker
 
-func init() {
-	if Compare(toolchain, Go1_19) < 0 {
-		toolchain = Go1_19
-	}
-}
+import "iter"
+
+type actionSeq = iter.Seq[*Action]
