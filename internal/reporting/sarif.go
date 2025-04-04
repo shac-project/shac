@@ -42,10 +42,10 @@ func (sr *SarifReport) EmitFinding(ctx context.Context, check string, level engi
 		engine.Error:   sarif.Error,
 	}
 	region := &sarif.Region{
-		StartLine:   int32(s.Start.Line),
-		EndLine:     int32(s.End.Line),
-		StartColumn: int32(s.Start.Col),
-		EndColumn:   int32(s.End.Col),
+		StartLine:   int32(s.Start.Line), // #nosec G115
+		EndLine:     int32(s.End.Line),   // #nosec G115
+		StartColumn: int32(s.Start.Col),  // #nosec G115
+		EndColumn:   int32(s.End.Col),    // #nosec G115
 	}
 
 	var fixes []*sarif.Fix

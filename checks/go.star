@@ -41,7 +41,7 @@ def _gofmt(ctx, simplify = True):
 
 gofmt = shac.check(_gofmt, formatter = True)
 
-def _gosec(ctx, version = "v2.20.0", level = "error", exclude = [
+def _gosec(ctx, version = "v2.22.3", level = "error", exclude = [
     # shac checks are allowed to run arbitrary subprocesses, so it's common for
     # shac's source code to run non-constant subcommands.
     "G204",
@@ -174,7 +174,7 @@ def _staticcheck(ctx, version = "v0.4.3"):
 
 staticcheck = shac.check(_staticcheck)
 
-def _shadow(ctx, version = "v0.21.0"):
+def _shadow(ctx, version = "v0.31.0"):
     """Runs go vet -vettool=shadow on a Go code base.
 
     Args:
