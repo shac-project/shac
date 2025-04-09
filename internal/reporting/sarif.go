@@ -17,10 +17,17 @@ package reporting
 import (
 	"context"
 	"io"
+	"log"
+	"os"
+	"path/filepath"
+	"regexp"
 	"sort"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 
+	"github.com/pmezard/go-difflib/difflib"
 	"go.fuchsia.dev/shac-project/shac/internal/engine"
 	"go.fuchsia.dev/shac-project/shac/internal/sarif"
 	"google.golang.org/protobuf/encoding/protojson"
@@ -50,16 +57,22 @@ func (sr *SarifReport) EmitFinding(ctx context.Context, check string, level engi
 
 	var fixes []*sarif.Fix
 	for _, repl := range replacements {
+		sarifRepl := &sarif.Replacement{
+			DeletedRegion:   region,
+			InsertedContent: &sarif.ArtifactContent{Text: repl},
+		}
+		sarifRepls, err := sr.splitReplacement(sarifRepl, root, file)
+		if err != nil {
+			// Errors here are unexpected, but if one occurs it's fine to just
+			// stick with the full-file replacement.
+			log.Printf("failed to split full-file replacement for %q: %s", file, err)
+			sarifRepls = []*sarif.Replacement{sarifRepl}
+		}
 		fixes = append(fixes, &sarif.Fix{
 			ArtifactChanges: []*sarif.ArtifactChange{
 				{
 					ArtifactLocation: &sarif.ArtifactLocation{Uri: file},
-					Replacements: []*sarif.Replacement{
-						{
-							DeletedRegion:   region,
-							InsertedContent: &sarif.ArtifactContent{Text: repl},
-						},
-					},
+					Replacements:     sarifRepls,
 				},
 			},
 		})
@@ -94,6 +107,26 @@ func (sr *SarifReport) EmitFinding(ctx context.Context, check string, level engi
 	sr.mu.Unlock()
 
 	return nil
+}
+
+// splitReplacement splits a whole-file replacement into more readable chunks
+// using a diffing library.
+func (sr *SarifReport) splitReplacement(repl *sarif.Replacement, root, file string) ([]*sarif.Replacement, error) {
+	// Only if StartLine==0 (indicating the whole file is being replaced) should
+	// we attempt to split the replacement.
+	if repl.DeletedRegion.StartLine != 0 || file == "" {
+		return []*sarif.Replacement{repl}, nil
+	}
+
+	b, err := os.ReadFile(filepath.Join(root, file))
+	if err != nil {
+		return nil, err
+	}
+
+	oldLines := strings.SplitAfter(string(b), "\n")
+	newLines := strings.SplitAfter(repl.InsertedContent.Text, "\n")
+
+	return replacementsForDiff(oldLines, newLines)
 }
 
 func (sr *SarifReport) EmitArtifact(ctx context.Context, root, check, file string, content []byte) error {
@@ -135,4 +168,68 @@ func (sr *SarifReport) Close() error {
 	}
 	_, err = sr.Out.Write(b)
 	return err
+}
+
+var diffBlockStartRE = regexp.MustCompile(`^@@ -(\d+)(?:,(\d+))? .*`)
+
+// replacementsForDiff takes a diff between oldLines and newLines and converts
+// it to corresponding SARIF replacement objects.
+func replacementsForDiff(oldLines, newLines []string) ([]*sarif.Replacement, error) {
+	diff, err := difflib.GetUnifiedDiffString(difflib.UnifiedDiff{
+		A: oldLines,
+		B: newLines,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	var res []*sarif.Replacement
+
+	add := func(region *sarif.Region, lines []string) {
+		if region == nil {
+			return
+		}
+		res = append(res, &sarif.Replacement{
+			DeletedRegion: region,
+			InsertedContent: &sarif.ArtifactContent{
+				Text: strings.Join(lines, ""),
+			},
+		})
+	}
+
+	var currRegion *sarif.Region
+	var currLines []string
+
+	for _, line := range strings.SplitAfter(diff, "\n") {
+		if line == "" { // The last line may be blank
+			continue
+		}
+		if groups := diffBlockStartRE.FindStringSubmatch(line); len(groups) == 3 {
+			add(currRegion, currLines)
+			startLine, err := strconv.ParseInt(groups[1], 10, 32)
+			if err != nil {
+				return nil, err
+			}
+			// Line count is 1 if not specified.
+			lineCount := int64(1)
+			if groups[2] != "" {
+				lineCount, err = strconv.ParseInt(groups[2], 10, 32)
+				if err != nil {
+					return nil, err
+				}
+			}
+			currRegion = &sarif.Region{
+				StartLine: int32(startLine),
+				EndLine:   int32(startLine + lineCount - 1), // #nosec G115
+			}
+			currLines = nil
+		} else if currRegion != nil && !strings.HasPrefix(line, "-") {
+			// Remove the first character since it's part of the diff output.
+			currLines = append(currLines, line[1:])
+		}
+	}
+
+	add(currRegion, currLines)
+
+	return res, nil
 }

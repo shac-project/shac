@@ -21,6 +21,7 @@ require (
 	github.com/google/go-cmp v0.6.0
 	github.com/mattn/go-colorable v0.1.13
 	github.com/mattn/go-isatty v0.0.20
+	github.com/pmezard/go-difflib v1.0.0
 	github.com/spf13/pflag v1.0.5
 	go.chromium.org/luci v0.0.0-20240531181147-0c7c729b2fcf
 	go.starlark.net v0.0.0-20240520160348-046347dcd104
