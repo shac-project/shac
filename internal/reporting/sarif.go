@@ -20,9 +20,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
-	"regexp"
 	"sort"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -126,7 +124,7 @@ func (sr *SarifReport) splitReplacement(repl *sarif.Replacement, root, file stri
 	oldLines := strings.SplitAfter(string(b), "\n")
 	newLines := strings.SplitAfter(repl.InsertedContent.Text, "\n")
 
-	return replacementsForDiff(oldLines, newLines)
+	return replacementsForDiff(oldLines, newLines), nil
 }
 
 func (sr *SarifReport) EmitArtifact(ctx context.Context, root, check, file string, content []byte) error {
@@ -170,66 +168,52 @@ func (sr *SarifReport) Close() error {
 	return err
 }
 
-var diffBlockStartRE = regexp.MustCompile(`^@@ -(\d+)(?:,(\d+))? .*`)
-
 // replacementsForDiff takes a diff between oldLines and newLines and converts
 // it to corresponding SARIF replacement objects.
-func replacementsForDiff(oldLines, newLines []string) ([]*sarif.Replacement, error) {
-	diff, err := difflib.GetUnifiedDiffString(difflib.UnifiedDiff{
-		A: oldLines,
-		B: newLines,
-	})
-	if err != nil {
-		return nil, err
-	}
-
+func replacementsForDiff(oldLines, newLines []string) []*sarif.Replacement {
 	var res []*sarif.Replacement
 
-	add := func(region *sarif.Region, lines []string) {
-		if region == nil {
-			return
+	// GetGroupedOpCodes returns a list of "operation groups", where each group
+	// corresponds to a chunk of adjacent changed lines.
+	for _, group := range difflib.NewMatcher(oldLines, newLines).GetGroupedOpCodes(0) {
+		// group.I1, group.I2 are oldLines start and end indices.
+		// group.J1, group.J2 are newLines start and end indices.
+		startLine, endLine := group[0].I1, group[len(group)-1].I2
+		var startCol, endCol int32
+
+		if startLine == endLine {
+			endLine++
+			startCol, endCol = 1, 1
 		}
+
+		var lines []string
+		for _, op := range group {
+			switch op.Tag {
+			// e == "equal" (unchanged)
+			// i == "inserted"
+			// r == "replaced"
+			case 'e', 'i', 'r':
+				lines = append(lines, newLines[op.J1:op.J2]...)
+			// d == "deleted"
+			case 'd':
+			default:
+				log.Panicf("Invalid opcode during diff %s", string(op.Tag))
+			}
+		}
+
 		res = append(res, &sarif.Replacement{
-			DeletedRegion: region,
-			InsertedContent: &sarif.ArtifactContent{
-				Text: strings.Join(lines, ""),
+			DeletedRegion: &sarif.Region{
+				// Convert start line from zero-based to one-based.
+				StartLine: int32(startLine) + 1, // #nosec:G115
+				// Convert end line from zero-based exclusive to one-based
+				// inclusive, which ends up being a no-op.
+				EndLine:     int32(endLine), // #nosec:G115
+				StartColumn: startCol,
+				EndColumn:   endCol,
 			},
+			InsertedContent: &sarif.ArtifactContent{Text: strings.Join(lines, "")},
 		})
 	}
 
-	var currRegion *sarif.Region
-	var currLines []string
-
-	for _, line := range strings.SplitAfter(diff, "\n") {
-		if line == "" { // The last line may be blank
-			continue
-		}
-		if groups := diffBlockStartRE.FindStringSubmatch(line); len(groups) == 3 {
-			add(currRegion, currLines)
-			startLine, err := strconv.ParseInt(groups[1], 10, 32)
-			if err != nil {
-				return nil, err
-			}
-			// Line count is 1 if not specified.
-			lineCount := int64(1)
-			if groups[2] != "" {
-				lineCount, err = strconv.ParseInt(groups[2], 10, 32)
-				if err != nil {
-					return nil, err
-				}
-			}
-			currRegion = &sarif.Region{
-				StartLine: int32(startLine),
-				EndLine:   int32(startLine + lineCount - 1), // #nosec G115
-			}
-			currLines = nil
-		} else if currRegion != nil && !strings.HasPrefix(line, "-") {
-			// Remove the first character since it's part of the diff output.
-			currLines = append(currLines, line[1:])
-		}
-	}
-
-	add(currRegion, currLines)
-
-	return res, nil
+	return res
 }
