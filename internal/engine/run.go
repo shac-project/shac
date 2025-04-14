@@ -612,7 +612,7 @@ func normalizeFiles(files []string, root string) ([]file, error) {
 	}
 
 	slices.Sort(relativized)
-	slices.Compact(relativized)
+	relativized = slices.Compact(relativized)
 
 	var res []file
 	for _, f := range relativized {

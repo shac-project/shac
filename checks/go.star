@@ -269,6 +269,7 @@ def govet(
         # analyzers that aren't enforced by the other linters.
         analyzers = [
             "copylocks",
+            "unusedresult",
         ]):
     """Enforces `go vet`.
 
