@@ -22,6 +22,10 @@ export CGO_ENABLED=0
 # the toolchain version specified in go.mod.
 export GOTOOLCHAIN=local
 
+# LINT.IfChange(goversion)
+GO_CIPD_VERSION="version:3@1.23.4"
+# LINT.ThenChange(go.mod:goversion)
+
 cd "$(dirname "${BASH_SOURCE[0]}")"
 cd ..
 REPO_ROOT="$(pwd)"
@@ -36,7 +40,11 @@ if ! command -v "go" > /dev/null; then
   export GOROOT="$CIPD_ROOT/go"
   echo "- Installing Go from CIPD..."
   cipd init -force "$GOROOT"
-  cipd install -log-level error -root "$GOROOT" 'infra/3pp/tools/go/${platform}' version:3@1.23.4
+  cipd install \
+    -log-level error \
+    -root "$GOROOT" \
+    'infra/3pp/tools/go/${platform}' \
+    "$GO_CIPD_VERSION"
   export PATH="$GOROOT/bin:$PATH"
   echo ""
 fi

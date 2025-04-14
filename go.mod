@@ -14,7 +14,10 @@
 
 module go.fuchsia.dev/shac-project/shac
 
+// LINT.IfChange(goversion)
 go 1.23.4
+
+// LINT.ThenChange(scripts/tests.sh:goversion, .github/workflows/test.yml:goversion_test, .github/workflows/test.yml:goversion_lint, .github/workflows/test.yml:goversion_codeql)
 
 require (
 	github.com/go-git/go-git/v5 v5.13.1
