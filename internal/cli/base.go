@@ -27,6 +27,7 @@ type commandBase struct {
 	entryPoint string
 	noRecurse  bool
 	allowList  []string
+	denyList   []string
 	vars       stringMapFlag
 }
 
@@ -36,6 +37,7 @@ func (c *commandBase) SetFlags(f *flag.FlagSet) {
 	f.BoolVar(&c.noRecurse, "no-recurse", false, "do not look for shac.star files recursively")
 	f.StringVar(&c.entryPoint, "entrypoint", engine.DefaultEntryPoint, "basename of Starlark files to run")
 	f.StringSliceVar(&c.allowList, "only", nil, "comma-separated allowlist of checks to run; by default all checks are run")
+	f.StringSliceVar(&c.denyList, "skip", nil, "comma-separated denylist of checks to skip; by default all checks are run")
 	c.vars = stringMapFlag{}
 	f.Var(&c.vars, "var", "runtime variables to set, of the form key=value")
 }
@@ -53,6 +55,7 @@ func (c *commandBase) options(files []string) (engine.Options, error) {
 		EntryPoint: c.entryPoint,
 		Filter: engine.CheckFilter{
 			AllowList: c.allowList,
+			DenyList:  c.denyList,
 		},
 	}, nil
 }

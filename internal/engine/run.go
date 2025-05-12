@@ -105,6 +105,8 @@ type CheckFilter struct {
 	// AllowList specifies checks to run. If non-empty, all other checks will be
 	// skipped.
 	AllowList []string
+	// DenyList specifies checks to skip.
+	DenyList []string
 }
 
 func (f *CheckFilter) filter(checks []*registeredCheck) ([]*registeredCheck, error) {
@@ -114,19 +116,35 @@ func (f *CheckFilter) filter(checks []*registeredCheck) ([]*registeredCheck, err
 
 	// Keep track of the allowlist elements that correspond to valid checks so
 	// we can report any invalid allowlist elements at the end.
-	nonValidatedAllowList := make(map[string]struct{})
+	allowList := make(map[string]struct{})
 	for _, name := range f.AllowList {
-		nonValidatedAllowList[name] = struct{}{}
+		allowList[name] = struct{}{}
+	}
+	var allowedAndDenied []string
+	denyList := make(map[string]struct{})
+	for _, name := range f.DenyList {
+		denyList[name] = struct{}{}
+		if _, ok := allowList[name]; ok {
+			allowedAndDenied = append(allowedAndDenied, name)
+		}
+	}
+	if len(allowedAndDenied) > 0 {
+		return nil, fmt.Errorf(
+			"checks cannot be both allowed and denied: %s",
+			strings.Join(allowedAndDenied, ", "))
 	}
 
 	var filtered []*registeredCheck
 	for _, check := range checks {
-		if len(f.AllowList) > 0 {
-			if _, ok := nonValidatedAllowList[check.name]; !ok {
-				// Check is not allow-listed.
+		if len(f.AllowList) != 0 {
+			if _, ok := allowList[check.name]; !ok {
 				continue
 			}
-			delete(nonValidatedAllowList, check.name)
+			delete(allowList, check.name)
+		}
+		if _, ok := denyList[check.name]; ok {
+			delete(denyList, check.name)
+			continue
 		}
 		switch f.FormatterFiltering {
 		case AllChecks:
@@ -144,9 +162,12 @@ func (f *CheckFilter) filter(checks []*registeredCheck) ([]*registeredCheck, err
 		filtered = append(filtered, check)
 	}
 
-	if len(nonValidatedAllowList) > 0 {
+	if len(allowList) > 0 || len(denyList) > 0 {
 		var invalidChecks []string
-		for name := range nonValidatedAllowList {
+		for name := range allowList {
+			invalidChecks = append(invalidChecks, name)
+		}
+		for name := range denyList {
 			invalidChecks = append(invalidChecks, name)
 		}
 		var msg string

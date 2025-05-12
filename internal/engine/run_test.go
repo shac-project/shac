@@ -198,6 +198,41 @@ func TestRun_Fail(t *testing.T) {
 			"check does not exist: does-not-exist",
 		},
 		{
+			"invalid denylist item",
+			func() Options {
+				root := t.TempDir()
+				writeFile(t, root, "shac.star", ""+
+					"def cb(ctx):\n"+
+					"    pass\n"+
+					"shac.register_check(cb)")
+				return Options{
+					Dir: root,
+					Filter: CheckFilter{
+						DenyList: []string{"does-not-exist"},
+					},
+				}
+			}(),
+			"check does not exist: does-not-exist",
+		},
+		{
+			"allowlisted and denylisted",
+			func() Options {
+				root := t.TempDir()
+				writeFile(t, root, "shac.star", ""+
+					"def cb(ctx):\n"+
+					"    pass\n"+
+					"shac.register_check(cb)")
+				return Options{
+					Dir: root,
+					Filter: CheckFilter{
+						AllowList: []string{"cb"},
+						DenyList:  []string{"cb"},
+					},
+				}
+			}(),
+			"checks cannot be both allowed and denied: cb",
+		},
+		{
 			"multiple invalid allowlist items",
 			func() Options {
 				root := t.TempDir()
@@ -527,6 +562,21 @@ func TestRun_Filtering(t *testing.T) {
 			want: "[//shac.star:2] non-formatter running\n" +
 				"[//shac.star:4] formatter running\n",
 		},
+		{
+			name: "allowlist",
+			filter: CheckFilter{
+				AllowList: []string{"formatter"},
+			},
+			want: "[//shac.star:4] formatter running\n",
+		},
+		{
+			name: "denylist",
+			filter: CheckFilter{
+				DenyList: []string{"formatter"},
+			},
+			want: "[//shac.star:2] non-formatter running\n",
+		},
+
 		{
 			name: "only formatters",
 			filter: CheckFilter{
