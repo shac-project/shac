@@ -1576,14 +1576,14 @@ func TestTestDataFailOrThrow(t *testing.T) {
 			"  //ctx-emit-finding-col.star:16:21: in cb\n",
 		},
 		{
-			"ctx-emit-finding-end_col-col-equal.star",
-			"ctx.emit.finding: for parameter \"end_col\": \"end_col\" (2) must be greater than \"col\" (2)",
-			"  //ctx-emit-finding-end_col-col-equal.star:16:21: in cb\n",
+			"ctx-emit-finding-end_col-less-than-col.star",
+			"ctx.emit.finding: for parameter \"end_col\": \"end_col\" (1) must be greater than or equal to \"col\" (2)",
+			"  //ctx-emit-finding-end_col-less-than-col.star:16:21: in cb\n",
 		},
 		{
-			"ctx-emit-finding-end_col-col.star",
+			"ctx-emit-finding-end_col-requires-col.star",
 			"ctx.emit.finding: for parameter \"end_col\": \"col\" must be specified",
-			"  //ctx-emit-finding-end_col-col.star:16:21: in cb\n",
+			"  //ctx-emit-finding-end_col-requires-col.star:16:21: in cb\n",
 		},
 		{
 			"ctx-emit-finding-end_col.star",
@@ -2201,6 +2201,15 @@ func TestTestDataEmit(t *testing.T) {
 					File:         "file.txt",
 					Span:         Span{Start: Cursor{Line: 1, Col: 1}, End: Cursor{Line: 10, Col: 1}},
 					Replacements: []string{"a", "list"},
+				},
+				{
+					Check:        "cb",
+					Level:        "warning",
+					Message:      "insert text here",
+					Root:         root,
+					File:         "file.txt",
+					Span:         Span{Start: Cursor{Line: 1, Col: 1}, End: Cursor{Line: 1, Col: 1}},
+					Replacements: []string{"a"},
 				},
 				{
 					Check:        "cb",

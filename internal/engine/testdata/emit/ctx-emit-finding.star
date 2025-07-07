@@ -48,6 +48,19 @@ def cb(ctx):
         end_col = 1,
         replacements = ["a", "list"],
     )
+
+    # (line, col) == (end_line, end_col) should be allowed, indicating that text
+    # should be inserted without removing anything.
+    ctx.emit.finding(
+        level = "warning",
+        message = "insert text here",
+        filepath = "file.txt",
+        line = 1,
+        col = 1,
+        end_line = 1,
+        end_col = 1,
+        replacements = ["a"],
+    )
     ctx.emit.finding(
         level = "warning",
         message = "weird",

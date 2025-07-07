@@ -51,6 +51,16 @@ func TestFix(t *testing.T) {
 			want: originalLines,
 		},
 		{
+
+			name: "insert_text.star",
+			want: []string{
+				"These are",
+				"the INSERTED contents",
+				"of the file",
+				"that may be modified",
+			},
+		},
+		{
 			name: "multiple_replacements_one_file.star",
 			want: []string{
 				"<REPL1>",

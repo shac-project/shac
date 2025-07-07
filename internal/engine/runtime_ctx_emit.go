@@ -88,8 +88,8 @@ func ctxEmitFinding(ctx context.Context, s *shacState, name string, args starlar
 		if span.End.Line > 0 {
 			if span.End.Line < span.Start.Line {
 				return fmt.Errorf("for parameter \"end_line\": \"end_line\" (%d) must be greater than or equal to \"line\" (%d)", span.End.Line, span.Start.Line)
-			} else if span.End.Line == span.Start.Line && span.End.Col > 0 && span.End.Col <= span.Start.Col {
-				return fmt.Errorf("for parameter \"end_col\": \"end_col\" (%d) must be greater than \"col\" (%d)", span.End.Col, span.Start.Col)
+			} else if span.End.Line == span.Start.Line && span.End.Col > 0 && span.End.Col < span.Start.Col {
+				return fmt.Errorf("for parameter \"end_col\": \"end_col\" (%d) must be greater than or equal to \"col\" (%d)", span.End.Col, span.Start.Col)
 			}
 		} else if span.End.Col > 0 {
 			// If end_col is set but end_line is unset, assume that end_line is
