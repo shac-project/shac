@@ -54,7 +54,7 @@ go test -count=1 -cover ./...
 
 echo ""
 echo "- Running 'shac check'"
-go run . check -v
+go run . check
 
 # Benchmarks are the slowest step, so run them last in case the user only cares
 # about previous steps and wants to ctrl-C.

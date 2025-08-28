@@ -20,6 +20,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"math"
 	"os"
 	"os/exec"
@@ -410,6 +411,7 @@ func ctxOsExec(ctx context.Context, s *shacState, name string, args starlark.Tup
 				return err
 			}
 			defer s.subprocessSem.Release(1)
+			log.Printf("Running command: %s", cmd)
 			return execsupport.Run(cmd)
 		}()
 		// Signals to subprocess.wait() that the subprocess is done, whether or
