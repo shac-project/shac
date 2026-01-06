@@ -119,11 +119,26 @@ func (s nsjailSandbox) Command(ctx context.Context, config *Config) *exec.Cmd {
 	for k, v := range env {
 		args = append(args, "--env", fmt.Sprintf("%s=%s", k, v))
 	}
+
+	config.Mounts = resolveFuseMounts(config.Cwd, config.Cmd[0], config.Mounts)
+
 	// nsjail is strict about ordering of --bindmount flags. If /a and /a/b are
 	// both to be mounted (/a might be read-only while /a/b is writable), then
 	// /a must precede /a/b in the arguments.
+	// We sort by the *destination* path in the sandbox to ensure that parent
+	// directories are mounted before their children. This is critical for
+	// "overlays" where we mount a specific subdirectory (e.g. from a resolved
+	// symlink) on top of a broader root mount.
 	sort.Slice(config.Mounts, func(i, j int) bool {
-		return config.Mounts[i].Path < config.Mounts[j].Path
+		destI := config.Mounts[i].Dest
+		if destI == "" {
+			destI = config.Mounts[i].Path
+		}
+		destJ := config.Mounts[j].Dest
+		if destJ == "" {
+			destJ = config.Mounts[j].Path
+		}
+		return destI < destJ
 	})
 	for _, mnt := range config.Mounts {
 		flag := "--bindmount_ro"
