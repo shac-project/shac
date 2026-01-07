@@ -140,7 +140,6 @@ func (p *PackageManager) RetrievePackages(ctx context.Context, root string, doc 
 	eg.SetLimit(p.pkgConcurrency)
 	for _, deps := range depslists {
 		for _, d := range deps {
-			d := d
 			eg.Go(func() error {
 				f, err := p.ensureGitPkg(ctx, d.Url, d.Version, doc.Sum.Digest(d.Url, d.Version))
 				if err != nil {

@@ -83,7 +83,6 @@ func TestParseSourceKey(t *testing.T) {
 		},
 	}
 	for i, l := range data {
-		l := l
 		t.Run(strconv.Itoa(i), func(t *testing.T) {
 			t.Parallel()
 			got, err := parseSourceKey(l.parent, l.in)

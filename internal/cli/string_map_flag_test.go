@@ -67,7 +67,6 @@ func TestStringMapFlag(t *testing.T) {
 		},
 	}
 	for i := range data {
-		i := i
 		t.Run(data[i].name, func(t *testing.T) {
 			m := stringMapFlag{}
 			f := flag.NewFlagSet("test", flag.ContinueOnError)

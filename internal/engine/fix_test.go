@@ -119,7 +119,6 @@ func TestFix(t *testing.T) {
 		t.Fatalf("mismatch (-want +got):\n%s", diff)
 	}
 	for i := range data {
-		i := i
 		t.Run(data[i].name, func(t *testing.T) {
 			t.Parallel()
 			root := t.TempDir()

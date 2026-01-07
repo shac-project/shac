@@ -285,7 +285,6 @@ func TestRun_Fail(t *testing.T) {
 		},
 	}
 	for i := range data {
-		i := i
 		t.Run(data[i].name, func(t *testing.T) {
 			t.Parallel()
 			o := data[i].o
@@ -333,7 +332,6 @@ func TestRun_DirOverridden(t *testing.T) {
 	}
 
 	for i := range data {
-		i := i
 		t.Run(data[i].name, func(t *testing.T) {
 			t.Parallel()
 			testStarlarkPrint(t, data[i].dir, "", false, false, data[i].want)
@@ -409,7 +407,6 @@ func TestRun_SpecificFiles(t *testing.T) {
 		},
 	}
 	for i := range data {
-		i := i
 		t.Run(data[i].name, func(t *testing.T) {
 			originalWd, err := os.Getwd()
 			if err != nil {
@@ -524,7 +521,6 @@ func TestRun_SpecificFiles_Fail(t *testing.T) {
 	}
 
 	for i := range data {
-		i := i
 		t.Run(data[i].name, func(t *testing.T) {
 			t.Parallel()
 			r := reportPrint{reportNoPrint: reportNoPrint{t: t}}
@@ -607,7 +603,6 @@ func TestRun_Filtering(t *testing.T) {
 		},
 	}
 	for i := range data {
-		i := i
 		t.Run(data[i].name, func(t *testing.T) {
 			r := reportPrint{reportNoPrint: reportNoPrint{t: t}}
 			o := Options{Report: &r, Dir: root, Filter: data[i].filter}
@@ -679,7 +674,6 @@ func TestRun_Ignore(t *testing.T) {
 		},
 	}
 	for i := range data {
-		i := i
 		t.Run(data[i].name, func(t *testing.T) {
 			t.Parallel()
 			testStarlarkPrint(t, root, data[i].name, false, false, data[i].want)
@@ -729,7 +723,6 @@ func TestRun_Vars(t *testing.T) {
 		},
 	}
 	for i := range data {
-		i := i
 		t.Run(data[i].name, func(t *testing.T) {
 			t.Parallel()
 			root := t.TempDir()
@@ -969,7 +962,6 @@ func TestRun_SCM_Git_NoUpstream_Pristine(t *testing.T) {
 		},
 	}
 	for i := range data {
-		i := i
 		name := data[i].name
 		if data[i].all {
 			name += "/all"
@@ -1023,7 +1015,6 @@ func TestRun_SCM_Git_NoUpstream_Staged(t *testing.T) {
 		},
 	}
 	for i := range data {
-		i := i
 		name := data[i].name
 		if data[i].all {
 			name += "/all"
@@ -1067,7 +1058,6 @@ func TestRun_SCM_Git_Upstream_Staged(t *testing.T) {
 		},
 	}
 	for i := range data {
-		i := i
 		t.Run(data[i].name, func(t *testing.T) {
 			t.Parallel()
 			testStarlarkPrint(t, root, data[i].name, false, false, data[i].want)
@@ -1104,7 +1094,6 @@ func TestRun_SCM_Git_Untracked(t *testing.T) {
 		},
 	}
 	for i := range data {
-		i := i
 		t.Run(data[i].name, func(t *testing.T) {
 			t.Parallel()
 
@@ -1185,7 +1174,6 @@ func TestRun_SCM_Git_Submodule(t *testing.T) {
 		},
 	}
 	for i := range data {
-		i := i
 		t.Run(data[i].name, func(t *testing.T) {
 			t.Parallel()
 			testStarlarkPrint(t, root, data[i].name, false, false, data[i].want)
@@ -1249,7 +1237,6 @@ func TestRun_SCM_DeletedFile(t *testing.T) {
 				"\n"},
 	}
 	for i := range data {
-		i := i
 		t.Run(data[i].name, func(t *testing.T) {
 			t.Parallel()
 			testStarlarkPrint(t, root, data[i].name, false, false, data[i].want)
@@ -1296,7 +1283,6 @@ func TestRun_SCM_Git_Binary_File(t *testing.T) {
 	}
 
 	for i := range data {
-		i := i
 		name := data[i].name
 		if data[i].all {
 			name += "/all"
@@ -2013,7 +1999,6 @@ func TestTestDataFailOrThrow(t *testing.T) {
 		t.Fatalf("mismatch (-want +got):\n%s", diff)
 	}
 	for i := range data {
-		i := i
 		t.Run(data[i].name, func(t *testing.T) {
 			t.Parallel()
 			o := Options{Report: &reportNoPrint{t: t}, Dir: root, EntryPoint: data[i].name}
@@ -2078,7 +2063,6 @@ func TestRun_NetworkSandbox(t *testing.T) {
 		},
 	}
 	for i := range data {
-		i := i
 		t.Run(data[i].name, func(t *testing.T) {
 			t.Parallel()
 			server := httptest.NewServer(handler)
@@ -2241,7 +2225,6 @@ func TestTestDataEmit(t *testing.T) {
 		t.Fatalf("mismatch (-want +got):\n%s", diff)
 	}
 	for i := range data {
-		i := i
 		t.Run(data[i].name, func(t *testing.T) {
 			t.Parallel()
 			r := reportEmitNoPrint{reportNoPrint: reportNoPrint{t: t}}
@@ -2457,7 +2440,6 @@ func TestTestDataPrint(t *testing.T) {
 		t.Fatalf("mismatch (-want +got):\n%s", diff)
 	}
 	for i := range data {
-		i := i
 		t.Run(data[i].name, func(t *testing.T) {
 			t.Parallel()
 			testStarlarkPrint(t, p, data[i].name, false, data[i].ignoreOrder, data[i].want)

@@ -128,7 +128,6 @@ func TestMainErr(t *testing.T) {
 		},
 	}
 	for name, f := range data {
-		f := f
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			args, wantErr := f(t)

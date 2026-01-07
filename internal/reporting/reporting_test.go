@@ -325,7 +325,6 @@ func TestInteractive_Finding(t *testing.T) {
 		},
 	}
 	for i, l := range data {
-		l := l
 		t.Run(fmt.Sprintf("%d-%s", i, l.name), func(t *testing.T) {
 			t.Parallel()
 			buf := bytes.Buffer{}

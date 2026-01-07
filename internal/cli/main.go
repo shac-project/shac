@@ -45,15 +45,15 @@ func (a *app) init(n, desc string) {
 }
 
 func getDesc(s []subcommand) string {
-	out := ""
+	var out strings.Builder
 	for _, c := range s {
 		d := strings.Split(c.Description(), "\n")
 		for i := 1; i < len(d); i++ {
 			d[i] = "            " + d[i]
 		}
-		out += fmt.Sprintf("  %-9s %s\n", c.Name(), strings.Join(d, "\n"))
+		out.WriteString(fmt.Sprintf("  %-9s %s\n", c.Name(), strings.Join(d, "\n")))
 	}
-	return out
+	return out.String()
 }
 
 type subcommand interface {

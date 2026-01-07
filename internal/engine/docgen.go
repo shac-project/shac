@@ -131,24 +131,24 @@ func genDoc(tmpdir, src, content string, isStdlib bool) (string, error) {
 	}
 
 	// Appends all the global symbols to the template to render them.
-	gen := ""
+	var gen strings.Builder
 	// First, "load" the symbols.
 	for i, n := range syms {
-		gen += fmt.Sprintf("{{- $sym%d := Symbol %q %q }}", i, src, n.Name())
+		gen.WriteString(fmt.Sprintf("{{- $sym%d := Symbol %q %q }}", i, src, n.Name()))
 	}
 
 	// Header and main comment if any.
 	if len(d) != 0 {
 		// If a module has a docstring, use the first line as the header.
-		gen += "# " + strings.TrimSpace(d)
+		gen.WriteString("# " + strings.TrimSpace(d))
 	} else {
 		// TODO(maruel): Maybe the absolute path? Or a module docstring?
-		gen += "# " + src
+		gen.WriteString("# " + src)
 	}
 
 	// Generate the table of content.
 	if len(syms) != 0 {
-		gen += "\n\n## Table of contents\n\n"
+		gen.WriteString("\n\n## Table of contents\n\n")
 		// TODO(maruel): Use "{{ template \"gen-toc\" }}"
 		for _, n := range syms {
 			name := n.Name()
@@ -161,15 +161,15 @@ func genDoc(tmpdir, src, content string, isStdlib bool) (string, error) {
 			// Anchor works here because top-level symbols are generally simple. It
 			// is brittle, especially with the different anchor generation algorithm
 			// between GitHub and Gitiles.
-			gen += "- [" + name + "](#" + name + ")\n"
+			gen.WriteString("- [" + name + "](#" + name + ")\n")
 		}
 	}
 
 	// Each of the symbol.
 	for i := range syms {
-		gen += fmt.Sprintf("\n{{ template \"gen-any\" $sym%d}}\n", i)
+		gen.WriteString(fmt.Sprintf("\n{{ template \"gen-any\" $sym%d}}\n", i))
 	}
-	b, err := g.Render(docgenTpl + gen)
+	b, err := g.Render(docgenTpl + gen.String())
 	return string(b), err
 }
 

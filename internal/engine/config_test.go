@@ -463,7 +463,6 @@ func TestDocument_Validate(t *testing.T) {
 		},
 	}
 	for i, l := range data {
-		l := l
 		t.Run(strconv.Itoa(i), func(t *testing.T) {
 			t.Parallel()
 			t.Log(l.in)
@@ -575,7 +574,6 @@ func TestCleanURL(t *testing.T) {
 		},
 	}
 	for i := range data {
-		i := i
 		t.Run(strconv.Itoa(i), func(t *testing.T) {
 			t.Parallel()
 			got, err := cleanURL(data[i].in)

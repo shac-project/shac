@@ -503,7 +503,6 @@ func runInner(ctx context.Context, o *Options, tmpdir string) error {
 	ch := make(chan func() error, len(shacStates))
 	done := make(chan struct{})
 	for _, s := range shacStates {
-		s := s
 		eg.Go(func() error {
 			err := s.parseAndBuffer(ctx, ch)
 			done <- struct{}{}
@@ -748,7 +747,6 @@ func (s *shacState) bufferAllChecks(ctx context.Context, ch chan<- func() error)
 		return err
 	}
 	for _, check := range checks {
-		check := check
 		ch <- func() error {
 			start := time.Now()
 			pi := func(th *starlark.Thread, msg string) {

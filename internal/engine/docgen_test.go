@@ -86,7 +86,6 @@ func TestDoc_Error(t *testing.T) {
 		},
 	}
 	for i, line := range data {
-		line := line
 		t.Run(strconv.Itoa(i), func(t *testing.T) {
 			t.Parallel()
 			d, err := Doc(line.path)
@@ -130,7 +129,6 @@ func TestDocTemplate(t *testing.T) {
 		},
 	}
 	for i, line := range data {
-		line := line
 		t.Run(strconv.Itoa(i), func(t *testing.T) {
 			t.Parallel()
 			// This test case cannot call load() because "main.star" is not an absolute path.
@@ -170,7 +168,6 @@ func TestDocTemplate_Testdata_Err(t *testing.T) {
 		},
 	}
 	for i, line := range data {
-		line := line
 		t.Run(strconv.Itoa(i), func(t *testing.T) {
 			in, err := os.ReadFile(line.path)
 			if err != nil {
@@ -284,7 +281,6 @@ file = struct(
 		{"{{ range $ctx.Symbols }}{{ .Name }}\n{{ end }}", "scm\n"},
 	}
 	for i, line := range data {
-		line := line
 		t.Run(strconv.Itoa(i), func(t *testing.T) {
 			t.Parallel()
 			g := docgen.Generator{

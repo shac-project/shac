@@ -65,7 +65,6 @@ func (t *MultiReport) Close() error {
 func (t *MultiReport) do(f func(r Report) error) error {
 	var eg errgroup.Group
 	for _, r := range t.Reporters {
-		r := r
 		eg.Go(func() error {
 			return f(r)
 		})
