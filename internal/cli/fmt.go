@@ -16,6 +16,9 @@ package cli
 
 import (
 	"context"
+	"fmt"
+	"io"
+	"os"
 
 	flag "github.com/spf13/pflag"
 	"go.fuchsia.dev/shac-project/shac/internal/engine"
@@ -24,6 +27,7 @@ import (
 type fmtCmd struct {
 	commandBase
 	quiet bool
+	emit  bool
 }
 
 func (*fmtCmd) Name() string {
@@ -39,6 +43,7 @@ func (c *fmtCmd) SetFlags(f *flag.FlagSet) {
 	// TODO(olivernewman): Move the --quiet flag into cmdBase and make it apply
 	// to the `check` command as well.
 	f.BoolVar(&c.quiet, "quiet", false, "Disable non-error output")
+	f.BoolVar(&c.emit, "emit", false, "Print fixed contents to stdout instead of overwriting files")
 }
 
 func (c *fmtCmd) Execute(ctx context.Context, files []string) error {
@@ -46,6 +51,13 @@ func (c *fmtCmd) Execute(ctx context.Context, files []string) error {
 	if err != nil {
 		return err
 	}
+	if c.emit && len(files) > 1 {
+		return fmt.Errorf("--emit is only available if you are formatting one file")
+	}
+	var w io.Writer
+	if c.emit {
+		w = os.Stdout
+	}
 	o.Filter.FormatterFiltering = engine.OnlyFormatters
-	return engine.Fix(ctx, &o, c.quiet)
+	return engine.Fix(ctx, &o, c.quiet, w)
 }

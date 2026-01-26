@@ -136,7 +136,7 @@ func TestFix(t *testing.T) {
 				EntryPoint: data[i].name,
 				config:     "../config/valid.textproto",
 			}
-			if err := Fix(context.Background(), &o, true); err != nil {
+			if err := Fix(context.Background(), &o, true, nil); err != nil {
 				t.Fatal(err)
 			}
 			got := strings.Split(readFile(t, filepath.Join(root, "file.txt")), "\n")
@@ -145,5 +145,50 @@ func TestFix(t *testing.T) {
 				t.Fatalf("Wrong updated file lines (-want +got):\n%s", diff)
 			}
 		})
+	}
+}
+
+func TestFixWithWriter(t *testing.T) {
+	t.Parallel()
+
+	originalLines := []string{
+		"These are",
+		"the contents",
+		"of the file",
+		"that may be modified",
+	}
+
+	root := t.TempDir()
+	writeFile(t, root, "file.txt", strings.Join(originalLines, "\n")+"\n")
+	copyFile(t, root, filepath.Join("testdata", "fix", "replace_one_full_line.star"))
+
+	o := Options{
+		Dir:        root,
+		EntryPoint: "replace_one_full_line.star",
+		config:     "../config/valid.textproto",
+	}
+	var b strings.Builder
+	if err := Fix(context.Background(), &o, true, &b); err != nil {
+		t.Fatal(err)
+	}
+
+	// Verify that the file on disk was NOT modified.
+	gotFile := strings.Split(readFile(t, filepath.Join(root, "file.txt")), "\n")
+	wantFile := append(originalLines, "")
+	if diff := cmp.Diff(wantFile, gotFile); diff != "" {
+		t.Errorf("File on disk was modified but should not have been (-want +got):\n%s", diff)
+	}
+
+	// Verify that the writer contains the modified contents.
+	gotWriter := strings.Split(b.String(), "\n")
+	wantWriter := []string{
+		"These are",
+		"the contents",
+		"UPDATED",
+		"that may be modified",
+		"",
+	}
+	if diff := cmp.Diff(wantWriter, gotWriter); diff != "" {
+		t.Errorf("Writer contains wrong content (-want +got):\n%s", diff)
 	}
 }

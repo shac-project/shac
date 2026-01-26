@@ -19,6 +19,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"slices"
@@ -30,7 +31,7 @@ import (
 
 // Fix loads a main shac.star file from a root directory and runs checks defined
 // in it, then applies suggested fixes to files on disk.
-func Fix(ctx context.Context, o *Options, quiet bool) error {
+func Fix(ctx context.Context, o *Options, quiet bool, w io.Writer) error {
 	fc := findingCollector{
 		countsByCheck:  map[string]int{},
 		quiet:          quiet,
@@ -55,7 +56,7 @@ func Fix(ctx context.Context, o *Options, quiet bool) error {
 
 	for _, f := range orderedFiles {
 		findings := fc.findingsByFile[f]
-		numFixed, err := fixFindings(filepath.Join(f.root, f.path), findings)
+		numFixed, err := fixFindings(filepath.Join(f.root, f.path), findings, w)
 		if err != nil {
 			return err
 		}
@@ -70,7 +71,7 @@ func Fix(ctx context.Context, o *Options, quiet bool) error {
 	return nil
 }
 
-func fixFindings(path string, findings []findingToFix) (int, error) {
+func fixFindings(path string, findings []findingToFix, w io.Writer) (int, error) {
 	fi, err := os.Stat(path)
 	if err != nil {
 		return 0, err
@@ -132,8 +133,14 @@ func fixFindings(path string, findings []findingToFix) (int, error) {
 			replLines...)
 	}
 
-	if err := os.WriteFile(path, []byte(strings.Join(lines, "")), fi.Mode()); err != nil {
-		return 0, err
+	if w != nil {
+		if _, err := io.WriteString(w, strings.Join(lines, "")); err != nil {
+			return 0, err
+		}
+	} else {
+		if err := os.WriteFile(path, []byte(strings.Join(lines, "")), fi.Mode()); err != nil {
+			return 0, err
+		}
 	}
 	return numFixed, nil
 }
