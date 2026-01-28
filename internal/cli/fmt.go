@@ -55,9 +55,16 @@ func (c *fmtCmd) Execute(ctx context.Context, files []string) error {
 		return fmt.Errorf("--emit is only available if you are formatting one file")
 	}
 	var w io.Writer
+	var s []byte
 	if c.emit {
 		w = os.Stdout
+		data, err := io.ReadAll(os.Stdin)
+		if err != nil {
+			return err
+		}
+		s = data
 	}
 	o.Filter.FormatterFiltering = engine.OnlyFormatters
+	o.Stdin = s
 	return engine.Fix(ctx, &o, c.quiet, w)
 }

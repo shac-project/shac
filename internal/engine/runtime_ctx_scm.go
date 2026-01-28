@@ -181,6 +181,26 @@ type overridesShacFileDirs interface {
 	shacFileDirs(basename string) ([]string, error)
 }
 
+type inMemoryFile struct {
+	data       []byte
+	targetFile file
+	root       string
+}
+
+var _ scmCheckout = (*inMemoryFile)(nil)
+
+func (s *inMemoryFile) affectedFiles(ctx context.Context, includeDeleted bool) ([]file, error) {
+	return []file{s.targetFile}, nil
+}
+
+func (s *inMemoryFile) allFiles(ctx context.Context, includeDeleted bool) ([]file, error) {
+	return []file{s.targetFile}, nil
+}
+
+func (s *inMemoryFile) newLines(ctx context.Context, f file) (starlark.Value, error) {
+	return newLinesWholeBytes(s.data)
+}
+
 // specifiedFilesOnly is an scm that returns only a specified set of files.
 type specifiedFilesOnly struct {
 	files []file
@@ -736,6 +756,10 @@ func newLinesWhole(root, path string) (starlark.Value, error) {
 	if err != nil {
 		return nil, err
 	}
+	return newLinesWholeBytes(b)
+}
+
+func newLinesWholeBytes(b []byte) (starlark.Value, error) {
 	// If the file contains a null byte we'll assume it's binary and not try to
 	// parse its lines.
 	if bytes.IndexByte(b, 0) != -1 {

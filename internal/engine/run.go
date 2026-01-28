@@ -278,6 +278,8 @@ type Options struct {
 	// EntryPoint is the main source file to run. Defaults to shac.star.
 	EntryPoint string
 
+	Stdin []byte
+
 	// config is the configuration file. Defaults to shac.textproto. Only used in
 	// unit tests.
 	config string
@@ -352,6 +354,14 @@ func runInner(ctx context.Context, o *Options, tmpdir string) error {
 			return err
 		}
 		scm = &specifiedFilesOnly{files: files, root: root}
+	} else if len(o.Stdin) > 0 && len(o.Files) == 1 {
+		// Make a scm that is for just the one in-memory file
+		var files []file
+		files, err = normalizeFiles(o.Files, root)
+		if err != nil {
+			return err
+		}
+		scm = &inMemoryFile{root: root, targetFile: files[0], data: o.Stdin}
 	} else {
 		scm, err = getSCM(ctx, root, o.AllFiles)
 		if err != nil {

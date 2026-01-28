@@ -15,10 +15,71 @@
 package engine
 
 import (
+	"context"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
 )
+
+func TestInMemoryFile(t *testing.T) {
+	t.Parallel()
+
+	data := []byte("line1\nline2\nline3")
+	tf := &fileImpl{path: "foo.txt", a: "A"}
+	s := &inMemoryFile{
+		data:       data,
+		targetFile: tf,
+		root:       "/tmp",
+	}
+
+	ctx := context.Background()
+
+	t.Run("affectedFiles", func(t *testing.T) {
+		files, err := s.affectedFiles(ctx, false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(files) != 1 || files[0] != tf {
+			t.Errorf("got %v, want [%v]", files, tf)
+		}
+	})
+
+	t.Run("allFiles", func(t *testing.T) {
+		files, err := s.allFiles(ctx, false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(files) != 1 || files[0] != tf {
+			t.Errorf("got %v, want [%v]", files, tf)
+		}
+	})
+
+	t.Run("newLines", func(t *testing.T) {
+		got, err := s.newLines(ctx, tf)
+		if err != nil {
+			t.Fatal(err)
+		}
+		want := `((1, "line1"), (2, "line2"), (3, "line3"))`
+		if got.String() != want {
+			t.Errorf("newLines() = %s, want %s", got.String(), want)
+		}
+	})
+
+	t.Run("newLinesBinary", func(t *testing.T) {
+		sBinary := &inMemoryFile{
+			data:       []byte("binary\x00data"),
+			targetFile: tf,
+		}
+		got, err := sBinary.newLines(ctx, tf)
+		if err != nil {
+			t.Fatal(err)
+		}
+		want := `()`
+		if got.String() != want {
+			t.Errorf("newLines() = %s, want %s", got.String(), want)
+		}
+	})
+}
 
 func TestGitConfigEnv(t *testing.T) {
 	t.Parallel()
