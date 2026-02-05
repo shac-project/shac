@@ -54,6 +54,18 @@ func Fix(ctx context.Context, o *Options, quiet bool, w io.Writer) error {
 		return cmp.Compare(a.path, b.path)
 	})
 
+	if len(orderedFiles) == 0 && len(o.Files) == 1 && w != nil {
+		// In this scenario, there are no fixes to perform, there is only one
+		// file being requested to format, and we are being requested to
+		// write the files contents out. Just emit the file right back out.
+		b, err := os.ReadFile(o.Files[0])
+		if err != nil {
+			return err
+		}
+		_, err = w.Write(b)
+		return err
+	}
+
 	for _, f := range orderedFiles {
 		findings := fc.findingsByFile[f]
 		numFixed, err := fixFindings(filepath.Join(f.root, f.path), findings, w)
