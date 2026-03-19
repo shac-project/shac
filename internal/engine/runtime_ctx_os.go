@@ -368,6 +368,17 @@ func ctxOsExec(ctx context.Context, s *shacState, name string, args starlark.Tup
 		}
 		config.Mounts = append(config.Mounts, passthroughMounts...)
 
+		// Explicitly mount standard binary directories. On systems with a
+		// merged /usr layout (like Debian 12+), /bin is a symlink to /usr/bin.
+		// A restricted $PATH might omit /bin, so we must ensure it's mounted
+		// for scripts that rely on standard shebangs like #!/bin/sh to function
+		// correctly.
+		for _, p := range []string{"/bin", "/usr/bin", "/sbin", "/usr/sbin"} {
+			if fi, errStat := os.Stat(p); errStat == nil && fi.IsDir() {
+				config.Mounts = append(config.Mounts, sandbox.Mount{Path: p})
+			}
+		}
+
 		// TODO(olivernewman): This is necessary because checks for shac itself
 		// assume Go is pre-installed. Switch to a hermetic Go installation that
 		// installs Go in the checkout directory, and stop explicitly mounting
