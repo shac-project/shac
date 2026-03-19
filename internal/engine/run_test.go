@@ -620,6 +620,109 @@ func TestRun_Filtering(t *testing.T) {
 	}
 }
 
+func TestRun_Filtering_MultipleFiles(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+
+	// Create a root shac.star that defines "check1".
+	writeFile(t, root, "shac.star", ""+
+		"def cb1(ctx):\n"+
+		"    print(\"check1 running\")\n"+
+		"shac.register_check(shac.check(cb1, name=\"check1\"))\n")
+
+	// Create a nested directory with a shac.star that defines "check2".
+	mkdirAll(t, filepath.Join(root, "nested"))
+	writeFile(t, root, filepath.Join("nested", "shac.star"), ""+
+		"def cb2(ctx):\n"+
+		"    print(\"check2 running\")\n"+
+		"shac.register_check(shac.check(cb2, name=\"check2\"))\n")
+
+	// Create another nested directory with a shac.star that defines no checks
+	// but prints something when evaluating.
+	mkdirAll(t, filepath.Join(root, "nested2"))
+	writeFile(t, root, filepath.Join("nested2", "shac.star"), ""+
+		"print(\"nested2 evaluating\")\n")
+
+	data := []struct {
+		name    string
+		filter  CheckFilter
+		want    string
+		wantErr string
+	}{
+		{
+			name: "all checks",
+			want: "[//nested/shac.star:2] check2 running\n" +
+				"[//nested2/shac.star:1] nested2 evaluating\n" +
+				"[//shac.star:2] check1 running\n",
+		},
+		{
+			name: "allowlist check1",
+			filter: CheckFilter{
+				AllowList: []string{"check1"},
+			},
+			want: "[//nested2/shac.star:1] nested2 evaluating\n" +
+				"[//shac.star:2] check1 running\n",
+		},
+		{
+			name: "allowlist check2",
+			filter: CheckFilter{
+				AllowList: []string{"check2"},
+			},
+			want: "[//nested/shac.star:2] check2 running\n" +
+				"[//nested2/shac.star:1] nested2 evaluating\n",
+		},
+		{
+			name: "allowlist non-existent",
+			filter: CheckFilter{
+				AllowList: []string{"check3"},
+			},
+			wantErr: "check does not exist: check3",
+		},
+		{
+			name: "allowlist check1 and check2",
+			filter: CheckFilter{
+				AllowList: []string{"check1", "check2"},
+			},
+			want: "[//nested/shac.star:2] check2 running\n" +
+				"[//nested2/shac.star:1] nested2 evaluating\n" +
+				"[//shac.star:2] check1 running\n",
+		},
+		{
+			name: "denylist check1",
+			filter: CheckFilter{
+				DenyList: []string{"check1"},
+			},
+			want: "[//nested/shac.star:2] check2 running\n" +
+				"[//nested2/shac.star:1] nested2 evaluating\n",
+		},
+	}
+	for i := range data {
+		t.Run(data[i].name, func(t *testing.T) {
+			r := reportPrint{reportNoPrint: reportNoPrint{t: t}}
+			o := Options{Report: &r, Dir: root, Filter: data[i].filter, Recurse: true}
+			err := Run(context.Background(), &o)
+			if data[i].wantErr != "" {
+				if err == nil {
+					t.Fatalf("expected error %q, got nil", data[i].wantErr)
+				}
+				if err.Error() != data[i].wantErr {
+					t.Fatalf("mismatch error (-want +got):\n-%s\n+%s", data[i].wantErr, err.Error())
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			got := sortLines(r.b.String())
+			want := sortLines(data[i].want)
+			if diff := cmp.Diff(want, got); diff != "" {
+				t.Fatalf("mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
 func TestRun_Ignore(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()

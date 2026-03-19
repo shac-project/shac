@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"io/fs"
 	"log"
+	"maps"
 	"os"
 	"os/exec"
 	"path"
@@ -69,6 +70,9 @@ const DefaultEntryPoint = "shac.star"
 
 var errEmptyIgnore = errors.New("ignore fields cannot be empty strings")
 
+// maxConcurrency is the maximum number of concurrent checks that will be run.
+var maxConcurrency = runtime.NumCPU() + 2
+
 // Span represents a section in a source file or a change description.
 type Span struct {
 	// Start is the beginning of the span. If Col is specified, Line must be
@@ -114,24 +118,13 @@ func (f *CheckFilter) filter(checks []*registeredCheck) ([]*registeredCheck, err
 		return checks, nil
 	}
 
-	// Keep track of the allowlist elements that correspond to valid checks so
-	// we can report any invalid allowlist elements at the end.
 	allowList := make(map[string]struct{})
 	for _, name := range f.AllowList {
 		allowList[name] = struct{}{}
 	}
-	var allowedAndDenied []string
 	denyList := make(map[string]struct{})
 	for _, name := range f.DenyList {
 		denyList[name] = struct{}{}
-		if _, ok := allowList[name]; ok {
-			allowedAndDenied = append(allowedAndDenied, name)
-		}
-	}
-	if len(allowedAndDenied) > 0 {
-		return nil, fmt.Errorf(
-			"checks cannot be both allowed and denied: %s",
-			strings.Join(allowedAndDenied, ", "))
 	}
 
 	var filtered []*registeredCheck
@@ -140,10 +133,8 @@ func (f *CheckFilter) filter(checks []*registeredCheck) ([]*registeredCheck, err
 			if _, ok := allowList[check.name]; !ok {
 				continue
 			}
-			delete(allowList, check.name)
 		}
 		if _, ok := denyList[check.name]; ok {
-			delete(denyList, check.name)
 			continue
 		}
 		switch f.FormatterFiltering {
@@ -162,14 +153,42 @@ func (f *CheckFilter) filter(checks []*registeredCheck) ([]*registeredCheck, err
 		filtered = append(filtered, check)
 	}
 
+	return filtered, nil
+}
+
+// validate validates the filter configuration against the set of discovered
+// checks.
+func (f *CheckFilter) validate(shacStates []*shacState) error {
+	allowList := make(map[string]struct{})
+	for _, name := range f.AllowList {
+		allowList[name] = struct{}{}
+	}
+	var allowedAndDenied []string
+	denyList := make(map[string]struct{})
+	for _, name := range f.DenyList {
+		denyList[name] = struct{}{}
+		if _, ok := allowList[name]; ok {
+			allowedAndDenied = append(allowedAndDenied, name)
+		}
+	}
+	if len(allowedAndDenied) > 0 {
+		return fmt.Errorf(
+			"checks cannot be both allowed and denied: %s",
+			strings.Join(allowedAndDenied, ", "))
+	}
+
+	// Remove all known checks from the allowlist and denylist to validate that
+	// there are no invalid checks in either list.
+	for _, s := range shacStates {
+		for _, check := range s.checks {
+			delete(allowList, check.name)
+			delete(denyList, check.name)
+		}
+	}
 	if len(allowList) > 0 || len(denyList) > 0 {
 		var invalidChecks []string
-		for name := range allowList {
-			invalidChecks = append(invalidChecks, name)
-		}
-		for name := range denyList {
-			invalidChecks = append(invalidChecks, name)
-		}
+		invalidChecks = slices.AppendSeq(invalidChecks, maps.Keys(allowList))
+		invalidChecks = slices.AppendSeq(invalidChecks, maps.Keys(denyList))
 		var msg string
 		if len(invalidChecks) == 1 {
 			msg = "check does not exist"
@@ -177,15 +196,9 @@ func (f *CheckFilter) filter(checks []*registeredCheck) ([]*registeredCheck, err
 			msg = "checks do not exist"
 		}
 		slices.Sort(invalidChecks)
-		return nil, fmt.Errorf("%s: %s", msg, strings.Join(invalidChecks, ", "))
+		return fmt.Errorf("%s: %s", msg, strings.Join(invalidChecks, ", "))
 	}
-
-	if len(filtered) == 0 {
-		// Fail noisily if all checks are filtered out, it's probably user
-		// error.
-		return nil, errors.New("no checks to run")
-	}
-	return filtered, nil
+	return nil
 }
 
 // Level is one of "notice", "warning" or "error".
@@ -400,7 +413,7 @@ func runInner(ctx context.Context, o *Options, tmpdir string) error {
 		opts:     starlarkOptions(),
 	}
 
-	subprocessSem := semaphore.NewWeighted(int64(runtime.NumCPU()) + 2)
+	subprocessSem := semaphore.NewWeighted(int64(maxConcurrency))
 
 	var vars map[string]string
 
@@ -506,42 +519,77 @@ func runInner(ctx context.Context, o *Options, tmpdir string) error {
 		shacStates = append(shacStates, state)
 	}
 
-	// Parse the starlark files. Run everything from our errgroup.
-	eg, ctx := errgroup.WithContext(ctx)
-	eg.SetLimit(runtime.NumCPU() + 2)
-	// Make it so each shac can submit at least one item.
-	ch := make(chan func() error, len(shacStates))
-	done := make(chan struct{})
+	// Parse the starlark files concurrently.
+	eg, egCtx := errgroup.WithContext(ctx)
+	eg.SetLimit(maxConcurrency)
 	for _, s := range shacStates {
 		eg.Go(func() error {
-			err := s.parseAndBuffer(ctx, ch)
-			done <- struct{}{}
-			return err
+			stateCtx := context.WithValue(egCtx, &shacStateCtxKey, s)
+			if err := s.parse(stateCtx); err != nil {
+				return err
+			}
+			if len(s.checks) == 0 && !s.printCalled {
+				return errors.New("did you forget to call shac.register_check?")
+			}
+			return nil
 		})
 	}
-	count := len(shacStates)
-	for loop := true; loop; {
-		select {
-		case cb := <-ch:
-			if cb == nil {
-				loop = false
-			} else {
-				// Actually run the check.
-				eg.Go(cb)
-			}
-		case <-done:
-			count--
-			if count == 0 {
-				// All shac.star processing is done, we can now send a nil to the
-				// channel to tell it to stop.
-				// Since we are pushing from the same loop that we are pulling, this is
-				// blocking. Instead of making the channel buffered, which would slow
-				// it down, use a one time goroutine. It's kind of a gross hack but
-				// it'll work just fine.
-				go func() {
-					ch <- nil
-				}()
-			}
+	if err := eg.Wait(); err != nil {
+		return err
+	}
+
+	if err := o.Filter.validate(shacStates); err != nil {
+		return err
+	}
+
+	var hasChecksAfterFiltering bool
+	var totalChecks int
+	for _, s := range shacStates {
+		totalChecks += len(s.checks)
+		checks, err := s.filter.filter(s.checks)
+		if err != nil {
+			return err
+		}
+		s.checks = checks
+		if len(s.checks) > 0 {
+			hasChecksAfterFiltering = true
+		}
+	}
+	if totalChecks > 0 && !hasChecksAfterFiltering {
+		return errors.New("no checks to run")
+	}
+
+	// Run all checks concurrently honoring the CPU limit.
+	eg, egCtx = errgroup.WithContext(ctx)
+	eg.SetLimit(maxConcurrency)
+
+	for _, s := range shacStates {
+		shacCtx, err := getCtx(path.Join(s.root, s.subdir), s.vars)
+		if err != nil {
+			return err
+		}
+		args := starlark.Tuple{shacCtx}
+		args.Freeze()
+		for _, check := range s.checks {
+			eg.Go(func() error {
+				stateCtx := context.WithValue(egCtx, &shacStateCtxKey, s)
+				start := time.Now()
+				pi := func(th *starlark.Thread, msg string) {
+					pos := th.CallFrame(1).Pos
+					s.r.Print(stateCtx, check.name, pos.Filename(), int(pos.Line), msg)
+				}
+				err := check.call(stateCtx, s.env, args, pi)
+				if err != nil && stateCtx.Err() != nil {
+					// Don't report the check completion if the context was
+					// canceled. The error was probably caused by the context
+					// being canceled as a side effect of another check failing.
+					// Only the original check failure should be reported, not
+					// the canceled check failures.
+					return stateCtx.Err()
+				}
+				s.r.CheckCompleted(stateCtx, check.name, start, time.Since(start), check.highestLevel, err)
+				return err
+			})
 		}
 	}
 	if err := eg.Wait(); err != nil {
@@ -708,19 +756,6 @@ func ctxShacState(ctx context.Context) *shacState {
 
 var shacStateCtxKey = "shac.shacState"
 
-// parseAndBuffer parses and run a single shac.star file, then buffer all its checks.
-func (s *shacState) parseAndBuffer(ctx context.Context, ch chan<- func() error) error {
-	ctx = context.WithValue(ctx, &shacStateCtxKey, s)
-	if err := s.parse(ctx); err != nil {
-		return err
-	}
-	if len(s.checks) == 0 && !s.printCalled {
-		return errors.New("did you forget to call shac.register_check?")
-	}
-	// Last phase where checks are called.
-	return s.bufferAllChecks(ctx, ch)
-}
-
 // parse parses a single shac.star file.
 func (s *shacState) parse(ctx context.Context) error {
 	pi := func(th *starlark.Thread, msg string) {
@@ -741,41 +776,6 @@ func (s *shacState) parse(ctx context.Context) error {
 		return err
 	}
 	s.doneLoading = true
-	return nil
-}
-
-// bufferAllChecks adds all the checks to the channel for execution.
-func (s *shacState) bufferAllChecks(ctx context.Context, ch chan<- func() error) error {
-	shacCtx, err := getCtx(path.Join(s.root, s.subdir), s.vars)
-	if err != nil {
-		return err
-	}
-	args := starlark.Tuple{shacCtx}
-	args.Freeze()
-	checks, err := s.filter.filter(s.checks)
-	if err != nil {
-		return err
-	}
-	for _, check := range checks {
-		ch <- func() error {
-			start := time.Now()
-			pi := func(th *starlark.Thread, msg string) {
-				pos := th.CallFrame(1).Pos
-				s.r.Print(ctx, check.name, pos.Filename(), int(pos.Line), msg)
-			}
-			err := check.call(ctx, s.env, args, pi)
-			if err != nil && ctx.Err() != nil {
-				// Don't report the check completion if the context was
-				// canceled. The error was probably caused by the context being
-				// canceled as a side effect of another check failing. Only the
-				// original check failure should be reported, not the canceled
-				// check failures.
-				return ctx.Err()
-			}
-			s.r.CheckCompleted(ctx, check.name, start, time.Since(start), check.highestLevel, err)
-			return err
-		}
-	}
 	return nil
 }
 

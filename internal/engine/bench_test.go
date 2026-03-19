@@ -17,6 +17,7 @@ package engine
 import (
 	"context"
 	"errors"
+	"fmt"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -50,6 +51,35 @@ func BenchmarkPrint100_Git(b *testing.B) {
 	copyFile(b, root, "testdata/bench/print100.star")
 	want := strings.Repeat("[//print100.star:16] running\n", 100)
 	benchStarlarkPrint(b, root, "print100.star", true, want)
+}
+
+func BenchmarkManyChecks(b *testing.B) {
+	root := b.TempDir()
+
+	for i := range 1000 {
+		dir := filepath.Join(root, fmt.Sprintf("dir%d", i))
+		mkdirAll(b, dir)
+		content := fmt.Sprintf("def cb(ctx):\n  pass\nshac.register_check(shac.check(cb, name=\"check%d\"))\n", i)
+		writeFile(b, dir, "shac.star", content)
+	}
+	// Create a root shac.star so we don't error out looking for the entrypoint.
+	writeFile(b, root, "shac.star", "print(\"root\")\n")
+
+	r := reportPrint{reportNoPrint: reportNoPrint{t: b}}
+	o := Options{
+		Report:     &r,
+		Dir:        root,
+		EntryPoint: "shac.star",
+		Recurse:    true,
+	}
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if err := Run(context.Background(), &o); err != nil {
+			b.Fatal(err)
+		}
+	}
 }
 
 func BenchmarkCtxEmitFinding(b *testing.B) {
