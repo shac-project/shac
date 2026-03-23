@@ -25,7 +25,12 @@ import (
 )
 
 func TestResolveFuseMounts(t *testing.T) {
-	tmpDir := t.TempDir()
+	// Make sure to evaluate symlinks before comparing, since
+	// `ResolveFuseMounts` evaluates symlinks.
+	tmpDir, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
 	rootDir := filepath.Join(tmpDir, "root")
 	if err := os.MkdirAll(rootDir, 0755); err != nil {
 		t.Fatal(err)
