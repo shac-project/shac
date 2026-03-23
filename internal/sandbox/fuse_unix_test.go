@@ -25,7 +25,13 @@ import (
 )
 
 func TestResolveFuseMounts(t *testing.T) {
-	tmpDir := t.TempDir()
+	// On some systems, the temporary directory returned by t.TempDir() is
+	// located under /var/folders/..., which is actually a symbolic link to
+	// /private/var/folders/....
+	tmpDir, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
 	rootDir := filepath.Join(tmpDir, "root")
 	if err := os.MkdirAll(rootDir, 0755); err != nil {
 		t.Fatal(err)
