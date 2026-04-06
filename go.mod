@@ -15,7 +15,7 @@
 module go.fuchsia.dev/shac-project/shac
 
 // LINT.IfChange(goversion)
-go 1.23.4
+go 1.26.1
 
 // LINT.ThenChange(scripts/tests.sh:goversion, .github/workflows/test.yml:test_goversion, .github/workflows/test.yml:lint_goversion, .github/workflows/test.yml:codeql_goversion)
 

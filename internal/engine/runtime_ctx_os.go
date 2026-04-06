@@ -123,7 +123,7 @@ func (s *subprocess) waitInner() (starlark.Value, error) {
 			msgBuilder.WriteString("\n")
 			msgBuilder.WriteString(s.stderr.String())
 		}
-		return nil, fmt.Errorf(msgBuilder.String())
+		return nil, errors.New(msgBuilder.String())
 	}
 	return toValue("completed_subprocess", starlark.StringDict{
 		"retcode": starlark.MakeInt(retcode),
@@ -389,7 +389,7 @@ func ctxOsExec(ctx context.Context, s *shacState, name string, args starlark.Tup
 		}
 
 		// Mount all directories listed in $PATH.
-		for _, p := range strings.Split(env["PATH"], string(os.PathListSeparator)) {
+		for p := range strings.SplitSeq(env["PATH"], string(os.PathListSeparator)) {
 			// $PATH may contain invalid elements. Filter them out.
 			if !filepath.IsAbs(p) {
 				// Relative paths in $PATH are not allowed.

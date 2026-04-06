@@ -26,7 +26,7 @@ var (
 	// Version is the current tool version.
 	//
 	// TODO(maruel): Add proper version, preferably from git tag.
-	Version = shacVersion{0, 1, 24}
+	Version = shacVersion{0, 1, 25}
 )
 
 func (v shacVersion) String() string {
@@ -35,7 +35,7 @@ func (v shacVersion) String() string {
 
 func parseVersion(s string) []int {
 	var out []int
-	for _, x := range strings.Split(s, ".") {
+	for x := range strings.SplitSeq(s, ".") {
 		i, err := strconv.Atoi(x)
 		if err != nil {
 			return nil

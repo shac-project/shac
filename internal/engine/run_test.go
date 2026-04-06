@@ -1022,13 +1022,11 @@ func TestRun_SCM_Raw(t *testing.T) {
 }
 
 func scmStarlarkFiles(action string) string {
-	return fmt.Sprintf("" +
-		"ctx-scm-affected_files-include_deleted.star: " + action + "\n" +
+	return "ctx-scm-affected_files-include_deleted.star: " + action + "\n" +
 		"ctx-scm-affected_files-new_lines.star: " + action + "\n" +
 		"ctx-scm-affected_files.star: " + action + "\n" +
 		"ctx-scm-all_files-include_deleted.star: " + action + "\n" +
-		"ctx-scm-all_files.star: " + action + "\n",
-	)
+		"ctx-scm-all_files.star: " + action + "\n"
 }
 
 func TestRun_SCM_Git_NoUpstream_Pristine(t *testing.T) {

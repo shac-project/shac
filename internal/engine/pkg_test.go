@@ -124,13 +124,16 @@ func TestFSToDigest_Fail(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := "stat .: no such file or directory"
-	if runtime.GOOS == "windows" {
-		want = "CreateFile .: The system cannot find the file specified."
-	}
 	if d, err := FSToDigest(os.DirFS(filepath.Join(root, "inexistant")), "prefix"); d != "" {
 		t.Fatal(d)
-	} else if err == nil || err.Error() != want {
-		t.Fatal(err)
+	} else if err == nil {
+		t.Fatal("expected error")
+	} else if runtime.GOOS == "windows" {
+		if !strings.Contains(err.Error(), "The system cannot find the file specified") {
+			t.Fatalf("expected error containing %q, got %q", "The system cannot find the file specified", err)
+		}
+	} else if err.Error() != want {
+		t.Fatalf("expected error %q, got %q", want, err)
 	}
 }
 

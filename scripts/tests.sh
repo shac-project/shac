@@ -23,8 +23,8 @@ export CGO_ENABLED=0
 export GOTOOLCHAIN=local
 
 # LINT.IfChange(goversion)
-GO_CIPD_VERSION="version:3@1.23.4"
-# LINT.ThenChange(go.mod:goversion)
+GO_CIPD_VERSION="version:3@1.26.1"
+# LINT.ThenChange(/go.mod:goversion)
 
 cd "$(dirname "${BASH_SOURCE[0]}")"
 cd ..
