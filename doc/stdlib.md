@@ -532,7 +532,7 @@ shac.register_check(new_todos)
 
 ### Arguments
 
-* **glob**: (optional) TODO: Will later accept a glob.
+* **glob**: (optional) A string or sequence of strings containing patterns to filter files. Patterns follow gitignore syntax. If specified, only files matching at least one pattern are returned.
 * **include_deleted**: (optional) Whether to include deleted files. By default deleted files are excluded.
 
 ### Returns
@@ -564,7 +564,7 @@ shac.register_check(all_todos)
 
 ### Arguments
 
-* **glob**: (optional) TODO: Will later accept a glob.
+* **glob**: (optional) A string or sequence of strings containing patterns to filter files. Patterns follow gitignore syntax. If specified, only files matching at least one pattern are returned.
 * **include_deleted**: (optional) Whether to include deleted files. By default deleted files are excluded.
 
 ### Returns

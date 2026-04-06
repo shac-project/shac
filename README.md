@@ -306,6 +306,8 @@ Planned features/changes, in descending order by priority:
 - [x] Include unstaged files in analysis, including respecting unstaged
       `shac.star` files
 - [x] Automatic fix application with handling for conflicting suggestions
+- [x] Add `glob` arguments to `ctx.scm.{all,affected}_files()` functions for
+      easier filtering
 - [ ] Rerun formatting checks after a conflict is encountered
 - [ ] Provide a `.shac` cache directory that checks can write to
 - [ ] Mount checkout directory read-only
@@ -317,8 +319,6 @@ Planned features/changes, in descending order by priority:
       mounts that can optionally be passed through to the sandbox
   - [x] Passed-through environment variables statically declared in
      shac.textproto
-- [ ] Add `glob` arguments to `ctx.scm.{all,affected}_files()` functions for
-      easier filtering
 - [ ] Filesystem sandboxing on MacOS
 - [ ] Windows sandboxing
 - [ ] Testing framework for checks

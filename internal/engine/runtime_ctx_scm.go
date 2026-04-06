@@ -708,12 +708,18 @@ func (r *rawTree) newLines(ctx context.Context, f file) (starlark.Value, error) 
 // Make sure to update //doc/stdlib.star whenever this function is modified.
 func ctxScmAffectedFiles(ctx context.Context, s *shacState, name string, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	var argincludeDeleted starlark.Bool
+	var argglob starlark.Value
 	if err := starlark.UnpackArgs(name, args, kwargs,
 		"include_deleted?", &argincludeDeleted,
+		"glob??", &argglob,
 	); err != nil {
 		return nil, err
 	}
 	files, err := s.scm.affectedFiles(ctx, bool(argincludeDeleted))
+	if err != nil {
+		return nil, err
+	}
+	files, err = filterFilesByGlob(files, argglob)
 	if err != nil {
 		return nil, err
 	}
@@ -727,12 +733,18 @@ func ctxScmAffectedFiles(ctx context.Context, s *shacState, name string, args st
 // Make sure to update //doc/stdlib.star whenever this function is modified.
 func ctxScmAllFiles(ctx context.Context, s *shacState, name string, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	var argincludeDeleted starlark.Bool
+	var argglob starlark.Value
 	if err := starlark.UnpackArgs(name, args, kwargs,
 		"include_deleted?", &argincludeDeleted,
+		"glob??", &argglob,
 	); err != nil {
 		return nil, err
 	}
 	files, err := s.scm.allFiles(ctx, bool(argincludeDeleted))
+	if err != nil {
+		return nil, err
+	}
+	files, err = filterFilesByGlob(files, argglob)
 	if err != nil {
 		return nil, err
 	}
@@ -782,4 +794,54 @@ func newLinesWholeBytes(b []byte) (starlark.Value, error) {
 func unsafeString(b []byte) string {
 	// #nosec G103
 	return unsafe.String(unsafe.SliceData(b), len(b))
+}
+
+func filterFilesByGlob(files []file, glob starlark.Value) ([]file, error) {
+	if glob == nil || glob == starlark.None {
+		return files, nil
+	}
+	var patterns []string
+	switch v := glob.(type) {
+	case starlark.String:
+		patterns = []string{string(v)}
+	case starlark.Sequence:
+		patterns = sequenceToStrings(v)
+		if patterns == nil {
+			return nil, fmt.Errorf("\"glob\" must be string or sequence of strings")
+		}
+	default:
+		return nil, fmt.Errorf("\"glob\" must be string or sequence of strings")
+	}
+
+	// If all patterns are negative, we need to prepend "**" because in
+	// gitignore syntax, negative patterns only take effect if a file was also
+	// matched by a positive pattern. Otherwise no files would be matched, which
+	// is probably not what the user intended.
+	allNegative := true
+	for _, p := range patterns {
+		if !strings.HasPrefix(p, "!") {
+			allNegative = false
+			break
+		}
+	}
+	var gitPatterns []gitignore.Pattern
+	if allNegative && len(patterns) > 0 {
+		gitPatterns = append(gitPatterns, gitignore.ParsePattern("**", nil))
+	}
+
+	for _, p := range patterns {
+		if p == "" {
+			return nil, fmt.Errorf("\"glob\" pattern cannot be empty")
+		}
+		gitPatterns = append(gitPatterns, gitignore.ParsePattern(p, nil))
+	}
+	matcher := gitignore.NewMatcher(gitPatterns)
+
+	var out []file
+	for _, f := range files {
+		if matcher.Match(strings.Split(f.rootedpath(), "/"), false) {
+			out = append(out, f)
+		}
+	}
+	return out, nil
 }

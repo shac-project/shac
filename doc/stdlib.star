@@ -461,7 +461,9 @@ def _ctx_scm_affected_files(glob = None, include_deleted = False):
       ```
 
     Args:
-      glob: (optional) TODO: Will later accept a glob.
+      glob: (optional) A string or sequence of strings containing patterns to
+        filter files. Patterns follow gitignore syntax. If specified, only
+        files matching at least one pattern are returned.
       include_deleted: (optional) Whether to include deleted files. By default
         deleted files are excluded.
 
@@ -492,7 +494,9 @@ def _ctx_scm_all_files(glob = None, include_deleted = False):
       ```
 
     Args:
-      glob: (optional) TODO: Will later accept a glob.
+      glob: (optional) A string or sequence of strings containing patterns to
+        filter files. Patterns follow gitignore syntax. If specified, only
+        files matching at least one pattern are returned.
       include_deleted: (optional) Whether to include deleted files. By default
         deleted files are excluded.
 

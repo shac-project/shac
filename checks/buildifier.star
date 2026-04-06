@@ -23,9 +23,8 @@ def _buildifier(ctx):
     """Checks Starlark/Bazel file formatting using buildifier."""
     starlark_files = [
         f
-        for f in ctx.scm.affected_files()
-        if f.endswith(".star") and
-           f not in _IGNORE_FILES
+        for f in ctx.scm.affected_files(glob = "**/*.star")
+        if f not in _IGNORE_FILES
     ]
     if not starlark_files:
         return

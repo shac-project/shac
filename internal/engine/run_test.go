@@ -399,9 +399,12 @@ func TestRun_SpecificFiles(t *testing.T) {
 			name:         "all files",
 			starlarkFile: "ctx-scm-all_files.star",
 			want: "[//ctx-scm-all_files.star:19] \n" +
+				"ctx-scm-affected_files-glob.star: \n" +
 				"ctx-scm-affected_files-include_deleted.star: \n" +
 				"ctx-scm-affected_files-new_lines.star: \n" +
 				"ctx-scm-affected_files.star: \n" +
+				"ctx-scm-all_files-all_negative_glob.star: \n" +
+				"ctx-scm-all_files-glob.star: \n" +
 				"ctx-scm-all_files-include_deleted.star: \n" +
 				"ctx-scm-all_files.star: \n" +
 				"python.py: \n" +
@@ -1019,12 +1022,35 @@ func TestRun_SCM_Raw(t *testing.T) {
 			"\n"
 		testStarlarkPrint(t, root, "ctx-scm-all_files.star", false, false, want)
 	})
+	t.Run("all-glob", func(t *testing.T) {
+		t.Parallel()
+		want := "[//ctx-scm-all_files-glob.star:29] \n" +
+			"glob=*all_files.star: ctx-scm-all_files.star\n" +
+			"glob=[*all_files.star, non-existent.star]: ctx-scm-all_files.star\n\n"
+		testStarlarkPrint(t, root, "ctx-scm-all_files-glob.star", false, false, want)
+	})
+	t.Run("affected-glob", func(t *testing.T) {
+		t.Parallel()
+		want := "[//ctx-scm-affected_files-glob.star:29] \n" +
+			"glob=*affected_files.star: ctx-scm-affected_files.star\n" +
+			"glob=[*affected_files.star, non-existent.star]: ctx-scm-affected_files.star\n\n"
+		testStarlarkPrint(t, root, "ctx-scm-affected_files-glob.star", false, false, want)
+	})
+	t.Run("all-negative-glob", func(t *testing.T) {
+		t.Parallel()
+		want := "[//ctx-scm-all_files-all_negative_glob.star:21] \n" +
+			"negative_glob: a.txt\n\n"
+		testStarlarkPrint(t, root, "ctx-scm-all_files-all_negative_glob.star", false, false, want)
+	})
 }
 
 func scmStarlarkFiles(action string) string {
-	return "ctx-scm-affected_files-include_deleted.star: " + action + "\n" +
+	return "ctx-scm-affected_files-glob.star: " + action + "\n" +
+		"ctx-scm-affected_files-include_deleted.star: " + action + "\n" +
 		"ctx-scm-affected_files-new_lines.star: " + action + "\n" +
 		"ctx-scm-affected_files.star: " + action + "\n" +
+		"ctx-scm-all_files-all_negative_glob.star: " + action + "\n" +
+		"ctx-scm-all_files-glob.star: " + action + "\n" +
 		"ctx-scm-all_files-include_deleted.star: " + action + "\n" +
 		"ctx-scm-all_files.star: " + action + "\n"
 }
@@ -1102,8 +1128,9 @@ func TestRun_SCM_Git_NoUpstream_Staged(t *testing.T) {
 		{
 			"ctx-scm-affected_files-new_lines.star",
 			false,
-			"[//ctx-scm-affected_files-new_lines.star:33] ctx-scm-affected_files-include_deleted.star\n" +
-				"1: # Copyright 2023 The Shac Authors\n",
+			// This file just happens to be the first one alphabetically.
+			"[//ctx-scm-affected_files-new_lines.star:33] ctx-scm-affected_files-glob.star\n" +
+				"1: # Copyright 2026 The Shac Authors\n",
 		},
 		{
 			"ctx-scm-affected_files-new_lines.star",

@@ -28,30 +28,29 @@ _EXPECTED_HEADER_RE = r"""
 (#|//|::) limitations under the License\.
 """.strip()
 
-_SKIP_FILE_REGEXES = [
-    # All-caps files in the root directory are likely special informational files
-    # that don't need licenses.
-    r"[A-Z]+",
-    # Markdown files and templates.
-    r".*\.mdt?",
-    # go.sum files can't contain comments.
-    r"go\.sum",
-    # JSON files can't contain comments.
-    r".*\.json",
-    # gitignore files need not contain a license header.
-    r"(.*/)?\.gitignore",
-    # text files in testdata/ need not contain a license header.
-    r"(.*/)?testdata/(.+)\.txt",
-]
-
 def check_license_headers(ctx):
     """Checks that all files have valid license headers.
 
     Args:
       ctx: A ctx instance.
     """
-    for path in ctx.scm.affected_files():
-        if any([ctx.re.match(r"^%s$" % regex, path) for regex in _SKIP_FILE_REGEXES]):
+    glob = [
+        # Markdown files and templates.
+        "!*.md",
+        "!*.mdt",
+        # go.sum can't contain comments.
+        "!/go.sum",
+        # JSON files can't contain comments.
+        "!*.json",
+        # gitignore files need not contain a license header.
+        "!.gitignore",
+        # text files in testdata/ need not contain a license header.
+        "!**/testdata/**/*.txt",
+    ]
+    for path in ctx.scm.affected_files(glob = glob):
+        # All-caps files in the root directory are likely special informational files
+        # that don't need licenses.
+        if "/" not in path and path.upper() == path:
             continue
         contents = str(ctx.io.read_file(path, 4096))
 

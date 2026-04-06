@@ -21,7 +21,7 @@ def _gofmt(ctx, simplify = True):
       ctx: A ctx instance.
       simplify: Whether to set the -s flag on gofmt.
     """
-    go_files = [f for f in ctx.scm.affected_files() if f.endswith(".go")]
+    go_files = ctx.scm.affected_files(glob = "**/*.go")
     if not go_files:
         return
 
@@ -29,7 +29,7 @@ def _gofmt(ctx, simplify = True):
     if simplify:
         base_cmd.append("-s")
 
-    unformatted = ctx.os.exec(base_cmd + ["-l"] + go_files).wait().stdout.splitlines()
+    unformatted = ctx.os.exec(base_cmd + ["-l"] + list(go_files)).wait().stdout.splitlines()
     for f in unformatted:
         new_contents = ctx.os.exec(base_cmd + [f]).wait().stdout
         ctx.emit.finding(
