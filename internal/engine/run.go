@@ -366,7 +366,12 @@ func runInner(ctx context.Context, o *Options, tmpdir string) error {
 		if err != nil {
 			return err
 		}
-		scm = &specifiedFilesOnly{files: files, root: root}
+		var baseSCM scmCheckout
+		baseSCM, err = getSCM(ctx, root, false)
+		if err != nil {
+			return err
+		}
+		scm = &specifiedFilesOnly{files: files, root: root, base: baseSCM}
 	} else if len(o.Stdin) > 0 && len(o.Files) == 1 {
 		// Make a scm that is for just the one in-memory file
 		var files []file

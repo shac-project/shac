@@ -205,6 +205,7 @@ func (s *inMemoryFile) newLines(ctx context.Context, f file) (starlark.Value, er
 type specifiedFilesOnly struct {
 	files []file
 	root  string
+	base  scmCheckout
 }
 
 var _ overridesShacFileDirs = (*specifiedFilesOnly)(nil)
@@ -214,7 +215,7 @@ func (s *specifiedFilesOnly) affectedFiles(ctx context.Context, includeDeleted b
 }
 
 func (s *specifiedFilesOnly) allFiles(ctx context.Context, includeDeleted bool) ([]file, error) {
-	return s.files, nil
+	return s.base.allFiles(ctx, includeDeleted)
 }
 
 func (s *specifiedFilesOnly) newLines(ctx context.Context, f file) (starlark.Value, error) {

@@ -66,6 +66,11 @@ func TestResolveFuseMounts(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	linkOutsidePath := filepath.Join(rootDir, "link_outside")
+	if err := os.Symlink(outTarget, linkOutsidePath); err != nil {
+		t.Fatal(err)
+	}
+
 	tests := []struct {
 		name   string
 		isFuse bool
@@ -79,7 +84,17 @@ func TestResolveFuseMounts(t *testing.T) {
 			isFuse: false,
 			root:   rootDir,
 			mounts: []Mount{{Path: linkPath, Writable: true}},
-			want:   []Mount{{Path: linkPath, Writable: true}},
+			want:   []Mount{{Path: linkPath, Dest: linkPath, Writable: true}},
+		},
+		{
+			name:   "NotFuseSymlinkOutside",
+			isFuse: false,
+			root:   rootDir,
+			mounts: []Mount{{Path: linkOutsidePath, Writable: true}},
+			want: []Mount{
+				{Path: outTarget, Dest: outTarget, Writable: true},
+				{Path: outTarget, Dest: linkOutsidePath, Writable: true},
+			},
 		},
 		{
 			name:   "FuseNoSymlink",

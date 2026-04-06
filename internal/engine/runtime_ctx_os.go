@@ -361,6 +361,7 @@ func ctxOsExec(ctx context.Context, s *shacState, name string, args starlark.Tup
 			{Path: "/usr/include"},
 			// System compilers.
 			{Path: "/usr/lib"},
+			{Path: "/usr/share"},
 			// Make the parent directory of tempDir available, since it is the root
 			// of all ctx.os.tempdir() calls, which can be used as scratch pads for
 			// this executable.

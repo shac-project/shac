@@ -399,8 +399,14 @@ func TestRun_SpecificFiles(t *testing.T) {
 			name:         "all files",
 			starlarkFile: "ctx-scm-all_files.star",
 			want: "[//ctx-scm-all_files.star:19] \n" +
+				"ctx-scm-affected_files-include_deleted.star: \n" +
+				"ctx-scm-affected_files-new_lines.star: \n" +
+				"ctx-scm-affected_files.star: \n" +
+				"ctx-scm-all_files-include_deleted.star: \n" +
+				"ctx-scm-all_files.star: \n" +
 				"python.py: \n" +
 				"rust.rs: \n" +
+				"shac.textproto: \n" +
 				"\n",
 			files:   []string{"python.py", "rust.rs"},
 			workDir: root,

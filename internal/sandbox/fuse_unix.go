@@ -44,10 +44,7 @@ func resolveFuseMounts(root, exe string, mounts []Mount) []Mount {
 }
 
 func resolveFuseMountsImpl(fuseCheck func(path string) bool, root, exe string, mounts []Mount) []Mount {
-	// If we are not in a FUSE filesystem, we don't need to do anything.
-	if !fuseCheck(root) {
-		return mounts
-	}
+	isFuse := fuseCheck(root)
 
 	seen := make(map[string]bool)
 	resolvedMounts := make([]Mount, 0, len(mounts)+1)
@@ -107,18 +104,23 @@ func resolveFuseMountsImpl(fuseCheck func(path string) bool, root, exe string, m
 
 				target := filepath.Clean(realPath)
 
-				// Mount the real path at its real location. This ensures that
-				// the symlink target actually exists in the sandbox. If we only
-				// mounted the overlay, the symlink itself (if accessed via another Path)
-				// might still be broken if its target is missing.
-				addMount(target, target, m.Writable)
+				isOutside := false
+				if rel, err := filepath.Rel(root, target); err != nil || strings.HasPrefix(rel, "..") {
+					isOutside = true
+				}
 
-				// Mount the real path at the symlink's location. This effectively
-				// "overlays" the real content onto the FUSE path. This is necessary
-				// because mounting directly from a FUSE source can be problematic
-				// (e.g. with MS_RDONLY remounts), and because we want to ensure
-				// the directory structure (siblings) is preserved via the real content.
-				addMount(target, path, m.Writable)
+				// Mount the real path at its real location. This ensures that
+				// the symlink target actually exists in the sandbox.
+				if isFuse || isOutside {
+					addMount(target, target, m.Writable)
+
+					// Mount the real path at the symlink's location. This effectively
+					// "overlays" the real content onto the FUSE path. This is necessary
+					// because mounting directly from a FUSE source can be problematic
+					// (e.g. with MS_RDONLY remounts), and because we want to ensure
+					// the directory structure (siblings) is preserved via the real content.
+					addMount(target, path, m.Writable)
+				}
 			}
 		}
 
@@ -143,17 +145,27 @@ func resolveFuseMountsImpl(fuseCheck func(path string) bool, root, exe string, m
 
 		target := filepath.Clean(realPath)
 
-		// Ensure RealPath is mounted at RealPath (Source=Real, Dest=Real).
-		addMount(target, target, m.Writable)
+		isOutside := false
+		if rel, err := filepath.Rel(root, target); err != nil || strings.HasPrefix(rel, "..") {
+			isOutside = true
+		}
 
-		// Ensure RealPath is mounted at Requested Destination (Source=Real, Dest=Requested).
 		dest := m.Dest
 		if dest == "" {
 			dest = m.Path
 		}
 		dest = filepath.Clean(dest)
 
-		addMount(target, dest, m.Writable)
+		if isFuse || isOutside {
+			// Ensure RealPath is mounted at RealPath (Source=Real, Dest=Real).
+			addMount(target, target, m.Writable)
+
+			// Ensure RealPath is mounted at Requested Destination (Source=Real, Dest=Requested).
+			addMount(target, dest, m.Writable)
+		} else {
+			// If not FUSE and not pointing outside, just add the original mount.
+			addMount(m.Path, dest, m.Writable)
+		}
 	}
 	return resolvedMounts
 }
