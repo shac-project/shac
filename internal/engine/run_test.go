@@ -1316,6 +1316,56 @@ func TestRun_SCM_Git_Submodule(t *testing.T) {
 	}
 }
 
+func TestRun_SCM_DeletedSubmodule(t *testing.T) {
+	t.Parallel()
+	root := makeGit(t)
+
+	submoduleRoot := filepath.Join(root, "submodule")
+	if err := os.Mkdir(submoduleRoot, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	initGit(t, submoduleRoot)
+	runGit(t, submoduleRoot, "commit", "--allow-empty", "-m", "Initial commit")
+	runGit(t, root, "submodule", "add", submoduleRoot)
+	runGit(t, root, "commit", "-m", "Add submodule")
+
+	// Delete the submodule.
+	runGit(t, root, "rm", "submodule")
+	// Also remove the directory if git rm didn't (it usually does).
+	_ = os.RemoveAll(filepath.Join(root, "submodule"))
+
+	copySCM(t, root)
+	runGit(t, root, "add", "ctx-scm-*.star")
+
+	data := []struct {
+		name string
+		want string
+	}{
+		{
+			"ctx-scm-affected_files.star",
+			"[//ctx-scm-affected_files.star:19] \n" +
+				".gitmodules: M\n" +
+				scmStarlarkFiles("A") +
+				"\n",
+		},
+		{
+			"ctx-scm-all_files.star",
+			"[//ctx-scm-all_files.star:19] \n" +
+				".gitmodules: M\n" +
+				"a.txt: \n" +
+				scmStarlarkFiles("A") +
+				"z.txt: \n" +
+				"\n",
+		},
+	}
+	for i := range data {
+		t.Run(data[i].name, func(t *testing.T) {
+			t.Parallel()
+			testStarlarkPrint(t, root, data[i].name, false, false, data[i].want)
+		})
+	}
+}
+
 func TestRun_SCM_DeletedFile(t *testing.T) {
 	t.Parallel()
 

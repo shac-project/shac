@@ -382,6 +382,10 @@ func (c *cachingSCM) newLines(ctx context.Context, fi file) (starlark.Value, err
 	return c.scm.newLines(ctx, fi)
 }
 
+// gitSubmoduleMode is the object mode string that git uses to represent a
+// submodule.
+const gitSubmoduleMode = "160000"
+
 // gitCheckout represents a git checkout.
 type gitCheckout struct {
 	// Configuration.
@@ -471,26 +475,29 @@ func (g *gitCheckout) affectedFiles(ctx context.Context, includeDeleted bool) ([
 func (g *gitCheckout) affectedFilesImpl(ctx context.Context, includeDeleted bool) []file {
 	var modified []file
 	// Each line has a variable number of NUL character, so process one at a time.
-	for o := g.run(ctx, "diff", "--name-status", "-z", "-C", g.upstream.hash); len(o) != 0; {
+	for o := g.run(ctx, "diff", "--raw", "-z", "-C", g.upstream.hash); len(o) != 0; {
 		var action, path string
+		var dstMode string
+		var srcMode string
 		if i := strings.IndexByte(o, 0); i != -1 {
-			// For rename, ignore the percentage number.
-			action = o[:1]
+			meta := o[:i]
 			o = o[i+1:]
+
+			parts := strings.Fields(meta)
+			if len(parts) < 5 {
+				g.err = fmt.Errorf("invalid git diff --raw output: %q", meta)
+				break
+			}
+			srcMode = parts[0][1:] // Remove leading ':'
+			dstMode = parts[1]
+			action = parts[4][:1]
+
 			if i = strings.IndexByte(o, 0); i != -1 {
 				path = o[:i]
 				o = o[i+1:]
-				if action == "C" {
+
+				if action == "C" || action == "R" {
 					if i = strings.IndexByte(o, 0); i != -1 {
-						// Ignore the source for now.
-						path = o[:i]
-						o = o[i+1:]
-					} else {
-						path = ""
-					}
-				} else if action == "R" {
-					if i = strings.IndexByte(o, 0); i != -1 {
-						// Ignore the source for now.
 						path = o[:i]
 						o = o[i+1:]
 					} else {
@@ -506,16 +513,17 @@ func (g *gitCheckout) affectedFilesImpl(ctx context.Context, includeDeleted bool
 			// If we encounter such a warning, we assume it's at the end of the
 			// diff output.
 			if !strings.HasPrefix(o, "warning:") {
-				g.err = fmt.Errorf("missing trailing NUL character from git diff --name-status -z -C %s", g.upstream.hash)
+				g.err = fmt.Errorf("missing trailing NUL character from git diff --raw -z -C %s", g.upstream.hash)
 			}
 			break
 		}
 		if action == "D" && !includeDeleted {
 			continue
 		}
-		// TODO(olivernewman): Omit deleted submodules. For now they're
-		// treated the same as deleted regular files.
-		if action == "D" || !g.isSubmodule(path) {
+
+		isSubmodule := dstMode == gitSubmoduleMode || (action == "D" && srcMode == gitSubmoduleMode)
+
+		if !isSubmodule {
 			modified = append(modified, &fileImpl{a: action, path: filepath.ToSlash(path)})
 		}
 	}
@@ -530,13 +538,16 @@ func (g *gitCheckout) allFiles(ctx context.Context, includeDeleted bool) ([]file
 	defer g.mu.Unlock()
 	// Paths are returned in POSIX style even on Windows.
 	// TODO(maruel): Extract more information.
-	o := g.run(ctx, "ls-files", "-z", "--cached", "--others", "--exclude-standard")
+	o := g.run(ctx, "ls-files", "-z", "--stage", "--cached", "--others", "--exclude-standard")
 	if g.err != nil {
 		// If an error occurred on this command or an earlier one, then the
 		// ls-files output may not be parseable and we should exit early.
 		return nil, g.err
 	}
-	affected := g.affectedFilesImpl(ctx, includeDeleted)
+	// Always include deleted files here so they are added to
+	// affectedFileActions. This allows allFiles to correctly filter out
+	// deleted tracked files without needing to call os.Stat later.
+	affected := g.affectedFilesImpl(ctx, true)
 	if g.err != nil {
 		return nil, g.err
 	}
@@ -546,40 +557,43 @@ func (g *gitCheckout) allFiles(ctx context.Context, includeDeleted bool) ([]file
 	}
 	items := strings.Split(o[:len(o)-1], "\x00")
 	all := make([]file, 0, len(items))
-	for _, path := range items {
-		fi, err := os.Stat(filepath.Join(g.checkoutRoot, path))
-		if errors.Is(err, fs.ErrNotExist) {
-			if includeDeleted {
-				all = append(all, &fileImpl{a: "D", path: filepath.ToSlash(path)})
+	for _, item := range items {
+		if meta, path, ok := strings.Cut(item, "\t"); ok {
+			// Tracked file.
+			parts := strings.Fields(meta)
+			mode := parts[0]
+
+			if mode == gitSubmoduleMode {
+				continue // Skip submodules.
 			}
-			continue
-		} else if err != nil {
-			return nil, err
-		}
-		if !fi.IsDir() { // Not a submodule.
+
 			p := filepath.ToSlash(path)
-			// action will be an empty string if the file has not changed
-			// relative to the upstream commit.
 			action := affectedFileActions[p]
+			if action == "D" && !includeDeleted {
+				continue
+			}
 			all = append(all, &fileImpl{a: action, path: p})
+		} else {
+			// Untracked file.
+			path := item
+			fi, err := os.Stat(filepath.Join(g.checkoutRoot, path))
+			if errors.Is(err, fs.ErrNotExist) {
+				// This may happen if the file is a dangling symlink or if
+				// another process deleted it between the `git ls-files` call
+				// and the os.Stat call. In either case we can safely ignore it.
+				continue
+			} else if err != nil {
+				return nil, err
+			}
+			if !fi.IsDir() { // Not a submodule.
+				p := filepath.ToSlash(path)
+				action := affectedFileActions[p]
+				all = append(all, &fileImpl{a: action, path: p})
+			}
 		}
 	}
 	sort.Slice(all, func(i, j int) bool { return all[i].rootedpath() < all[j].rootedpath() })
 	return all, g.err
-}
-
-func (g *gitCheckout) isSubmodule(path string) bool {
-	fi, err := os.Stat(filepath.Join(g.checkoutRoot, path))
-	if err != nil {
-		if !errors.Is(err, fs.ErrNotExist) {
-			g.err = err
-		}
-		return false
-	}
-	// TODO(olivernewman): Actually check the git object mode to determine if
-	// it's a submodule. It would be nice to get the object mode from the git
-	// command to avoid unnecessary syscalls.
-	return fi.IsDir()
 }
 
 func (g *gitCheckout) newLines(ctx context.Context, f file) (starlark.Value, error) {
@@ -723,7 +737,7 @@ func ctxScmAffectedFiles(ctx context.Context, s *shacState, name string, args st
 	if err != nil {
 		return nil, err
 	}
-	return ctxScmFilesReturnValue(s, files), nil
+	return ctxScmFilesReturnValue(files), nil
 }
 
 // ctxScmAllFiles implements native function ctx.scm.all_files().
@@ -748,12 +762,12 @@ func ctxScmAllFiles(ctx context.Context, s *shacState, name string, args starlar
 	if err != nil {
 		return nil, err
 	}
-	return ctxScmFilesReturnValue(s, files), nil
+	return ctxScmFilesReturnValue(files), nil
 }
 
 // ctxScmFilesReturnValue converts a list of files into a starlark.Dict to
 // return from the ctx.scm.all_files() and ctx.scm.affected_files() functions.
-func ctxScmFilesReturnValue(s *shacState, files []file) starlark.Value {
+func ctxScmFilesReturnValue(files []file) starlark.Value {
 	out := starlark.NewDict(len(files))
 	for _, f := range files {
 		_ = out.SetKey(starlark.String(f.relpath()), f.getMetadata())
