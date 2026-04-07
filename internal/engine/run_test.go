@@ -506,6 +506,7 @@ func TestRun_SpecificFiles_Fail(t *testing.T) {
 	subdir := filepath.Join(root, "dir")
 	mkdirAll(t, subdir)
 	dirOutsideRoot := t.TempDir()
+	writeFile(t, dirOutsideRoot, "outside-root.txt", "")
 
 	data := []struct {
 		name    string

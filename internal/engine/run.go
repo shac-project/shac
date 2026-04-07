@@ -660,22 +660,18 @@ func normalizeFiles(files []string, root string) ([]file, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	resolvedRoot, err := filepath.EvalSymlinks(root)
+	if err != nil {
+		return nil, err
+	}
 	var relativized []string
 	for _, orig := range files {
 		f := orig
 		if !filepath.IsAbs(f) {
 			f = filepath.Join(cwd, f)
 		}
-		var rel string
-		rel, err = filepath.Rel(root, f)
-		if err != nil {
-			return nil, err
-		}
-		// Validates that the path is within the root directory (i.e.
-		// doesn't start with "..").
-		if !filepath.IsLocal(rel) {
-			return nil, fmt.Errorf("cannot analyze file outside root: %s", orig)
-		}
+
 		fi, err := os.Stat(f)
 		if err != nil {
 			if errors.Is(err, os.ErrNotExist) {
@@ -685,12 +681,30 @@ func normalizeFiles(files []string, root string) ([]file, error) {
 			}
 			return nil, err
 		}
+
 		// TODO(olivernewman): Support analyzing directories. This will require
 		// doing a filesystem traversal that respects the scm, so `shac check .`
 		// still ignores git-ignored files.
 		if fi.IsDir() {
 			return nil, fmt.Errorf("is a directory: %s", orig)
 		}
+
+		f, err = filepath.EvalSymlinks(f)
+		if err != nil {
+			return nil, err
+		}
+
+		var rel string
+		rel, err = filepath.Rel(resolvedRoot, f)
+		if err != nil {
+			return nil, err
+		}
+		// Validates that the path is within the root directory (i.e.
+		// doesn't start with "..").
+		if !filepath.IsLocal(rel) {
+			return nil, fmt.Errorf("cannot analyze file outside root: %s", orig)
+		}
+
 		relativized = append(relativized, rel)
 	}
 
