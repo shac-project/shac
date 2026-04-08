@@ -35,7 +35,7 @@ func TestInMemoryFile(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("affectedFiles", func(t *testing.T) {
-		files, err := s.affectedFiles(ctx, false)
+		files, err := s.affectedFiles(ctx, fileFilter{})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -45,7 +45,7 @@ func TestInMemoryFile(t *testing.T) {
 	})
 
 	t.Run("allFiles", func(t *testing.T) {
-		files, err := s.allFiles(ctx, false)
+		files, err := s.allFiles(ctx, fileFilter{})
 		if err != nil {
 			t.Fatal(err)
 		}

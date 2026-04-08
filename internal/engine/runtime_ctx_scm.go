@@ -122,12 +122,18 @@ func (f *fileSubdirImpl) relpath() string {
 	return f.rel
 }
 
+// fileFilter contains options for filtering files returned by SCM methods.
+type fileFilter struct {
+	includeDeleted  bool
+	includeSymlinks bool
+}
+
 // scmCheckout is the generic interface for version controlled sources.
 //
 // Returned files must be sorted.
 type scmCheckout interface {
-	affectedFiles(ctx context.Context, includeDeleted bool) ([]file, error)
-	allFiles(ctx context.Context, includeDeleted bool) ([]file, error)
+	affectedFiles(ctx context.Context, filter fileFilter) ([]file, error)
+	allFiles(ctx context.Context, filter fileFilter) ([]file, error)
 	newLines(ctx context.Context, f file) (starlark.Value, error)
 }
 
@@ -136,13 +142,13 @@ type filteredSCM struct {
 	scm     scmCheckout
 }
 
-func (f *filteredSCM) affectedFiles(ctx context.Context, includeDeleted bool) ([]file, error) {
-	files, err := f.scm.affectedFiles(ctx, includeDeleted)
+func (f *filteredSCM) affectedFiles(ctx context.Context, filter fileFilter) ([]file, error) {
+	files, err := f.scm.affectedFiles(ctx, filter)
 	return f.filter(files), err
 }
 
-func (f *filteredSCM) allFiles(ctx context.Context, includeDeleted bool) ([]file, error) {
-	files, err := f.scm.allFiles(ctx, includeDeleted)
+func (f *filteredSCM) allFiles(ctx context.Context, filter fileFilter) ([]file, error) {
+	files, err := f.scm.allFiles(ctx, filter)
 	return f.filter(files), err
 }
 
@@ -189,11 +195,11 @@ type inMemoryFile struct {
 
 var _ scmCheckout = (*inMemoryFile)(nil)
 
-func (s *inMemoryFile) affectedFiles(ctx context.Context, includeDeleted bool) ([]file, error) {
+func (s *inMemoryFile) affectedFiles(ctx context.Context, filter fileFilter) ([]file, error) {
 	return []file{s.targetFile}, nil
 }
 
-func (s *inMemoryFile) allFiles(ctx context.Context, includeDeleted bool) ([]file, error) {
+func (s *inMemoryFile) allFiles(ctx context.Context, filter fileFilter) ([]file, error) {
 	return []file{s.targetFile}, nil
 }
 
@@ -210,12 +216,12 @@ type specifiedFilesOnly struct {
 
 var _ overridesShacFileDirs = (*specifiedFilesOnly)(nil)
 
-func (s *specifiedFilesOnly) affectedFiles(ctx context.Context, includeDeleted bool) ([]file, error) {
+func (s *specifiedFilesOnly) affectedFiles(ctx context.Context, filter fileFilter) ([]file, error) {
 	return s.files, nil
 }
 
-func (s *specifiedFilesOnly) allFiles(ctx context.Context, includeDeleted bool) ([]file, error) {
-	return s.base.allFiles(ctx, includeDeleted)
+func (s *specifiedFilesOnly) allFiles(ctx context.Context, filter fileFilter) ([]file, error) {
+	return s.base.allFiles(ctx, filter)
 }
 
 func (s *specifiedFilesOnly) newLines(ctx context.Context, f file) (starlark.Value, error) {
@@ -263,14 +269,14 @@ type subdirSCM struct {
 	subdir string
 }
 
-func (s *subdirSCM) affectedFiles(ctx context.Context, includeDeleted bool) ([]file, error) {
-	affected, err := s.s.affectedFiles(ctx, includeDeleted)
+func (s *subdirSCM) affectedFiles(ctx context.Context, filter fileFilter) ([]file, error) {
+	affected, err := s.s.affectedFiles(ctx, filter)
 	affected = s.filterFiles(affected)
 	return affected, err
 }
 
-func (s *subdirSCM) allFiles(ctx context.Context, includeDeleted bool) ([]file, error) {
-	all, err := s.s.allFiles(ctx, includeDeleted)
+func (s *subdirSCM) allFiles(ctx context.Context, filter fileFilter) ([]file, error) {
+	all, err := s.s.allFiles(ctx, filter)
 	all = s.filterFiles(all)
 	return all, err
 }
@@ -347,44 +353,49 @@ type cachingSCM struct {
 	scm scmCheckout
 
 	mu sync.Mutex
-	// Mutable. Lazy loaded. Keys are `include_deleted` values.
-	affected map[bool][]file
-	all      map[bool][]file
+	// Mutable. Lazy loaded.
+	affected map[fileFilter][]file
+	all      map[fileFilter][]file
 }
 
-func (c *cachingSCM) affectedFiles(ctx context.Context, includeDeleted bool) ([]file, error) {
+func (c *cachingSCM) affectedFiles(ctx context.Context, filter fileFilter) ([]file, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.affected == nil {
-		c.affected = make(map[bool][]file)
+		c.affected = make(map[fileFilter][]file)
 	}
 	var err error
-	if _, ok := c.affected[includeDeleted]; !ok {
-		c.affected[includeDeleted], err = c.scm.affectedFiles(ctx, includeDeleted)
+	if _, ok := c.affected[filter]; !ok {
+		c.affected[filter], err = c.scm.affectedFiles(ctx, filter)
 	}
-	return c.affected[includeDeleted], err
+	return c.affected[filter], err
 }
 
-func (c *cachingSCM) allFiles(ctx context.Context, includeDeleted bool) ([]file, error) {
+func (c *cachingSCM) allFiles(ctx context.Context, filter fileFilter) ([]file, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.all == nil {
-		c.all = make(map[bool][]file)
+		c.all = make(map[fileFilter][]file)
 	}
 	var err error
-	if _, ok := c.all[includeDeleted]; !ok {
-		c.all[includeDeleted], err = c.scm.allFiles(ctx, includeDeleted)
+	if _, ok := c.all[filter]; !ok {
+		c.all[filter], err = c.scm.allFiles(ctx, filter)
 	}
-	return c.all[includeDeleted], err
+	return c.all[filter], err
 }
 
 func (c *cachingSCM) newLines(ctx context.Context, fi file) (starlark.Value, error) {
 	return c.scm.newLines(ctx, fi)
 }
 
-// gitSubmoduleMode is the object mode string that git uses to represent a
-// submodule.
-const gitSubmoduleMode = "160000"
+const (
+	// gitModeSymlink is the object mode string that git uses to represent a
+	// symlink.
+	gitModeSymlink = "120000"
+	// gitModeSubmodule is the object mode string that git uses to represent a
+	// submodule.
+	gitModeSubmodule = "160000"
+)
 
 // gitCheckout represents a git checkout.
 type gitCheckout struct {
@@ -448,31 +459,91 @@ func (g *gitCheckout) run(ctx context.Context, args ...string) string {
 // affectedFiles returns the modified files on this checkout.
 //
 // The entries are lazy loaded and cached.
-func (g *gitCheckout) affectedFiles(ctx context.Context, includeDeleted bool) ([]file, error) {
+func (g *gitCheckout) affectedFiles(ctx context.Context, filter fileFilter) ([]file, error) {
 	if g.returnAll {
-		return g.allFiles(ctx, includeDeleted)
+		return g.allFiles(ctx, filter)
 	}
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	modified := g.affectedFilesImpl(ctx, includeDeleted)
+	modified := g.affectedTrackedFiles(ctx, filter)
 	if g.err != nil {
 		return nil, g.err
 	}
+
 	// Untracked files are always considered affected (as long as they're not
 	// ignored).
+	untracked, err := g.untrackedFiles(ctx, filter)
+	if err != nil {
+		return nil, err
+	}
+	modified = append(modified, untracked...)
+
+	sort.Slice(modified, func(i, j int) bool { return modified[i].rootedpath() < modified[j].rootedpath() })
+	return modified, g.err
+}
+
+func (g *gitCheckout) untrackedFiles(ctx context.Context, filter fileFilter) ([]file, error) {
+	var modified []file
 	o := g.run(ctx, "ls-files", "-z", "--others", "--exclude-standard")
 	var items []string
 	if len(o) > 0 {
 		items = strings.Split(o[:len(o)-1], "\x00")
 	}
 	for _, path := range items {
+		absPath := filepath.Join(g.checkoutRoot, path)
+		fi, err := os.Lstat(absPath)
+		if errors.Is(err, fs.ErrNotExist) {
+			continue
+		} else if err != nil {
+			return nil, err
+		}
+
+		var gitMode string
+		if fi.Mode()&os.ModeSymlink != 0 {
+			gitMode = gitModeSymlink
+		}
+		inc, err := g.shouldIncludeFile(filter, path, "A", gitMode)
+		if err != nil {
+			return nil, err
+		}
+		if !inc {
+			continue
+		}
+
 		modified = append(modified, &fileImpl{a: "A", path: filepath.ToSlash(path)})
 	}
-	sort.Slice(modified, func(i, j int) bool { return modified[i].rootedpath() < modified[j].rootedpath() })
-	return modified, g.err
+	return modified, nil
 }
 
-func (g *gitCheckout) affectedFilesImpl(ctx context.Context, includeDeleted bool) []file {
+func (g *gitCheckout) shouldIncludeFile(filter fileFilter, path string, action string, gitMode string) (bool, error) {
+	if gitMode == gitModeSubmodule {
+		return false, nil
+	}
+	if action == "D" && !filter.includeDeleted {
+		return false, nil
+	}
+	if gitMode == gitModeSymlink {
+		if !filter.includeSymlinks {
+			return false, nil
+		}
+		// For deleted files, we can't check if it was a symlink to a directory.
+		// We'll include it, assuming it was a symlink to a file.
+		if action != "D" {
+			fi, err := os.Stat(filepath.Join(g.checkoutRoot, path))
+			if errors.Is(err, fs.ErrNotExist) {
+				return false, nil // Dangling symlink
+			} else if err != nil {
+				return false, err
+			}
+			if fi.IsDir() {
+				return false, nil
+			}
+		}
+	}
+	return true, nil
+}
+
+func (g *gitCheckout) affectedTrackedFiles(ctx context.Context, filter fileFilter) []file {
 	var modified []file
 	// Each line has a variable number of NUL character, so process one at a time.
 	for o := g.run(ctx, "diff", "--raw", "-z", "-C", g.upstream.hash); len(o) != 0; {
@@ -517,13 +588,20 @@ func (g *gitCheckout) affectedFilesImpl(ctx context.Context, includeDeleted bool
 			}
 			break
 		}
-		if action == "D" && !includeDeleted {
-			continue
+
+		var gitMode string
+		if action == "D" {
+			gitMode = srcMode
+		} else {
+			gitMode = dstMode
 		}
 
-		isSubmodule := dstMode == gitSubmoduleMode || (action == "D" && srcMode == gitSubmoduleMode)
-
-		if !isSubmodule {
+		inc, err := g.shouldIncludeFile(filter, path, action, gitMode)
+		if err != nil {
+			g.err = err
+			break
+		}
+		if inc {
 			modified = append(modified, &fileImpl{a: action, path: filepath.ToSlash(path)})
 		}
 	}
@@ -533,7 +611,7 @@ func (g *gitCheckout) affectedFilesImpl(ctx context.Context, includeDeleted bool
 // allFiles returns all the files in this checkout.
 //
 // The entries are lazy loaded and cached.
-func (g *gitCheckout) allFiles(ctx context.Context, includeDeleted bool) ([]file, error) {
+func (g *gitCheckout) allFiles(ctx context.Context, filter fileFilter) ([]file, error) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	// Paths are returned in POSIX style even on Windows.
@@ -547,7 +625,7 @@ func (g *gitCheckout) allFiles(ctx context.Context, includeDeleted bool) ([]file
 	// Always include deleted files here so they are added to
 	// affectedFileActions. This allows allFiles to correctly filter out
 	// deleted tracked files without needing to call os.Stat later.
-	affected := g.affectedFilesImpl(ctx, true)
+	affected := g.affectedTrackedFiles(ctx, fileFilter{includeDeleted: true, includeSymlinks: filter.includeSymlinks})
 	if g.err != nil {
 		return nil, g.err
 	}
@@ -561,22 +639,21 @@ func (g *gitCheckout) allFiles(ctx context.Context, includeDeleted bool) ([]file
 		if meta, path, ok := strings.Cut(item, "\t"); ok {
 			// Tracked file.
 			parts := strings.Fields(meta)
-			mode := parts[0]
-
-			if mode == gitSubmoduleMode {
-				continue // Skip submodules.
-			}
-
+			gitMode := parts[0]
 			p := filepath.ToSlash(path)
 			action := affectedFileActions[p]
-			if action == "D" && !includeDeleted {
-				continue
+			inc, err := g.shouldIncludeFile(filter, path, action, gitMode)
+			if err != nil {
+				return nil, err
 			}
-			all = append(all, &fileImpl{a: action, path: p})
+			if inc {
+				all = append(all, &fileImpl{a: action, path: p})
+			}
 		} else {
 			// Untracked file.
 			path := item
-			fi, err := os.Stat(filepath.Join(g.checkoutRoot, path))
+			absPath := filepath.Join(g.checkoutRoot, path)
+			fi, err := os.Lstat(absPath)
 			if errors.Is(err, fs.ErrNotExist) {
 				// This may happen if the file is a dangling symlink or if
 				// another process deleted it between the `git ls-files` call
@@ -585,9 +662,19 @@ func (g *gitCheckout) allFiles(ctx context.Context, includeDeleted bool) ([]file
 			} else if err != nil {
 				return nil, err
 			}
-			if !fi.IsDir() { // Not a submodule.
-				p := filepath.ToSlash(path)
-				action := affectedFileActions[p]
+
+			var gitMode string
+			if fi.Mode()&os.ModeSymlink != 0 {
+				gitMode = gitModeSymlink
+			}
+			p := filepath.ToSlash(path)
+			action := affectedFileActions[p]
+
+			inc, err := g.shouldIncludeFile(filter, path, action, gitMode)
+			if err != nil {
+				return nil, err
+			}
+			if inc {
 				all = append(all, &fileImpl{a: action, path: p})
 			}
 		}
@@ -675,38 +762,58 @@ func (g *gitCheckout) newLines(ctx context.Context, f file) (starlark.Value, err
 
 // Generic support.
 
+type rawTreeFile struct {
+	path      string
+	isSymlink bool
+}
+
 type rawTree struct {
 	root string
 
 	mu  sync.Mutex
-	all []file
+	all []rawTreeFile
 }
 
-func (r *rawTree) affectedFiles(ctx context.Context, includeDeleted bool) ([]file, error) {
-	return r.allFiles(ctx, includeDeleted)
+func (r *rawTree) affectedFiles(ctx context.Context, filter fileFilter) ([]file, error) {
+	return r.allFiles(ctx, filter)
 }
 
 // allFiles returns all files in this directory tree.
 //
 // The includeDeleted argument is ignored as only files that exist on disk are
 // included.
-func (r *rawTree) allFiles(ctx context.Context, includeDeleted bool) ([]file, error) {
+func (r *rawTree) allFiles(ctx context.Context, filter fileFilter) ([]file, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	var err error
 	if r.all == nil {
 		l := len(r.root) + 1
 		err = filepath.WalkDir(r.root, func(path string, d fs.DirEntry, err2 error) error {
-			if err2 == nil {
-				if !d.IsDir() {
-					r.all = append(r.all, &fileImpl{path: filepath.ToSlash(path[l:])})
+			if err2 == nil && !d.IsDir() {
+				isSymlink := d.Type()&fs.ModeSymlink != 0
+				if isSymlink {
+					fi, statErr := os.Stat(path)
+					if statErr != nil {
+						return nil // Skip dangling symlinks.
+					}
+					if fi.IsDir() {
+						return nil // Skip symlinks to directories.
+					}
 				}
+				r.all = append(r.all, rawTreeFile{path: filepath.ToSlash(path[l:]), isSymlink: isSymlink})
 			}
 			return nil
 		})
-		sort.Slice(r.all, func(i, j int) bool { return r.all[i].rootedpath() < r.all[j].rootedpath() })
+		sort.Slice(r.all, func(i, j int) bool { return r.all[i].path < r.all[j].path })
 	}
-	return r.all, err
+	var res []file
+	for _, e := range r.all {
+		if e.isSymlink && !filter.includeSymlinks {
+			continue
+		}
+		res = append(res, &fileImpl{path: e.path})
+	}
+	return res, err
 }
 
 func (r *rawTree) newLines(ctx context.Context, f file) (starlark.Value, error) {
@@ -722,14 +829,19 @@ func (r *rawTree) newLines(ctx context.Context, f file) (starlark.Value, error) 
 // Make sure to update //doc/stdlib.star whenever this function is modified.
 func ctxScmAffectedFiles(ctx context.Context, s *shacState, name string, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	var argincludeDeleted starlark.Bool
+	var argincludeSymlinks starlark.Bool
 	var argglob starlark.Value
 	if err := starlark.UnpackArgs(name, args, kwargs,
 		"include_deleted?", &argincludeDeleted,
+		"include_symlinks?", &argincludeSymlinks,
 		"glob??", &argglob,
 	); err != nil {
 		return nil, err
 	}
-	files, err := s.scm.affectedFiles(ctx, bool(argincludeDeleted))
+	files, err := s.scm.affectedFiles(ctx, fileFilter{
+		includeDeleted:  bool(argincludeDeleted),
+		includeSymlinks: bool(argincludeSymlinks),
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -747,14 +859,19 @@ func ctxScmAffectedFiles(ctx context.Context, s *shacState, name string, args st
 // Make sure to update //doc/stdlib.star whenever this function is modified.
 func ctxScmAllFiles(ctx context.Context, s *shacState, name string, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	var argincludeDeleted starlark.Bool
+	var argincludeSymlinks starlark.Bool
 	var argglob starlark.Value
 	if err := starlark.UnpackArgs(name, args, kwargs,
 		"include_deleted?", &argincludeDeleted,
+		"include_symlinks?", &argincludeSymlinks,
 		"glob??", &argglob,
 	); err != nil {
 		return nil, err
 	}
-	files, err := s.scm.allFiles(ctx, bool(argincludeDeleted))
+	files, err := s.scm.allFiles(ctx, fileFilter{
+		includeDeleted:  bool(argincludeDeleted),
+		includeSymlinks: bool(argincludeSymlinks),
+	})
 	if err != nil {
 		return nil, err
 	}

@@ -138,7 +138,7 @@ func ctxEmitFinding(ctx context.Context, s *shacState, name string, args starlar
 	if file != "" {
 		root = filepath.Join(s.root, s.subdir)
 		// The file must be tracked by scm.
-		f, err := s.scm.allFiles(ctx, false)
+		f, err := s.scm.allFiles(ctx, fileFilter{includeSymlinks: true})
 		if err != nil {
 			return err
 		}

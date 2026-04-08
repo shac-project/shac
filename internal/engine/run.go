@@ -488,7 +488,7 @@ func runInner(ctx context.Context, o *Options, tmpdir string) error {
 				return err
 			}
 		} else {
-			files, err := scm.allFiles(ctx, false)
+			files, err := scm.allFiles(ctx, fileFilter{includeSymlinks: true})
 			if err != nil {
 				return err
 			}

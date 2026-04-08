@@ -499,6 +499,102 @@ func TestRun_SpecificFiles(t *testing.T) {
 	})
 }
 
+func TestRun_AffectedFiles_ExcludeDirectories(t *testing.T) {
+	t.Parallel()
+
+	root := makeGit(t)
+
+	// Create an untracked directory.
+	mkdirAll(t, filepath.Join(root, "untracked_dir"))
+	writeFile(t, root, filepath.Join("untracked_dir", "file.txt"), "content")
+
+	if runtime.GOOS != "windows" {
+		// Create a symlink to the directory.
+		err := os.Symlink("untracked_dir", filepath.Join(root, "dir_symlink"))
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Write shac.star to print affected files.
+	writeFile(t, root, "shac.star", `
+def cb(ctx):
+  out = "\n"
+  for path in ctx.scm.affected_files():
+    out += path + "\n"
+  print(out)
+shac.register_check(cb)
+`)
+
+	r := reportPrint{reportNoPrint: reportNoPrint{t: t}}
+	o := Options{Report: &r, Dir: root}
+
+	if err := Run(context.Background(), &o); err != nil {
+		t.Fatal(err)
+	}
+
+	got := r.b.String()
+	want := "[//shac.star:6] \n" +
+		"a.txt\n" +
+		"shac.star\n" +
+		"untracked_dir/file.txt\n" +
+		"z.txt\n\n"
+
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Fatalf("mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestRun_AllFiles_ExcludeDirectories(t *testing.T) {
+	t.Parallel()
+
+	root := makeGit(t)
+
+	// Create a directory.
+	mkdirAll(t, filepath.Join(root, "target_dir"))
+	writeFile(t, root, filepath.Join("target_dir", "file.txt"), "content")
+
+	if runtime.GOOS != "windows" {
+		// Create a symlink to the directory.
+		err := os.Symlink("target_dir", filepath.Join(root, "dir_symlink"))
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// Track the symlink.
+		runGit(t, root, "add", "dir_symlink")
+		runGit(t, root, "commit", "-m", "Add symlink")
+	}
+
+	// Write shac.star to print all files.
+	writeFile(t, root, "shac.star", `
+def cb(ctx):
+  out = "\n"
+  for path in ctx.scm.all_files():
+    out += path + "\n"
+  print(out)
+shac.register_check(cb)
+`)
+
+	r := reportPrint{reportNoPrint: reportNoPrint{t: t}}
+	o := Options{Report: &r, Dir: root}
+
+	if err := Run(context.Background(), &o); err != nil {
+		t.Fatal(err)
+	}
+
+	got := r.b.String()
+	want := "[//shac.star:6] \n" +
+		"a.txt\n" +
+		"shac.star\n" +
+		"target_dir/file.txt\n" +
+		"z.txt\n\n"
+
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Fatalf("mismatch (-want +got):\n%s", diff)
+	}
+}
+
 func TestRun_SpecificFiles_Fail(t *testing.T) {
 	t.Parallel()
 
@@ -1429,6 +1525,52 @@ func TestRun_SCM_DeletedFile(t *testing.T) {
 	}
 }
 
+func TestRun_SCM_DeletedSymlink(t *testing.T) {
+	t.Parallel()
+	if runtime.GOOS == "windows" {
+		t.Skip("Skipping symlink test on Windows")
+	}
+
+	root := makeGit(t)
+	copySCM(t, root)
+	runGit(t, root, "add", ".")
+	runGit(t, root, "commit", "-m", "Initial commit")
+
+	// Create a target file.
+	writeFile(t, root, "target.txt", "Target file")
+	runGit(t, root, "add", "target.txt")
+	runGit(t, root, "commit", "-m", "Add target.txt")
+
+	// Create a symlink pointing to the target.
+	err := os.Symlink("target.txt", filepath.Join(root, "link.txt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, root, "add", "link.txt")
+	runGit(t, root, "commit", "-m", "Add link.txt")
+
+	// Delete the symlink from disk.
+	if err := os.Remove(filepath.Join(root, "link.txt")); err != nil {
+		t.Fatal(err)
+	}
+
+	// Write a shac.star file that checks for affected files including deleted and symlinks.
+	shacStar := `
+def cb(ctx):
+    for path, meta in ctx.scm.affected_files(include_deleted = True, include_symlinks = True).items():
+        if path == "link.txt":
+            print("%s: %s" % (path, meta.action))
+shac.register_check(cb)
+`
+	writeFile(t, root, "shac.star", shacStar)
+
+	want := "[//shac.star:5] link.txt: D\n"
+
+	t.Run("deleted-symlink", func(t *testing.T) {
+		testStarlarkPrint(t, root, "shac.star", false, false, want)
+	})
+}
+
 func TestRun_SCM_Git_Binary_File(t *testing.T) {
 	t.Parallel()
 	root := makeGit(t)
@@ -1604,6 +1746,69 @@ func TestRun_SCM_Git_Recursive(t *testing.T) {
 	sort.Slice(r.findings, func(i, j int) bool { return r.findings[i].File < r.findings[j].File })
 	if diff := cmp.Diff(findings, r.findings); diff != "" {
 		t.Errorf("mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestRun_SCM_Git_Recursive_Symlink(t *testing.T) {
+	t.Parallel()
+	if runtime.GOOS == "windows" {
+		t.Skip("Skipping symlink test on Windows")
+	}
+	// Tree content:
+	//   shac.star
+	//   a/
+	//     shac.star -> ../shared/shac.star
+	//   shared/
+	//     shac.star
+	root := resolvedTempDir(t)
+	initGit(t, root)
+
+	// Make an initial commit so HEAD~1 exists.
+	writeFile(t, root, "README.txt", "initial")
+	runGit(t, root, "add", "README.txt")
+	runGit(t, root, "commit", "-m", "Initial commit")
+
+	for _, p := range []string{"a", "shared"} {
+		if err := os.Mkdir(filepath.Join(root, p), 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	writeFile(t, root, "shared/shac.star", ""+
+		"def cb(ctx):\n"+
+		"  print(\"shared\")\n"+
+		"shac.register_check(cb)\n")
+
+	// Create symlink a/shac.star -> ../shared/shac.star
+	err := os.Symlink("../shared/shac.star", filepath.Join(root, "a", "shac.star"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	writeFile(t, root, "shac.star", ""+
+		"def cb(ctx):\n"+
+		"  print(\"root\")\n"+
+		"shac.register_check(cb)\n")
+
+	runGit(t, root, "add", ".")
+	runGit(t, root, "commit", "-m", "Second commit")
+
+	r := reportPrint{reportNoPrint: reportNoPrint{t: t}}
+	o := Options{Report: &r, Dir: root, Recurse: true}
+	if err := Run(context.Background(), &o); err != nil {
+		t.Fatal(err)
+	}
+
+	want := "\n" +
+		"[//a/shac.star:2] shared\n" +
+		"[//shac.star:2] root\n" +
+		"[//shared/shac.star:2] shared"
+
+	// With parallel execution, the output will not be deterministic. Sort it manually.
+	a := strings.Split(r.b.String(), "\n")
+	sort.Strings(a)
+	got := strings.Join(a, "\n")
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Fatalf("mismatch (-want +got):\n%s", diff)
 	}
 }
 
@@ -2947,6 +3152,71 @@ func (r *reportEmitPrint) EmitArtifact(ctx context.Context, check, root, file st
 	r.artifacts = append(r.artifacts, artifact{Check: check, Root: root, File: file, Content: content})
 	r.mu.Unlock()
 	return nil
+}
+
+func TestRun_SCM_Symlinks(t *testing.T) {
+	t.Parallel()
+	if runtime.GOOS == "windows" {
+		t.Skip("Skipping test on Windows")
+	}
+	root := resolvedTempDir(t)
+	initGit(t, root)
+
+	writeFile(t, root, "a.txt", "regular file")
+	if err := os.Mkdir(filepath.Join(root, "dir"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, root, "dir/b.txt", "file in dir")
+
+	if err := os.Symlink("a.txt", filepath.Join(root, "link_to_file")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink("dir", filepath.Join(root, "link_to_dir")); err != nil {
+		t.Fatal(err)
+	}
+
+	runGit(t, root, "add", "a.txt", "dir/b.txt", "link_to_file", "link_to_dir")
+	runGit(t, root, "commit", "-m", "Initial commit")
+
+	// Make a second commit so HEAD~1 points to Initial commit.
+	writeFile(t, root, "touch.txt", "touch")
+	runGit(t, root, "add", "touch.txt")
+	runGit(t, root, "commit", "-m", "Second commit")
+
+	t.Run("all_files_default", func(t *testing.T) {
+		t.Parallel()
+		want := "[//test1.star:6] \n" +
+			"a.txt: \n" +
+			"dir/b.txt: \n" +
+			"\n"
+
+		writeFile(t, root, "test1.star", `def cb(ctx):
+    out = "\n"
+    for path, meta in ctx.scm.all_files().items():
+        if path in ["a.txt", "dir/b.txt"]:
+            out += path + ": " + meta.action + "\n"
+    print(out)
+shac.register_check(cb)`)
+		testStarlarkPrint(t, root, "test1.star", false, true, want)
+	})
+
+	t.Run("all_files_include_symlinks", func(t *testing.T) {
+		t.Parallel()
+		want := "[//test2.star:6] \n" +
+			"a.txt: \n" +
+			"dir/b.txt: \n" +
+			"link_to_file: \n" +
+			"\n"
+
+		writeFile(t, root, "test2.star", `def cb(ctx):
+    out = "\n"
+    for path, meta in ctx.scm.all_files(include_symlinks=True).items():
+        if path in ["a.txt", "dir/b.txt", "link_to_file", "link_to_dir"]:
+            out += path + ": " + meta.action + "\n"
+    print(out)
+shac.register_check(cb)`)
+		testStarlarkPrint(t, root, "test2.star", false, true, want)
+	})
 }
 
 func init() {
