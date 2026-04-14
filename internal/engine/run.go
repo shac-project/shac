@@ -398,8 +398,10 @@ func runInner(ctx context.Context, o *Options, tmpdir string) error {
 				scm:     scm,
 			}
 		}
-		scm = &cachingSCM{scm: scm}
 	}
+
+	// Always cache the SCM to avoid recomputing the same values multiple times.
+	scm = &cachingSCM{scm: scm}
 
 	pkgMgr := NewPackageManager(tmpdir)
 	packages, err := pkgMgr.RetrievePackages(ctx, root, &doc)
