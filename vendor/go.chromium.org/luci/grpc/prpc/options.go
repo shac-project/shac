@@ -16,11 +16,11 @@ package prpc
 
 import (
 	"fmt"
-	"strings"
 	"time"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/metadata"
 
 	"go.chromium.org/luci/common/retry"
@@ -34,7 +34,8 @@ type Options struct {
 	// controlling retry loop of a single RPC call.
 	Retry retry.Factory
 
-	// UserAgent is the value of User-Agent HTTP header.
+	// UserAgent is the value of User-Agent HTTP header to use if the request
+	// doesn't have "user-agent" outgoing metadata.
 	//
 	// If empty, DefaultUserAgent is used.
 	UserAgent string
@@ -44,6 +45,15 @@ type Options struct {
 	// Useful for local tests.
 	Insecure bool
 
+	// PerRPCCredentials is used to get per-RPC authentication tokens.
+	//
+	// Can be overridden per-RPC by using grpc.PerRPCCredentials(...) call option.
+	// If PerRPCCredentials is nil and grpc.PerRPCCredentials(...) isn't used,
+	// the call will be made without any extra credentials attached (but note
+	// that the *http.Client may still be attaching credentials of its own,
+	// depending on how it was obtained).
+	PerRPCCredentials credentials.PerRPCCredentials
+
 	// PerRPCTimeout, if > 0, is a timeout that is applied to each call attempt.
 	//
 	// If the context passed to the call has a shorter deadline, this timeout will
@@ -52,11 +62,19 @@ type Options struct {
 	// any other transient error per Retry policy.
 	PerRPCTimeout time.Duration
 
-	// AcceptContentSubtype defines acceptable Content-Type of responses.
+	// RequestFormat defines how to encode requests.
 	//
-	// Valid values are "binary" and "json". Empty value defaults to "binary".
-	// It can be overridden on per-call basis via CallAcceptContentSubtype().
-	AcceptContentSubtype string
+	// The default value is FormatBinary (i.e. use wirepb protobuf encoding).
+	//
+	// Can be overridden on per-call basis via RequestFormat() call option.
+	RequestFormat Format
+
+	// ResponseFormat defines how the server should encode responses.
+	//
+	// The default value is FormatBinary (i.e. use wirepb protobuf encoding).
+	//
+	// Can be overridden on per-call basis via ResponseFormat() call option.
+	ResponseFormat Format
 
 	// Debug is a flag indicate if we want to print more logs for debug purpose.
 	//
@@ -72,11 +90,11 @@ type Options struct {
 
 	// These are used internally.
 
-	host        string // a hostname of a service being called
-	serviceName string // a service being called
-	methodName  string // a method being called
-	inFormat    Format // encoding of the request
-	outFormat   Format // encoding of the response
+	host        string     // a hostname of a service being called
+	serviceName string     // a service being called
+	methodName  string     // a method being called
+	reqCodec    protoCodec // how to serialize the request
+	respCodec   protoCodec // how to deserialize the response
 }
 
 // DefaultOptions are used if no options are specified in Client.
@@ -100,6 +118,10 @@ func (o *Options) apply(callOptions []grpc.CallOption) {
 			o.resHeaderMetadata = val.HeaderAddr
 		case grpc.TrailerCallOption:
 			o.resTrailerMetadata = val.TrailerAddr
+		case grpc.PerRPCCredsCallOption:
+			o.PerRPCCredentials = val.Creds
+		case grpc.StaticMethodCallOption:
+			// Noop.
 		case *CallOption:
 			val.apply(o)
 		default:
@@ -138,16 +160,29 @@ func ExpectedCode(codes ...codes.Code) *CallOption {
 	}
 }
 
-// CallAcceptContentSubtype returns a CallOption that sets Content-Type.
-// For example, if content-subtype is "json", the Content-Type over the wire
-// will be "application/json".
-// Unlike that of the grpc.CallContentSubtype, sets Content-Type only for
-// response, not for the request.
-func CallAcceptContentSubtype(contentSubtype string) *CallOption {
+// RequestFormat returns a CallOption that defines how to encode the request.
+//
+// This has no effect on the response encoding. Use ResponseFormat() call option
+// to change it.
+func RequestFormat(f Format) *CallOption {
 	return &CallOption{
 		grpc.EmptyCallOption{},
 		func(o *Options) {
-			o.AcceptContentSubtype = strings.ToLower(contentSubtype)
+			o.RequestFormat = f
+		},
+	}
+}
+
+// ResponseFormat returns a CallOption that defines how the server should encode
+// the response.
+//
+// This has no effect on the request encoding. Use RequestFormat() call option
+// to change it.
+func ResponseFormat(f Format) *CallOption {
+	return &CallOption{
+		grpc.EmptyCallOption{},
+		func(o *Options) {
+			o.ResponseFormat = f
 		},
 	}
 }

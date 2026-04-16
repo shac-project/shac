@@ -32,7 +32,7 @@ import "context"
 // (like go-logging or GAE logging). It is the least common denominator among
 // logger implementations.
 //
-// Logger instance is bound to some particular context that defines logging
+// Logger instance is bound to some particular LogContext that defines logging
 // level and extra message fields.
 //
 // Implementations register factories that produce Loggers (using 'SetFactory'
@@ -58,40 +58,88 @@ type Logger interface {
 	LogCall(l Level, calldepth int, format string, args []any)
 }
 
-// Factory is a function that returns a Logger instance bound to the specified
-// context.
+// LogContext is the current logging context: the logging level, logging fields,
+// etc.
 //
-// The given context will be used to detect logging level and fields.
-type Factory func(context.Context) Logger
-
-type key int
-
-const (
-	loggerKey key = iota
-	fieldsKey
-	levelKey
-)
-
-// SetFactory sets the Logger factory for this context.
+// It is propagated through context.Context. It is primarily used by logging
+// handlers. Callers usually use functions like SetLevel to modify it.
 //
-// The factory will be called each time Get(context) is used.
-func SetFactory(ctx context.Context, f Factory) context.Context {
-	return context.WithValue(ctx, loggerKey, f)
+// Values of LogContext are immutable once constructed.
+type LogContext struct {
+	// Factory can instantiate loggers configured to use this context.
+	//
+	// Used to construct Loggers when logging a message.
+	Factory Factory
+
+	// Level is the current logging level.
+	//
+	// Logging messages below this level will be silently discarded.
+	Level Level
+
+	// Fields is the current fields put into all messages.
+	//
+	// Details of how fields are logged depend on a particular logger
+	// implementation.
+	Fields Fields
+
+	// StackTrace is a stack trace to associate with messages (if any).
+	//
+	// This is usually set only when logging messages that explicitly have a stack
+	// trace attached (e.g. panic messages). Normally (e.g. when logging info
+	// level messages) this will not be set. It's logging library user's
+	// responsibility to capture this stack trace and associate it was a logging
+	// message via ErrorWithStackTrace.
+	StackTrace StackTrace
 }
 
-// GetFactory returns the currently-configured logging factory (or nil).
-func GetFactory(ctx context.Context) Factory {
-	if f, ok := ctx.Value(loggerKey).(Factory); ok {
-		return f
-	}
-	return nil
+// StackTrace is a representation of a stack trace where an error happened.
+type StackTrace struct {
+	// Standard is a stack trace in a standard format compatible with what is
+	// produced by https://pkg.go.dev/runtime/debug#Stack
+	//
+	// This must be a stack trace of a single goroutine. This format is used when
+	// pushing the stack trace to Cloud Error Reporting or similar services that
+	// can aggregate errors by where they happened.
+	Standard string
+
+	// Textual is a stack trace in an arbitrary human-readable format for output
+	// in text logs.
+	//
+	// This can have arbitrary format as long as the information here is useful
+	// to show in text logs. This trace will be appended to the logging message
+	// when logging to a human-readable log.
+	//
+	// If empty, defaults to Standard.
+	Textual string
 }
 
-// Get the current Logger, or a logger that ignores all messages if none
-// is defined.
-func Get(ctx context.Context) Logger {
-	if f := GetFactory(ctx); f != nil {
-		return f(ctx)
+// ForTextLog returns either s.Textual (if set) or s.Standard.
+func (s StackTrace) ForTextLog() string {
+	if s.Textual != "" {
+		return s.Textual
 	}
-	return Null
+	return s.Standard
+}
+
+var ctxKey = "logging.LogContext"
+var defaultCtx = LogContext{Level: DefaultLevel}
+
+// readCtx returns the current context or the default context. Never nil.
+func readCtx(ctx context.Context) *LogContext {
+	if inCtx := ctx.Value(&ctxKey); inCtx != nil {
+		return inCtx.(*LogContext)
+	}
+	return &defaultCtx
+}
+
+// modifyCtx calls the callback to modify the current context and stores it.
+func modifyCtx(ctx context.Context, cb func(*LogContext)) context.Context {
+	cur := *readCtx(ctx)
+	cb(&cur)
+	return context.WithValue(ctx, &ctxKey, &cur)
+}
+
+// CurrentLogContext returns a copy of the current LogContext in its entirety.
+func CurrentLogContext(ctx context.Context) LogContext {
+	return *readCtx(ctx)
 }

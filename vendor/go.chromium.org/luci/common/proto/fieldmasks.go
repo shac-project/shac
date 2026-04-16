@@ -17,14 +17,13 @@ package proto
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
 	"reflect"
-	"strconv"
-	"strings"
 	"sync"
 	"unicode"
 
-	"github.com/golang/protobuf/proto"
+	jsonpbv1 "github.com/golang/protobuf/jsonpb"
+	protov1 "github.com/golang/protobuf/proto"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 	"google.golang.org/protobuf/types/known/structpb"
 )
@@ -32,41 +31,66 @@ import (
 var (
 	fieldMaskType    = reflect.TypeOf((*fieldmaskpb.FieldMask)(nil))
 	structType       = reflect.TypeOf((*structpb.Struct)(nil))
-	protoMessageType = reflect.TypeOf((*proto.Message)(nil)).Elem()
+	protoMessageType = reflect.TypeOf((*protov1.Message)(nil)).Elem()
 )
 
-// FixFieldMasksBeforeUnmarshal reads FieldMask fields from a JSON-encoded message,
-// parses them as a string according to
+// UnmarshalJSONWithNonStandardFieldMasks unmarshals a JSONPB message that has
+// google.protobuf.FieldMask inside that either uses non-standard field mask
+// semantics (like paths that contains `*`) or uses non-standard object encoding
+// (e.g. `"mask": {"paths": ["a", "b"]}` instead of `"mask": "a,b"`), or both.
+//
+// Such field masks are not supported by the standard JSONPB unmarshaller.
+// If your message uses only standard field masks (i.e. only containing paths
+// like `a.b.c` with not extra syntax, with the field mask serialized as a
+// string), use the standard JSON unmarshaler from
+// google.golang.org/protobuf/encoding/protojson package.
+//
+// Using non-standard field masks is discouraged. Deserializing them has
+// significant performance overhead. This function is also more likely to break
+// in the future (since it uses deprecated libraries under the hood).
+//
+// Giant name of this function is a hint that it should not be used.
+func UnmarshalJSONWithNonStandardFieldMasks(buf []byte, msg proto.Message) error {
+	v1 := protov1.MessageV1(msg)
+	t := reflect.TypeOf(v1)
+	if t.Kind() == reflect.Ptr {
+		t = t.Elem()
+	}
+	buf, err := fixFieldMasksBeforeUnmarshal(buf, t)
+	if err == nil {
+		err = (&jsonpbv1.Unmarshaler{AllowUnknownFields: true}).Unmarshal(bytes.NewBuffer(buf), v1)
+	}
+	return err
+}
+
+// fixFieldMasksBeforeUnmarshal reads FieldMask fields from a JSON-encoded
+// message, parses them as a string according to
 // https://github.com/protocolbuffers/protobuf/blob/ec1a70913e5793a7d0a7b5fbf7e0e4f75409dd41/src/google/protobuf/field_mask.proto#L180
-// and converts them to a JSON serialization format that Golang Protobuf library
-// can unmarshal from.
+// and converts them to a JSON serialization format that Golang Protobuf v1
+// library can unmarshal from.
+//
 // It is a workaround for https://github.com/golang/protobuf/issues/745.
 //
-// This function is a reverse of FixFieldMasksAfterMarshal.
-//
 // messageType must be a struct, not a struct pointer.
-//
-// WARNING: AVOID. LIKELY BUGGY, see https://crbug.com/1028915.
-func FixFieldMasksBeforeUnmarshal(jsonMessage []byte, messageType reflect.Type) ([]byte, error) {
+func fixFieldMasksBeforeUnmarshal(jsonMessage []byte, messageType reflect.Type) ([]byte, error) {
 	var msg map[string]any
 	if err := json.Unmarshal(jsonMessage, &msg); err != nil {
 		return nil, err
 	}
 
-	if err := fixFieldMasksBeforeUnmarshal(make([]string, 0, 10), msg, messageType); err != nil {
+	if err := fixFieldMasks(msg, messageType); err != nil {
 		return nil, err
 	}
 
 	return json.Marshal(msg)
 }
 
-func fixFieldMasksBeforeUnmarshal(fieldPath []string, msg map[string]any, messageType reflect.Type) error {
+func fixFieldMasks(msg map[string]any, messageType reflect.Type) error {
 	fieldTypes := getFieldTypes(messageType)
 	for name, val := range msg {
-		localPath := append(fieldPath, name)
 		typ := fieldTypes[name]
 		if typ == nil {
-			return fmt.Errorf("unexpected field path %q", strings.Join(localPath, "."))
+			continue // no such field, this is fine, since we decode with `AllowUnknownFields: true`
 		}
 
 		switch val := val.(type) {
@@ -76,8 +100,10 @@ func fixFieldMasksBeforeUnmarshal(fieldPath []string, msg map[string]any, messag
 			}
 
 		case map[string]any:
-			if typ != structType && typ.Implements(protoMessageType) {
-				if err := fixFieldMasksBeforeUnmarshal(localPath, val, typ.Elem()); err != nil {
+			if typ == fieldMaskType {
+				convertObjectFieldMask(val)
+			} else if typ != structType && typ.Implements(protoMessageType) {
+				if err := fixFieldMasks(val, typ.Elem()); err != nil {
 					return err
 				}
 			}
@@ -85,10 +111,9 @@ func fixFieldMasksBeforeUnmarshal(fieldPath []string, msg map[string]any, messag
 		case []any:
 			if typ.Kind() == reflect.Slice && typ.Elem().Implements(protoMessageType) {
 				subMsgType := typ.Elem().Elem()
-				for i, el := range val {
+				for _, el := range val {
 					if subMsg, ok := el.(map[string]any); ok {
-						elPath := append(localPath, strconv.Itoa(i))
-						if err := fixFieldMasksBeforeUnmarshal(elPath, subMsg, subMsgType); err != nil {
+						if err := fixFieldMasks(subMsg, subMsgType); err != nil {
 							return err
 						}
 					}
@@ -110,6 +135,28 @@ func convertFieldMask(s string) map[string]any {
 	return map[string]any{
 		"paths": paths,
 	}
+}
+
+// convertObjectFieldMask takes a JSON map with a field mask proto (i.e.
+// `{"paths": [...]}`), and converts (in place) paths inside to snake case.
+//
+// It ignores any extra keys or any type mismatches: all these errors will be
+// dealt with when trying to deserialize the resulting JSON for real.
+func convertObjectFieldMask(m map[string]any) {
+	paths := m["paths"]
+	slice, _ := paths.([]any)
+	if len(slice) == 0 {
+		return
+	}
+	fixed := make([]string, len(slice))
+	for i, p := range slice {
+		path, ok := p.(string)
+		if !ok {
+			return
+		}
+		fixed[i] = toSnakeCase(path)
+	}
+	m["paths"] = fixed
 }
 
 func toSnakeCase(s string) string {
@@ -182,22 +229,21 @@ func getFieldTypes(t reflect.Type) map[string]reflect.Type {
 
 	ret = map[string]reflect.Type{}
 
-	addFieldType := func(p *proto.Properties, fieldType reflect.Type) {
-		jsonName := p.JSONName
-		if jsonName == "" {
+	addFieldType := func(p *protov1.Properties, fieldType reflect.Type) {
+		ret[p.OrigName] = fieldType
+		if p.JSONName != "" {
 			// it set only for fields where the JSON name is different.
-			jsonName = p.OrigName
+			ret[p.JSONName] = fieldType
 		}
-		ret[jsonName] = fieldType
 	}
 
 	n := t.NumField()
 	fields := make(map[string]reflect.StructField, n)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		f := t.Field(i)
 		fields[f.Name] = f
 	}
-	props := proto.GetProperties(t)
+	props := protov1.GetProperties(t)
 	for _, p := range props.Prop {
 		addFieldType(p, fields[p.Name].Type)
 	}

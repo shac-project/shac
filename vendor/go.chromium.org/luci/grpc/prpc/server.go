@@ -15,22 +15,25 @@
 package prpc
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"io"
+	"math"
 	"net"
 	"net/http"
 	"net/netip"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
-
-	"github.com/golang/protobuf/proto"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/peer"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 
 	"go.chromium.org/luci/common/logging"
 	"go.chromium.org/luci/server/router"
@@ -40,12 +43,22 @@ var (
 	// Describes the default permitted headers for cross-origin requests.
 	//
 	// It explicitly includes a subset of the default CORS-safelisted request
-	// headers that are relevant to RPCs, as well as "Authorization" header.
+	// headers that are relevant to RPCs, as well as "Authorization" header plus
+	// some headers used in the pRPC protocol.
 	//
 	// Custom AccessControl implementations may allow more headers.
 	//
 	// See https://developer.mozilla.org/en-US/docs/Glossary/CORS-safelisted_request_header
-	allowHeaders = strings.Join([]string{"Origin", "Content-Type", "Accept", "Authorization"}, ", ")
+	allowHeaders = strings.Join([]string{
+		"Origin",
+		"Content-Type",
+		"Accept",
+		"Authorization",
+		HeaderTimeout,
+		HeaderMaxResponseSize,
+	}, ", ")
+
+	// What HTTP verbs are allowed for cross-origin requests.
 	allowMethods = strings.Join([]string{"OPTIONS", "POST"}, ", ")
 
 	// allowPreflightCacheAgeSecs is the amount of time to enable the browser to
@@ -55,8 +68,34 @@ var (
 	allowPreflightCacheAgeSecs = "600"
 
 	// exposeHeaders lists the non-standard response headers that are exposed to
-	// client that make cross-origin calls.
-	exposeHeaders = strings.Join([]string{HeaderGRPCCode}, ", ")
+	// clients that make cross-origin calls.
+	exposeHeaders = strings.Join([]string{
+		HeaderGRPCCode,
+		HeaderStatusDetail,
+	}, ", ")
+)
+
+const (
+	// DefaultMaxRequestSize is the default maximum request size (in bytes)
+	// the server is willing to read from the client.
+	DefaultMaxRequestSize = 64 * 1024 * 1024
+
+	// UnlimitedMaxRequestSize can be used as Server's MaxRequestSize to remove
+	// limits on the allowed request size (with the risk of OOMing the client).
+	UnlimitedMaxRequestSize = math.MaxInt
+)
+
+// ResponseCompression controls how the server compresses responses.
+//
+// See Server doc for details.
+type ResponseCompression string
+
+// Possible values for ResponseCompression.
+const (
+	CompressDefault ResponseCompression = "" // same as "never"
+	CompressNever   ResponseCompression = "never"
+	CompressAlways  ResponseCompression = "always"
+	CompressNotJSON ResponseCompression = "not JSON"
 )
 
 // AccessControlDecision describes how to handle a cross-origin request.
@@ -95,8 +134,7 @@ type AccessControlDecision struct {
 	// AllowHeaders is a list of request headers that a cross-origin request is
 	// allowed to have.
 	//
-	// Extends the default list of allowed headers, which is: "Accept",
-	// "Authorization", "Content-Type", Origin".
+	// Extends the default list of allowed headers.
 	//
 	// Use this option if the authentication interceptor checks some custom
 	// headers.
@@ -124,7 +162,16 @@ func AllowOriginAll(ctx context.Context, origin string) AccessControlDecision {
 // the override's responsibility to ensure it hasn't done anything that will
 // be incompatible with pRPC semantics (such as writing garbage to the response
 // writer in the router context).
-type Override func(*router.Context) bool
+//
+// Override receives `body` callback as an argument that can, on demand, read
+// and decode the request body using the decoder constructed based on the
+// request headers. This callback can be used to "peek" inside the deserialized
+// request to decide if the override should be activated. Note that `req.Body`
+// can be read only once, and the callback reads it. To allow reusing `req`
+// after the callback is done, it, as a side effect, replaces `req.Body` with a
+// byte buffer containing the data it just read. The callback can be called at
+// most once.
+type Override func(rw http.ResponseWriter, req *http.Request, body func(msg proto.Message) error) (stop bool, err error)
 
 // Server is a pRPC server to serve RPC requests.
 // Zero value is valid.
@@ -148,28 +195,95 @@ type Server struct {
 	// overview of CORS policies.
 	AccessControl func(ctx context.Context, origin string) AccessControlDecision
 
-	// HackFixFieldMasksForJSON indicates whether to attempt a workaround for
-	// https://github.com/golang/protobuf/issues/745 when the request has
-	// Content-Type: application/json. This hack is scheduled for removal.
-	// TODO(crbug/1082369): Remove this workaround once field masks can be decoded.
-	HackFixFieldMasksForJSON bool
-
 	// UnaryServerInterceptor provides a hook to intercept the execution of
 	// a unary RPC on the server. It is the responsibility of the interceptor to
 	// invoke handler to complete the RPC.
 	UnaryServerInterceptor grpc.UnaryServerInterceptor
 
-	// EnableResponseCompression allows the server to compress responses if they
-	// are larger than a certain threshold.
+	// ResponseCompression controls how the server compresses responses.
 	//
-	// If false (default), responses are never compressed.
+	// It applies only to eligible responses. A response is eligible for
+	// compression if the client sends "Accept-Encoding: gzip" request header
+	// (default for all Go clients, including the standard pRPC client) and
+	// the response size is larger than a certain threshold.
 	//
-	// If true and the client sends "Accept-Encoding: gzip" (default for all Go
-	// clients), responses larger than a certain threshold will be compressed.
+	// If ResponseCompression is CompressNever or CompressDefault, responses are
+	// never compressed. This is a conservative default (since the server
+	// generally doesn't know the trade off between CPU and network in the
+	// environment it runs in and assumes network is cheaper; in particular this
+	// situation is realized when the server is running on the localhost network).
+	//
+	// If ResponseCompression is CompressAlways, eligible responses are always
+	// compressed.
+	//
+	// If ResponseCompression is CompressNotJSON, only eligible responses that
+	// do **not** use JSON encoding will be compressed. JSON responses are left
+	// uncompressed at this layer. This is primarily added for the Appengine
+	// environment: GAE runtime compresses JSON responses on its own already,
+	// presumably using a more efficient compressor (C++ and all). Note that the
+	// client will see all eligible responses compressed (JSON ones will be
+	// compressed by the GAE, and non-JSON ones will be compressed by the pRPC
+	// server).
+	//
+	// A compressed response is accompanied by "Content-Encoding: gzip" response
+	// header, telling the client that it should decompress it.
 	//
 	// The request compression is configured independently on the client. The
 	// server always accepts compressed requests.
-	EnableResponseCompression bool
+	ResponseCompression ResponseCompression
+
+	// MaxRequestSize is how many bytes the server will read from the request body
+	// before rejecting it as too big.
+	//
+	// This is a protection against OOMing the server by big requests.
+	//
+	// When using request compression the limit is checked twice: when reading
+	// the original compressed request, and when decompressing it. Checking the
+	// decompressed request size is done to to prevent attacks like "zip bombs"
+	// where very small payloads decompress to enormous buffer sizes.
+	//
+	// Note that some environments impose their own request size limits. In
+	// particular, AppEngine and Cloud Run (but only when using HTTP/1), have
+	// a 32MiB request size limit.
+	//
+	// If <= 0, DefaultMaxRequestSize will be used. Use UnlimitedMaxRequestSize to
+	// disable the limit (with the risk of OOMing the server).
+	MaxRequestSize int
+
+	// EnableNonStandardFieldMasks enables support for non-standard values of
+	// google.protobuf.FieldMask in requests.
+	//
+	// Avoid if possible, especially in new servers. This option exists primarily
+	// for backward compatibility with some existing servers. Has performance and
+	// maintainability risks. See below for details.
+	//
+	// If false, only standard field masks are supported. Such masks can only use
+	// field paths composed of JSON field names (any advanced syntax like `*` is
+	// forbidden). They serialize to JSON as strings. See:
+	//  - https://protobuf.dev/reference/protobuf/google.protobuf/#field-mask
+	//  - https://github.com/protocolbuffers/protobuf/blob/main/src/google/protobuf/field_mask.proto
+	//
+	// If true, field mask paths can have arbitrary values in them. Additionally,
+	// field masks represented in JSONPB by objects (e.g. `{"paths": [...]}`)
+	// would be accepted (in additional to the standard string form).
+	//
+	// WARNING: Enabling this option has performance and maintainability risks.
+	// Since google.protobuf.FieldMask is a "well-known" protobuf type, rules of
+	// how to serialize it to/from JSON are hardcoded in the protobuf library, and
+	// this library supports only standard field masks (failing with errors if
+	// masks have non-standard paths or represented as JSON objects). Non-standard
+	// field masks are supported here through JSON pre-processing (which takes CPU
+	// time) and deserializing pre-processed JSON through an old deprecated JSONPB
+	// decoder (since it's so old it doesn't know FieldMasks are "well-known"
+	// types and ignores them). This decoder may stop working when new features
+	// are added to JSONPB encoding (making usage of non-standard field masks
+	// a maintainability risk).
+	//
+	// Some related issues:
+	//  - https://github.com/golang/protobuf/issues/1315
+	//  - https://github.com/golang/protobuf/issues/1435
+	//  - https://github.com/protocolbuffers/protobuf/issues/8547
+	EnableNonStandardFieldMasks bool
 
 	mu        sync.RWMutex
 	services  map[string]*service
@@ -177,6 +291,7 @@ type Server struct {
 }
 
 type service struct {
+	name    string
 	methods map[string]grpc.MethodDesc
 	impl    any
 }
@@ -190,6 +305,7 @@ type service struct {
 // Panics if a service of the same name is already registered.
 func (s *Server) RegisterService(desc *grpc.ServiceDesc, impl any) {
 	serv := &service{
+		name:    desc.ServiceName,
 		impl:    impl,
 		methods: make(map[string]grpc.MethodDesc, len(desc.Methods)),
 	}
@@ -241,7 +357,66 @@ func (s *Server) InstallHandlers(r *router.Router, base router.MiddlewareChain) 
 	r.OPTIONS("/prpc/:service/:method", base, s.handleOPTIONS)
 }
 
-// handle handles RPCs.
+// requestCodec decides what codec to use to deserialize requests, per format.
+func (s *Server) requestCodec(f Format) protoCodec {
+	switch f {
+	case FormatBinary:
+		return codecWireV2
+	case FormatJSONPB:
+		if s.EnableNonStandardFieldMasks {
+			return codecJSONV1WithHack // the only codec that supports advanced field masks
+		}
+		return codecJSONV2
+	case FormatText:
+		return codecTextV2
+	default:
+		panic(fmt.Sprintf("impossible invalid format %v", f))
+	}
+}
+
+// responseCodec decides what codec to use to serialize responses, per format.
+func (s *Server) responseCodec(f Format) protoCodec {
+	switch f {
+	case FormatBinary:
+		return codecWireV2
+	case FormatJSONPB:
+		return codecJSONV2
+	case FormatText:
+		return codecTextV2
+	default:
+		panic(fmt.Sprintf("impossible invalid format %v", f))
+	}
+}
+
+// maxRequestSize is a limit on the request size pre and post decompression.
+//
+// Use int64 (not int) in case the server is 32-bit. We need to be able to
+// handle large requests in that case  (even if just to reject them).
+func (s *Server) maxRequestSize() int64 {
+	if s.MaxRequestSize > 0 {
+		return int64(s.MaxRequestSize)
+	}
+	return DefaultMaxRequestSize
+}
+
+// maxBytesReader wraps `r` with a reader that reads up to a maximum allowed
+// request size.
+//
+// When the limit is reached, it marks the request connection as "faulty" to
+// close it as soon as the response is written. Note that `w` must be an actual
+// http.Server's ResponseWriter for this to work (http.MaxBytesReader uses
+// special private API inside).
+func (s *Server) maxBytesReader(w http.ResponseWriter, r io.ReadCloser) io.ReadCloser {
+	// If `r` is a *reproducingReader, then we have applied the limit already.
+	// Applying it twice may do weird things to `w`.
+	if _, replaced := r.(*reproducingReader); replaced {
+		return r
+	}
+	return http.MaxBytesReader(w, r, s.maxRequestSize())
+}
+
+// handlePOST handles POST requests with pRPC messages.
+//
 // See https://godoc.org/go.chromium.org/luci/grpc/prpc#hdr-Protocol
 // for pRPC protocol.
 func (s *Server) handlePOST(c *router.Context) {
@@ -249,14 +424,60 @@ func (s *Server) handlePOST(c *router.Context) {
 	methodName := c.Params.ByName("method")
 
 	override, service, method, methodFound := s.lookup(serviceName, methodName)
-	// Override takes precedence over notImplementedErr.
-	if override != nil && override(c) {
-		return
-	}
 
-	s.setAccessControlHeaders(c, false)
-	c.Writer.Header().Set("X-Content-Type-Options", "nosniff")
-	c.Writer.Header()["Date"] = nil // omit, not part of the protocol
+	// Override takes precedence over notImplementedErr.
+	if override != nil {
+		var originalReader io.ReadCloser
+
+		decode := func(msg proto.Message) error {
+			if originalReader != nil {
+				panic("the body callback should not be called more than once")
+			}
+			// Read as many bytes as we can (all of them if there's no IO errors).
+			body, err := io.ReadAll(s.maxBytesReader(c.Writer, c.Request.Body))
+			// Replace c.Request.Body with a reader that reproduces whatever we just
+			// read, including the final error (if any). That way this IO error will
+			// correctly be handled later (regardless if the override happens or not).
+			originalReader = c.Request.Body
+			c.Request.Body = &reproducingReader{r: bytes.NewReader(body), eofErr: err}
+			if err != nil {
+				return err
+			}
+			// Try to decode the request body as an RPC message.
+			return readMessage(
+				bytes.NewReader(body),
+				c.Request.Header,
+				msg,
+				s.maxRequestSize(),
+				s.requestCodec,
+			)
+		}
+
+		// This will potentially call `decode` inside.
+		stop, err := override(c.Writer, c.Request, decode)
+
+		// It appears http.Server holds a reference to the original req.Body and
+		// closes it properly when the request ends (even if we replace req.Body).
+		// But this is not documented. To be safe, restore req.Body to the original
+		// value before exiting.
+		if originalReader != nil {
+			defer func() { c.Request.Body = originalReader }()
+		}
+
+		switch {
+		case err != nil:
+			s.writeInitialHeaders(c.Request, c.Writer.Header())
+			writeError(
+				c.Request.Context(),
+				c.Writer,
+				requestReadErr(err, "the override check"),
+				s.responseCodec(FormatText),
+			)
+			return
+		case stop:
+			return
+		}
+	}
 
 	res := response{}
 	switch {
@@ -271,49 +492,104 @@ func (s *Server) handlePOST(c *router.Context) {
 			"method %q in service %q is not implemented",
 			methodName, serviceName)
 	default:
-		s.call(c, service, method, &res)
+		// Note: this at most populates some of c.Writer.Header(). The actual RPC
+		// response or error are placed into `res` and flushed below.
+		s.parseAndCall(c.Request, c.Writer, service, method, &res)
 	}
 
-	if res.err != nil {
-		writeError(c.Request.Context(), c.Writer, res.err, res.fmt)
-		return
+	// Ignore client's gzip preference if the server doesn't want to do
+	// compression for this particular request.
+	if res.acceptsGZip {
+		switch s.ResponseCompression {
+		case CompressAlways:
+			res.acceptsGZip = true
+		case CompressNotJSON:
+			res.acceptsGZip = res.codec.Format() != FormatJSONPB
+		default:
+			res.acceptsGZip = false
+		}
 	}
 
-	writeMessage(c.Request.Context(), c.Writer, res.out, res.fmt, s.EnableResponseCompression && res.acceptsGZip)
+	s.writeInitialHeaders(c.Request, c.Writer.Header())
+	writeResponse(c.Request.Context(), c.Writer, &res)
 }
 
 func (s *Server) handleOPTIONS(c *router.Context) {
-	s.setAccessControlHeaders(c, true)
+	s.writeAccessControlHeaders(c.Request, c.Writer.Header(), true)
 	c.Writer.WriteHeader(http.StatusOK)
 }
 
-var requestContextKey = "context key with *requestContext"
+// reproducingReader returns all of `r` but then fails with `eofErr` instead of
+// io.EOF.
+//
+// This makes it reproduce a potentially faulty io.Reader from the original
+// request.
+type reproducingReader struct {
+	r      *bytes.Reader
+	eofErr error
+}
+
+func (r *reproducingReader) Read(p []byte) (n int, err error) {
+	n, err = r.r.Read(p)
+	if err == io.EOF {
+		if r.eofErr != nil {
+			err = r.eofErr
+		}
+	}
+	return
+}
+
+func (r *reproducingReader) Close() error {
+	return nil
+}
 
 type requestContext struct {
-	// additional headers that will be sent in the response
+	method string
+
+	// Additional headers that will be sent in the response.
 	header http.Header
 }
 
+var _ grpc.ServerTransportStream = (*requestContext)(nil)
+
+func (rc *requestContext) Method() string {
+	return rc.method
+}
+
+func (rc *requestContext) SetHeader(md metadata.MD) error {
+	return metaIntoHeaders(md, rc.header)
+}
+
+func (rc *requestContext) SetTrailer(md metadata.MD) error {
+	return status.Error(codes.Internal, "prpc.requestContext.SetTrailer: not implemented")
+}
+
+func (rc *requestContext) SendHeader(md metadata.MD) error {
+	return status.Error(codes.Internal, "prpc.requestContext.SendHeader: not implemented")
+}
+
 // SetHeader sets the header metadata.
-// When called multiple times, all the provided metadata will be merged.
 //
-// If ctx is not a pRPC server context, then SetHeader calls grpc.SetHeader
-// such that calling prpc.SetHeader works for both pRPC and gRPC.
+// When called multiple times, all the provided metadata will be merged.
+// Headers set this way will be sent whenever the RPC handler finishes
+// (successfully or not).
+//
+// Some headers are reserved for internal pRPC or HTTP needs and can't be
+// set this way. This includes all "x-prpc-*" headers, various core HTTP
+// headers (like "content-type") and all "access-control-*" headers (if you want
+// to configure CORS policies, use [Server.AccessControl] field instead).
+//
+// Deprecated: Use `grpc.SetHeader(ctx, md)` instead.
 func SetHeader(ctx context.Context, md metadata.MD) error {
-	if rctx, ok := ctx.Value(&requestContextKey).(*requestContext); ok {
-		if err := metaIntoHeaders(md, rctx.header); err != nil {
-			return err
-		}
-		return nil
-	}
 	return grpc.SetHeader(ctx, md)
 }
 
 type response struct {
-	out         proto.Message
-	fmt         Format
-	acceptsGZip bool
-	err         error
+	out             proto.Message
+	codec           protoCodec
+	acceptsGZip     bool
+	maxResponseSize int64 // 0 => no limit
+	err             error
 }
 
 func (s *Server) lookup(serviceName, methodName string) (override Override, service *service, method grpc.MethodDesc, methodFound bool) {
@@ -330,31 +606,52 @@ func (s *Server) lookup(serviceName, methodName string) (override Override, serv
 	return
 }
 
-func (s *Server) call(c *router.Context, service *service, method grpc.MethodDesc, r *response) {
-	var perr *protocolError
-	r.fmt, perr = responseFormat(c.Request.Header.Get(headerAccept))
+// parseAndCall parses the request and calls the RPC implementation.
+//
+// All errors (either protocol-level or RPC errors) are placed into `r`.
+//
+// `rw` is used to pass it to http.MaxBytesReader(...) and to write headers to
+// via SetHeader(...).
+func (s *Server) parseAndCall(req *http.Request, rw http.ResponseWriter, service *service, method grpc.MethodDesc, r *response) {
+	respFmt, perr := responseFormat(req.Header.Get(headerAccept))
 	if perr != nil {
 		r.err = perr
 		return
 	}
+	r.codec = s.responseCodec(respFmt)
 
-	methodCtx, cancelFunc, err := parseHeader(c.Request.Context(), c.Request.Header, c.Request.Host)
+	var err error
+	if r.acceptsGZip, err = acceptsGZipResponse(req.Header); err != nil {
+		r.err = protocolErr(codes.InvalidArgument, http.StatusBadRequest, "bad Accept header: %s", err)
+		return
+	}
+
+	if val := req.Header.Get(HeaderMaxResponseSize); val != "" {
+		r.maxResponseSize, err = strconv.ParseInt(val, 10, 64)
+		if err == nil && r.maxResponseSize <= 0 {
+			err = fmt.Errorf("must be positive")
+		}
+		if err != nil {
+			r.err = protocolErr(codes.InvalidArgument, http.StatusBadRequest, "bad %s value %q: %s", HeaderMaxResponseSize, val, err)
+			return
+		}
+	}
+
+	methodCtx, cancelFunc, err := parseHeader(req.Context(), req.Header, req.Host)
 	if err != nil {
 		r.err = protocolErr(codes.InvalidArgument, http.StatusBadRequest, "bad request headers: %s", err)
 		return
 	}
 	defer cancelFunc()
 
-	if r.acceptsGZip, err = acceptsGZipResponse(c.Request.Header); err != nil {
-		r.err = protocolErr(codes.InvalidArgument, http.StatusBadRequest, "bad Accept headers: %s", err)
-		return
-	}
-
-	methodCtx = context.WithValue(methodCtx, &requestContextKey, &requestContext{header: c.Writer.Header()})
+	methodCtx = grpc.NewContextWithServerTransportStream(methodCtx, &requestContext{
+		method: fmt.Sprintf("/%s/%s", service.name, method.MethodName),
+		header: rw.Header(),
+	})
 
 	// Populate peer.Peer if we can manage to parse the address. This may fail
 	// if the server is exposed via a Unix socket, for example.
-	if addr, err := netip.ParseAddrPort(c.Request.RemoteAddr); err == nil {
+	if addr, err := netip.ParseAddrPort(req.RemoteAddr); err == nil {
 		methodCtx = peer.NewContext(methodCtx, &peer.Peer{
 			Addr: net.TCPAddrFromAddrPort(addr),
 		})
@@ -364,11 +661,13 @@ func (s *Server) call(c *router.Context, service *service, method grpc.MethodDes
 		if in == nil {
 			return status.Errorf(codes.Internal, "input message is nil")
 		}
-		// Do not collapse it to one line. There is implicit err type conversion.
-		if perr := readMessage(c.Request, in.(proto.Message), s.HackFixFieldMasksForJSON); perr != nil {
-			return perr
-		}
-		return nil
+		return readMessage(
+			s.maxBytesReader(rw, req.Body),
+			req.Header,
+			in.(proto.Message),
+			s.maxRequestSize(),
+			s.requestCodec,
+		)
 	}, s.UnaryServerInterceptor)
 
 	switch {
@@ -379,45 +678,63 @@ func (s *Server) call(c *router.Context, service *service, method grpc.MethodDes
 	default:
 		r.out = out.(proto.Message)
 	}
-	return
 }
 
-func (s *Server) setAccessControlHeaders(c *router.Context, preflight bool) {
+// writeInitialHeaders populates headers present in all pRPC responses
+// (successful or not).
+func (s *Server) writeInitialHeaders(req *http.Request, headers http.Header) {
+	// CORS headers are necessary for successes and errors.
+	s.writeAccessControlHeaders(req, headers, false)
+
+	// Never interpret the response as e.g. HTML.
+	headers.Set("X-Content-Type-Options", "nosniff")
+
+	// This tells the http.Server not to auto-populate Date header. We do this
+	// because Date is not part of the pRPC protocol and its presence in responses
+	// is generally unexpected and should not be relied upon. If the header is set
+	// already, it means it was emitted via SetHeader(...) in the RPC handler and
+	// we should respect that.
+	if _, present := headers["Date"]; !present {
+		headers["Date"] = nil
+	}
+}
+
+// writeAccessControlHeaders populates Access-Control-* headers.
+func (s *Server) writeAccessControlHeaders(req *http.Request, headers http.Header, preflight bool) {
 	// Don't write out access control headers if the origin is unspecified.
 	const originHeader = "Origin"
-	origin := c.Request.Header.Get(originHeader)
+	origin := req.Header.Get(originHeader)
 	if origin == "" || s.AccessControl == nil {
 		return
 	}
-	accessControl := s.AccessControl(c.Request.Context(), origin)
+	accessControl := s.AccessControl(req.Context(), origin)
 	if !accessControl.AllowCrossOriginRequests {
 		if accessControl.AllowCredentials {
-			logging.Warningf(c.Request.Context(), "pRPC AccessControl: ignoring AllowCredentials since AllowCrossOriginRequests is false")
+			logging.Warningf(req.Context(), "pRPC AccessControl: ignoring AllowCredentials since AllowCrossOriginRequests is false")
 		}
 		if len(accessControl.AllowHeaders) != 0 {
-			logging.Warningf(c.Request.Context(), "pRPC AccessControl: ignoring AllowHeaders since AllowCrossOriginRequests is false")
+			logging.Warningf(req.Context(), "pRPC AccessControl: ignoring AllowHeaders since AllowCrossOriginRequests is false")
 		}
 		return
 	}
 
-	h := c.Writer.Header()
-	h.Add("Access-Control-Allow-Origin", origin)
-	h.Add("Vary", originHeader) // indicate the response depends on Origin header
+	headers.Add("Access-Control-Allow-Origin", origin)
+	headers.Add("Vary", originHeader) // indicate the response depends on Origin header
 	if accessControl.AllowCredentials {
-		h.Add("Access-Control-Allow-Credentials", "true")
+		headers.Add("Access-Control-Allow-Credentials", "true")
 	}
 
 	if preflight {
 		if len(accessControl.AllowHeaders) == 0 {
-			h.Add("Access-Control-Allow-Headers", allowHeaders)
+			headers.Add("Access-Control-Allow-Headers", allowHeaders)
 		} else {
-			h.Add("Access-Control-Allow-Headers",
+			headers.Add("Access-Control-Allow-Headers",
 				strings.Join(accessControl.AllowHeaders, ", ")+", "+allowHeaders)
 		}
-		h.Add("Access-Control-Allow-Methods", allowMethods)
-		h.Add("Access-Control-Max-Age", allowPreflightCacheAgeSecs)
+		headers.Add("Access-Control-Allow-Methods", allowMethods)
+		headers.Add("Access-Control-Max-Age", allowPreflightCacheAgeSecs)
 	} else {
-		h.Add("Access-Control-Expose-Headers", exposeHeaders)
+		headers.Add("Access-Control-Expose-Headers", exposeHeaders)
 	}
 }
 

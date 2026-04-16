@@ -80,7 +80,7 @@ func Doc(src string) (string, error) {
 func genDoc(tmpdir, src, content string, isStdlib bool) (string, error) {
 	// It's unfortunate that we parse the source file twice. We need to fix the
 	// upstream API.
-	m, err := ast.ParseModule(src, content, func(s string) (string, error) { return s, nil })
+	m, err := ast.ParseModule(starlarkOptions(), src, content, func(s string) (string, error) { return s, nil })
 	if err != nil {
 		return "", err
 	}

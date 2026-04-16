@@ -16,15 +16,17 @@ syntax = "proto3";
 
 package luci.resultdb.v1;
 
-import "google/protobuf/timestamp.proto";
+import "google/api/field_behavior.proto";
 
 option go_package = "go.chromium.org/luci/resultdb/proto/v1;resultpb";
+option java_package = "com.google.luci.resultdb.v1";
+option java_multiple_files = true;
 
-// A key-value map describing one variant of a test case.
+// A key-value map describing one variant of a module.
 //
-// The same test case can be executed in different ways, for example on
+// A module can be executed in different ways, for example on
 // different OS, GPUs, with different compile options or runtime flags.
-// A variant definition captures one variant.
+// A variant definition captures one such variant.
 // A test case with a specific variant definition is called test variant.
 //
 // Guidelines for variant definition design:
@@ -50,17 +52,334 @@ message Variant {
   // The definition of the variant.
   // Key and values must be valid StringPair keys and values, see their
   // constraints.
+  //
+  // These values must be the same for all tests in a given execution of
+  // a module. Variants specific to a particular test case should be
+  // encoded in the test method name (see TestIdentifier.method).
+  //
+  // The total size (as measured by proto.Size) must be less than 1,024 bytes.
   map<string, string> def = 1;
 }
 
 // A string key-value pair. Typically used for tagging, see Invocation.tags
 message StringPair {
   // Regex: ^[a-z][a-z0-9_]*(/[a-z][a-z0-9_]*)*$
-  // Max length: 64.
+  // Max length: 64 bytes.
   string key = 1;
 
-  // Max length: 256.
+  // Must be valid UTF-8, Unicode Normalization Form C, printable characters
+  // only.
+  // Max length: 256 bytes.
   string value = 2;
+}
+
+// TestIdentifier represents the identity of a test in structured form.
+// It includes information about the configuration the test was run in (e.g.
+// build configuration, CPU architecture, OS).
+//
+// The structured test identifier represented in this proto corresponds to
+// the flat test identifier with the following form:
+// :{module_name}!{module_scheme}:{coarse_name}:{fine_name}#{case_name}
+//
+// and variant matching module_variant. (Note that {case_name} may in turn
+// include multiple components separated by colons, see 'Extended depth
+// hierarchies' under case_name below.)
+//
+// The precise algorithm for encoding a structured test ID to a flat
+// test ID is an implementation detail of ResultDB and must not be relied
+// upon by clients. Use the provided encode and decode functions in the
+// pbutil library if you need to encode or decode them. BigQuery exports
+// should include the structured form Test ID to avoid clients needing
+// to decode IDs.
+//
+// Special treatment exists for legacy test identifiers, for which
+// module_name = "legacy", module_scheme = "legacy", coarse_name = "",
+// fine_name = "" and case_name = <legacy_id>. For these, the corresponding
+// flat test ID is simply:
+// {case_name}
+//
+// (no escaping applies to this form, although method starting with ':'
+// is illegal for legacy test identifiers).
+//
+// See go/resultdb-test-hierarchy-design for more details.
+//
+// Limits: the encoded flat test ID (as per rules above) must be less than
+// 512 bytes in UTF-8.
+message TestIdentifier {
+  // The name of the module being tested. A module is a set of tests which run
+  // with the same test harness, and typically corresponds with a unit of
+  // build, such as a bazel test target.
+  //
+  // For example, "CtsSdkExtensionsTestCases" or "chrome/test:blink_webkit_tests".
+  //
+  // Note: Modules are identified by the combination of module_name and scheme, not
+  // only module_name. See `scheme` field below for more.
+  //
+  // Constraints:
+  // - Limited to 300 bytes of valid, printable UTF-8. For the purposes of this
+  //   definition, the unicode replacement character (U+FFFD) is not considered printable.
+  //   See also length limits on `TestIdentifier` as a whole.
+  // - All unicode must be in Normalization Form C.
+  // - Use of spaces is allowed, but discouraged.
+  string module_name = 1;
+
+  // The scheme of the module, for example, "junit" or "gtest".
+  //
+  // Must match one of the schemes in the ResultDB service configuration (see
+  // go/resultdb-schemes). Additional values can be configured as needed.
+  //
+  // Note: modules are identified by the combination of module_name, module_variant and
+  // module_scheme.
+  // Nonetheless, when presenting data on a frontend, it is acceptable to not show the scheme
+  // as it exists primarily to allow customisation of the labels shown next to the coarse_name,
+  // fine_name and case_name fields.
+  // When uploading data it is STRONGLY DISCOURAGED to use different schemes with the same
+  // module name as it may lead to ambiguous UI for users.
+  //
+  // Limited to ^[a-z][a-z0-9]{0,19}$.
+  string module_scheme = 2;
+
+  // Description of one specific way of running the tests in a module,
+  // e.g. specific ABI (x64/x86/...), build flags and/or operating system.
+  //
+  // Variants identify the unique ways the module was run compared to every other way
+  // the module is run by the LUCI project. As such, some variant key-value pairs
+  // may be repeated for all modules in an invocation.
+  //
+  // N.B. Presently this is always the same as test_result.variant but semantics could
+  // diverge in future if variants are introduced at other levels.
+  Variant module_variant = 3;
+
+  // Hash of the module variant.
+  // hex(sha256(sorted(''.join('%s:%s\n' for k, v in module_variant.items()))))[:8].
+  //
+  // In the context of the TestResult record, this field is OUTPUT_ONLY and will be
+  // automatically computed from the provided module_variant (do not set it yourself).
+  // In the context of ResultDB Query RPCs accepting this type as a request filter,
+  // this field may be specified as an alternative to module_variant.
+  string module_variant_hash = 4;
+
+  // Intermediate hierarchy - coarse name.
+  //
+  // For example "com.android.os.ext".
+  //
+  // A scheme dependent value used to organise the test into a coarse group of related tests,
+  // such as a package or directory.
+  // If the scheme does not define a coarse grouping, this must be blank.
+  // If only one intermediate hierarchy level is used for a scheme, it is always the
+  // fine hierarchy level.
+  //
+  // Constraints:
+  // - Must match constraints set by the module's scheme.
+  // - Limited to 300 bytes of printable UTF-8. For the purposes of this
+  //   definition, the unicode replacement character (U+FFFD) is not considered printable.
+  //   See also length limits on `TestIdentifier` as a whole.
+  // - Must not start with one of the characters in [ !"#$%'()*+,] (i.e. U+0020 to U+002C).
+  // - All unicode must be in Normalization Form C.
+  // - Use of spaces is allowed, but discouraged.
+  string coarse_name = 5;
+
+  // Interemdiate hierarchy - fine name.
+  //
+  // For example "SdkExtensionsTest" or "WebDialogBrowserTest".
+  //
+  // A finer grouping within the above coarse grouping (if any), e.g. class or file.
+  // If the scheme does not define a fine grouping, this must be blank.
+  //
+  // Constraints:
+  // - Must match constraints set by the module's scheme.
+  // - Limited to 300 bytes of printable UTF-8. For the purposes of this
+  //   definition, the unicode replacement character (U+FFFD) is not considered printable.
+  //   See also length limits on `TestIdentifier` as a whole.
+  // - Must not start with one of the characters in [ !"#$%'()*+,] (i.e. U+0020 to U+002C).
+  // - All unicode must be in Normalization Form C.
+  // - Use of spaces is allowed, but discouraged.
+  string fine_name = 6;
+
+  // The identifier of test case within the above fine grouping.
+  //
+  // For example "testBadArgument" or "topLevelTest:with_context:does_something".
+  //
+  // This is the finest granularity component of the test identifier, and typically
+  // refers to sub-file granularity unless no such granularity exists.
+  //
+  // Application guidance:
+  // * Standard usage: E.g. GTest methods, JUnit methods, etc.
+  //
+  //   Put the test method name in this field, escaping any colons (':')
+  //   and backlashes ('\') with a backslash '\'.
+  //   If your tests have additional hierarchy in the test case name,
+  //   consider the section on 'Extended depth hierarchies' below.
+  //
+  // * Class/package-level setup/teardown:
+  //
+  //   Use the special value "*fixture" when reporting the result of
+  //   setup and teardown common to tests in the same fine_name.
+  //
+  // * Extended depth hierarchies:
+  //
+  //   When uploading a test case from an extended depth hierarchy, use the separator ':'
+  //   to separate the components of the test case identifier (e.g. the describe blocks
+  //   in a jest/mocha test). Text between the separators must have all occurrences
+  //   of ':' and '\' escaped with a backslash ('\') to avoid other colons being interpreted
+  //   as separators. Each component of such a hierarchical test case ID must not be empty.
+  //   E.g. 'topLevelTest:' is not valid.
+  //
+  //   Rationale and Important Caveats
+  //
+  //   Most test hierarchy should be captured by the module, coarse and fine names.
+  //   For example, the module typically captures the compilation unit, the coarse name
+  //   the directory (e.g. package name) and the fine name the file (e.g. class name).
+  //   This leaves the case name to capture sub-file granularity, which
+  //   in many frameworks is simply the method name.
+  //
+  //   However, some frameworks have additional levels of test hierarchy within the
+  //   "file" level. For example, Jest and Mocha allow tests to be nested within
+  //   an arbitrary number of describe('subscope', func() { ... }) blocks. There may
+  //   also be parameterisations of tests. For such cases, we offer a standardised
+  //   way to express the additional hierarchy using colons (':') to separate components.
+  //   UI may give special treatment to components so expressed in future.
+  //
+  //   Only consider uploading separate results for each test in such an additional
+  //   depth hierarchy if all of the following hold:
+  //   - Passes are reported for each test, not just failures.
+  //   - Tests are independent (e.g. a assertion failure does not cause multiple
+  //     failing results, e.g. failure of the child test does not also cause the
+  //     parent to fail or vice-versa as is typical in many 'subtest' arrangements).
+  //   - In case of retries, you are happy for each test passing individually at least
+  //     once to allow CL submission. I.E. they do not all have to pass in the same run.
+  //
+  //   The above criteria are important to keep the test results view understandable in
+  //   case of retries, and to protect the data model that downstream clients
+  //   rely on (e.g. clients must report passes where they report failures).
+  //
+  //   If they cannot be met, do not upload separate tests results and prefer to upload one
+  //   test result per top-level method. Currently Mocha and Jest tests, and parameterised
+  //   GTest methods are the only cases where it is known these requirements can be met. Python
+  //   unittests and go subtests do not meet the requirements due to falling foul of the
+  //   independence requirement (and in case of python unittests, also the inability to
+  //   report passes for subtests).
+  //
+  // Constraints:
+  // - Must not start with one of the characters in [ !"#$%'()*+,] (i.e. U+0020 to U+002C),
+  //   unless it is to write the value "*fixture".
+  // - The use of the ':' character is reserved for denoting variable depth/extended depth
+  //   hierarchies. If you do not intend this semantic, you must escape it using a backslash.
+  //   (You must also escape all backslashes that are not denoting an escape sequence with
+  //   a backslash.)
+  // - When the case_name is broken up by ':', each such component must be non-empty.
+  // - Limited to 512 bytes of printable UTF-8. For the purposes of this
+  //   definition, the unicode replacement character (U+FFFD) is not considered printable.
+  //   See also length limits on `TestIdentifier` as a whole.
+  // - All unicode must be in Normalization Form C.
+  // - Use of spaces is allowed, but discouraged.
+  // - Legacy test identifiers (in module "legacy") are exempted from some of the
+  //   above constraints to facilitate backwards compatibility but use of this quirk is
+  //   discouraged.
+  string case_name = 7;
+}
+
+// TestIdentifierPrefix represents a prefix of a structured test id.
+//
+// For the purposes of this message, all module_* fields are considered one
+// logical field and must be set together.
+//
+// Compared to the TestIdentifier message, this message tracks which
+// parts of the prefix is present. This is necessary, as:
+//
+// module_name: "//bazel_path:my_target"
+// module_variant: [...]
+// module_scheme: "myscheme"
+// (module prefix)
+//
+// differs semantically from
+//
+// module_name: "//bazel_path:my_target"
+// module_variant: [...]
+// module_scheme: "myscheme"
+// coarse_name: ""
+// (coarse name prefix)
+//
+// As the former represents a module-level portion of the test ID space and the latter
+// a coarse-name portion of the test ID space.
+//
+// In case of aggregates, while we generally avoid displaying aggregates for empty coarse
+// and fine names on the UI (proceeding instead to the next non-empty level), they exist
+// in the data model in the interest of uniformity and simplicity. This motivates needing
+// to semantically distinguish between the two cases.
+message TestIdentifierPrefix {
+  // The aggregation level represented by the prefix.
+  AggregationLevel level = 1;
+
+  // The test identifier. This may have only some fields set, based on the
+  // selected aggregation level.
+  // If `level` is Invocation, all fields must be unset.
+  // If `level` is Module, only module fields should be set.
+  // If `level` is Coarse, only module fields and the coarse_name fields should be set.
+  // If `level` is Fine, only module fields, and the coarse_name and fine_name fields should be set.
+  // If `level` is Case, all fields should be set.
+  //
+  // In case of coarse_name and fine_name, as empty ("") is a valid value, the fields
+  // are taken to be set according to the set AggregationLevel.
+  //
+  // Where TestIdentifierPrefix is used to specify a filter for a query and the
+  // `level` is Module or finer, either module_variant or module_variant_hash may
+  // be set (it is not required to set both).
+  TestIdentifier id = 2;
+}
+
+// ModuleIdentifier represents the identity of a module.
+message ModuleIdentifier {
+  // The name of the module being tested. A module is a set of tests which run
+  // with the same test harness, and typically corresponds with a unit of
+  // build, such as a bazel test target.
+  //
+  // See TestIdentifier.module_name for more details.
+  string module_name = 1;
+
+  // The scheme of the module, for example, "junit" or "gtest".
+  //
+  // Must match one of the schemes in the ResultDB service configuration (see
+  // go/resultdb-schemes). Additional values can be configured as needed.
+  //
+  // See TestIdentifier.module_scheme for more details.
+  string module_scheme = 2;
+
+  // Description of one specific way of running the tests in a module,
+  // e.g. specific ABI (x64/x86/...), build flags and/or operating system.
+  //
+  // See TestIdentifier.module_variant for more details.
+  Variant module_variant = 3;
+
+  // Hash of the module variant.
+  //
+  // In the context of the WorkUnit record, this field is always OUTPUT_ONLY and will be
+  // automatically computed from the provided module_variant (do not set it yourself).
+  // In the context of ResultDB Query RPCs accepting this type as a request filter,
+  // this field may be specified as an alternative to module_variant.
+  //
+  // See TestIdentifier.module_variant_hash for more details.
+  string module_variant_hash = 4;
+}
+
+// FlatTestIdentifier is a flattened form of TestIdentifier.
+//
+// This style of test identifier was common before structured test identifiers
+// were introduced. Often the fields in this message are directly embedded in a
+// resource (e.g. test result) but can be convenient to package them as a message
+// for queries that accept either structured or flat test identifiers.
+message FlatTestIdentifier {
+  // The unique identifier of the test in a LUCI project. See the comment on
+  // TestResult.test_id for full documentation.
+  string test_id = 1;
+
+  // Reserved for variant in future.
+  reserved 2;
+  reserved "variant";
+
+  // Hash of the variant. See the comment on TestResult.variant_hash for full
+  // documentation.
+  string variant_hash = 3;
 }
 
 // GitilesCommit specifies the position of the gitiles commit an invocation
@@ -106,6 +425,75 @@ message GerritChange {
   int64 patchset = 4;
 }
 
+// Specifies the build ID of a submitted Android build. A submitted build is a
+// build that uses only changes that have been submitted to a branch.
+message SubmittedAndroidBuild {
+  // The Android Build API data realm.
+  // This is usually `prod`. For a list of available data realms, see
+  // https://chrome-internal.googlesource.com/infradata/config/+/HEAD/configs/luci-resultdb/config.cfg.
+  // Required.
+  string data_realm = 1;
+
+  // The Android Build branch.
+  // E.g. `git_main`.
+  // Required.
+  string branch = 2;
+
+  // The build ID of the *submitted* build.
+  //
+  // This must be parsed to an integer, as this will be exported to BigQuery
+  // and used for sorting results in source order.
+  //
+  // When comparing two build IDs on the same data realm and branch, we expect:
+  // - A higher number means a newer version of sources were used in a build.
+  // - An equal number means the same version of sources used in a build.
+  // - A smaller number means an earlier version of sources were used in a build.
+  // Required.
+  int64 build_id = 3;
+}
+
+// Specifies the source code that was tested.
+message Sources {
+  // The base version of code sources checked out.
+  // This is used for various purposes, including test history, changepoint
+  // analysis and comparative log analysis.
+  //
+  // In local testing scenarios where the base checkout is unknown, this
+  // may be left blank. If it is not specified, the aforementioned features
+  // will not work for this result.
+  oneof base_sources {
+    // A commit from a gitiles repository. Commits are numbered using
+    // goto.google.com/git-numberer.
+    GitilesCommit gitiles_commit = 1;
+
+    // The submitted Android Build ID that describes the base code sources tested.
+    //
+    // In presubmit, where the invocation is testing a pending build (a build ID
+    // starting with "P"), lookup its reference build (which will be a submitted
+    // build) and specify it here. Then specify the cherry-picked changes under
+    // `changelists`.
+    SubmittedAndroidBuild submitted_android_build = 4;
+  }
+
+  // The changelist(s) which were applied upon the base version of sources
+  // checked out. E.g. in presubmit tryjobs.
+  //
+  // At most 10 changelist(s) may be specified here. If there
+  // are more, only include the first 10 and set is_dirty.
+  repeated GerritChange changelists = 2;
+
+  // Whether there were any changes made to the sources, not described above.
+  // For example, a version of a dependency was upgraded before testing (e.g.
+  // in an autoroller recipe).
+  //
+  // Cherry-picking a changelist on top of the base checkout is not considered
+  // making the sources dirty as it is reported separately in `changelists` above.
+  //
+  // In case no `base_sources` are reported, e.g. when running tests locally where
+  // the sources are unknown, this must always be true.
+  bool is_dirty = 3;
+}
+
 // Deprecated: Use GitilesCommit instead.
 message CommitPosition {
   // The following fields identify a git repository and a ref within which the
@@ -119,27 +507,6 @@ message CommitPosition {
   int64 position = 4;
 }
 
-// Deprecated: Do not use.
-message CommitPositionRange {
-  // The lowest commit position to include in the range.
-  CommitPosition earliest = 1;
-
-  // Include only commit positions that that are strictly lower than this.
-  CommitPosition latest = 2;
-}
-
-// A range of timestamps.
-//
-// Currently unused.
-message TimeRange {
-  // The oldest timestamp to include in the range.
-  google.protobuf.Timestamp earliest = 1;
-
-  // Include only timestamps that are strictly older than this.
-  google.protobuf.Timestamp latest = 2;
-}
-
-
 // Represents a reference in a source control system.
 message SourceRef {
   // The source control system used.
@@ -149,6 +516,8 @@ message SourceRef {
   oneof system {
     // A branch in gitiles repository.
     GitilesRef gitiles = 1;
+    // A branch in Android Build API.
+    AndroidBuildBranch android_build = 2;
   }
 }
 
@@ -163,4 +532,260 @@ message GitilesRef {
   // Commit ref, e.g. "refs/heads/main" from which the commit was fetched.
   // Not the branch name, use "refs/heads/branch"
   string ref = 3;
+}
+
+// Represents a branch in Android Build API.
+message AndroidBuildBranch {
+  // The Android Build API data realm.
+  // This is usually `prod`. For a list of available data realms, see
+  // https://chrome-internal.googlesource.com/infradata/config/+/HEAD/configs/luci-resultdb/config.cfg.
+  string data_realm = 1;
+
+  // The Android Build branch.
+  // E.g. `git_main`.
+  string branch = 2;
+}
+
+// AggregationLevel defines the levels that test verdicts can be
+// aggregated to.
+enum AggregationLevel {
+  // Aggregation level not specified. Do not use.
+  AGGREGATION_LEVEL_UNSPECIFIED = 0;
+  // Aggregate to the invocation level. This means all test results
+  // in an invocation.
+  INVOCATION = 1;
+  // Aggregate to the module level. This means all test results
+  // sharing the same module_name, module_variant and module_scheme.
+  MODULE = 2;
+  // Aggregate to the coarse name level.
+  // This means all test results sharing the same module and coarse_name.
+  COARSE = 3;
+  // Aggregate to the fine name level.
+  // This means all test results sharing the same module, coarse_name,
+  // and fine_name.
+  FINE = 4;
+  // Aggregate to the test case (test verdict) level.
+  // This means all test results sharing the same test identifier.
+  CASE = 5;
+}
+
+// WorkUnitView represents the set of work unit fields to be retrieved.
+// See https://google.aip.dev/157.
+enum WorkUnitView {
+  // The default / unset value. The API will default to the basic view.
+  WORK_UNIT_VIEW_UNSPECIFIED = 0;
+
+  // Include basic information about the work unit. Excludes
+  // extended_properties.
+  WORK_UNIT_VIEW_BASIC = 1;
+
+  // Include all fields, including extended_properties.
+  WORK_UNIT_VIEW_FULL = 2;
+}
+
+// TestVerdictView represents the set of test verdict fields to be retrieved.
+// See https://google.aip.dev/157.
+enum TestVerdictView {
+  // The default value / unset value.
+  TEST_VERDICT_VIEW_UNSPECIFIED = 0;
+
+  // Only the test identifier and status* fields are returned.
+  TEST_VERDICT_VIEW_BASIC = 1;
+
+  // Include all fields.
+  TEST_VERDICT_VIEW_FULL = 2;
+}
+
+// Represents the process definition of a root invocation.
+message RootInvocationDefinition {
+  // The system name that namespaces the process definition name.
+  // Please use kebab-case as per https://google.aip.dev/126#alternatives.
+  //
+  // For example, "atp", "bazel" or "buildbucket".
+  //
+  // Limit of 64 bytes of UTF-8.
+  // Required.
+  string system = 1;
+
+  // The name used to identify the set of tests being executed.
+  //
+  // For example, "v2/adb-team/adb/adb_integration".
+  //
+  // Limit 256 bytes of UTF-8.
+  // Required.
+  string name = 2;
+
+  // Represents a key-value map of properties that differentiate
+  // definitions with the same name and system.
+  message Properties {
+    // The key-value pairs. May be left empty.
+    //
+    // Keys must satisfy regex: ^[a-z][a-z0-9_]*(/[a-z][a-z0-9_]*)*$ and have a max length of 64 bytes.
+    // Values must be valid UTF-8, in Unicode Normalization Form C, printable characters only, and have a
+    // max length of 256 bytes.
+    //
+    // The total size of properties in this collection as measured by proto.Size()
+    // is limited to 1 KiB.
+    map<string, string> def = 1;
+  }
+
+  // A key-value map of properties used to differentiate between
+  // definitions with the same name and system. For example 'cluster_id' and
+  // 'run_target' for ATP.
+  //
+  // In the Recorder APIs, this field is required (although the contained `def`
+  // may be left empty).
+  Properties properties = 3;
+
+  // Base64-encoded hash of the properties.
+  //
+  // In the Recorder APIs, this field is OUTPUT_ONLY and will be
+  // automatically computed from the provided properties (do not set it yourself).
+  // In the context of ResultDB Query RPCs accepting this type as a request filter,
+  // this field may be specified as an alternative to setting properties.
+  string properties_hash = 4;
+}
+
+// Represents a set of artifacts produced from source code, e.g.
+// a built software binary and associated content.
+message BuildDescriptor {
+  oneof definition {
+    AndroidBuildDescriptor android_build = 1;
+    // In future, other build definitions, can be defined here,
+    // such as those based on buildbucket builds or GCS folders.
+  }
+
+  // The URL at which the build can be viewed.
+  //
+  // In case of AndroidBuildDescriptor, generated from data_realm, branch, build_target and build_id
+  // fields using configuration in the ResultDB service configuration.
+  // This field may be blank for builds that do not have a UI that allow viewing.
+  //
+  // Output only.
+  string url = 2 [
+    (google.api.field_behavior) = OUTPUT_ONLY
+  ];
+}
+
+// Represents a build from Android Build (go/ab).
+//
+// Except for submitted builds, this will be different from the
+// Source's SubmittedAndroidBuild.
+//
+// For pending builds ("P" builds):
+// - specify the pending build here
+// - specify the pending build's reference build in sources.submitted_android_build,
+//   and the pending build's included changelists in sources.changelists.
+//
+// For local ("L") and external ("E") builds:
+// - specify the local/external build here
+// - if you have a reference build, specify it in sources.submitted_android_build,
+//   otherwise leave it blank.
+message AndroidBuildDescriptor {
+  // The Android Build API data realm.
+  //
+  // This is usually `prod`. For a list of available data realms, see
+  // https://chrome-internal.googlesource.com/infradata/config/+/HEAD/configs/luci-resultdb/config.cfg.
+  // Required.
+  string data_realm = 1;
+
+  // The branch. For example, `git_main`.
+  // Limited to 255 bytes.
+  // Required.
+  string branch = 2;
+
+  // The build target. For example, `cf_x86_phone-userdebug`.
+  // Limited to 255 bytes.
+  // Required.
+  string build_target = 3;
+
+  // The build identifier, such as "12345678", "P81983588" or "L17635075".
+  // Limited to 32 bytes.
+  // Required.
+  string build_id = 4;
+}
+
+// ProducerResource represents the identity of the resource that produced a
+// root invocation or work unit, e.g. an ATP test run or swarming task.
+//
+// This structure is a deviation from https://google.aip.dev/122#full-resource-names
+// owing to:
+// - the desire to capture the deployment of a system we are talking about (both
+//   test and production deployments could talk to the same instance of ResultDB)
+// - the lack of good API service names for many services (https://google.aip.dev/9#api-service-name)
+//   which was leading to API endpoints being substited contrary to AIP-122.
+//   While endpoints makes it possible to distinguish dev and prod, it makes it
+//   harder for downstream systems to understand the type of producer resource
+//   (and to e.g. filter to only ATP runs). API endpoints are also unstable
+//   and subject to change.
+message ProducerResource {
+  // The name of the system that is producing the resource.
+  //
+  // For LUCI, this should be "buildbucket" or "swarming".
+  // For Android, it is the scheduler like "atp", "ants-relay", "atest" or "bazel".
+  //
+  // Values should use kebab-case as per https://google.aip.dev/126#alternatives.
+  //
+  // Please contact ResultDB owners or update ResultDB config in
+  // https://chrome-internal.googlesource.com/infradata/config/+/HEAD/configs/luci-resultdb/config.cfg
+  // when adding a new system to specify:
+  // - the expected data realm and resource name formats, and
+  // - configure how URLs for backlinking should be generated.
+  //
+  // Producer systems can be configured to be "restricted" and not open to all callers.
+  // To use such a system, the caller will need resultdb.workUnits.setProducerResource
+  // or resultdb.rootInvocations.setProducerResource permission (depending on the context).
+  // This helps protect the integrity of backlinks for that system.
+  //
+  // Total length limited to 50 bytes. Required.
+  string system = 1;
+
+  // The data realm of the producing resource.
+  //
+  // This is used to identify the data store the resource specified at `name` is stored in,
+  // for backlinking purposes. I.E. is it in the production deployments, or is it in one
+  // of the test deployments.
+  //
+  // For systems with only only a single prod and test instance, the names "prod" and
+  // "test" are preferred.
+  //
+  // For buildbucket, use the value "prod" for production and "test" for development.
+  // For swarming, use the swarming instance name (e.g. "chromeos-swarming" or "chromium-swarm-dev").
+  //
+  // Total length limited to 100 bytes. Required.
+  string data_realm = 2;
+
+  // The AIP-122 resource name of the producer resource.
+  //
+  // See: https://google.aip.dev/122
+  //
+  // The format is typically defined by the producing system. If the producing
+  // system does not follow AIP-122, an AIP-122-like format is invented for it.
+  //
+  // Examples:
+  // - atp: `testRuns/{RUN_ID}`
+  // - swarming: `tasks/deadbeef`
+  // - buildbucket: 'builds/1234567890`
+  //
+  // Producing systems can register their expected formats via a `producer_systems` entry in
+  // https://chrome-internal.googlesource.com/infradata/config/+/HEAD/configs/luci-resultdb/config.cfg
+  //
+  // Total length limited to 1000 bytes. Resource names must be in Unicode
+  // normalization form C. Required.
+  string name = 3;
+
+  // The URL at which the producer resource can be viewed.
+  //
+  // Generated from data_realm and name fields using producer system-specific configuration
+  // in the ResultDB service configuration. This field may be blank for producing systems
+  // that do not have a UI.
+  //
+  // Producing systems can specify how URLs for backlinking should be generated via a
+  // `producer_systems` entry in
+  // https://chrome-internal.googlesource.com/infradata/config/+/HEAD/configs/luci-resultdb/config.cfg
+  //
+  // Output only.
+  string url = 4 [
+    (google.api.field_behavior) = OUTPUT_ONLY
+  ];
 }

@@ -18,16 +18,25 @@ package luci.resultdb.v1;
 
 import "google/api/field_behavior.proto";
 import "go.chromium.org/luci/resultdb/proto/v1/common.proto";
+import "go.chromium.org/luci/resultdb/proto/v1/test_exoneration.proto";
 import "go.chromium.org/luci/resultdb/proto/v1/test_metadata.proto";
 import "go.chromium.org/luci/resultdb/proto/v1/test_result.proto";
+import "go.chromium.org/luci/resultdb/proto/v1/test_verdict.proto";
 
 option go_package = "go.chromium.org/luci/resultdb/proto/v1;resultpb";
+option java_package = "com.google.luci.resultdb.v1";
+option java_multiple_files = true;
 
 // Represents a matching test variant with its outcomes.
 // Also known as a test verdict.
 message TestVariant {
+  // The structured test identifier.
+  //
+  // Refer to TestResult.test_id_structured for details.
+  TestIdentifier test_id_structured = 11;
+
   // A unique identifier of the test in a LUCI project.
-  // Regex: ^[[::print::]]{1,256}$
+  // Regex: ^[[::print::]]{1,512}$
   //
   // Refer to TestResult.test_id for details.
   string test_id = 1;
@@ -40,8 +49,15 @@ message TestVariant {
   // hex(sha256(sorted(''.join('%s:%s\n' for k, v in variant.items())))).
   string variant_hash = 3;
 
+  // Deprecated: Use status_v2 and status_override.
   // Status of the test variant.
-  TestVariantStatus status = 4;
+  TestVariantStatus status = 4 [ deprecated = true ];
+
+  // Status of the test verdict (v2).
+  TestVerdict.Status status_v2 = 12;
+
+  // The status override, e.g. whether the test was exonerated.
+  TestVerdict.StatusOverride status_override = 13;
 
   // Outcomes of the test variant.
   repeated TestResultBundle results = 5;
@@ -80,7 +96,9 @@ message TestVariant {
   // test result in the test verdict and get its instruction.
   // Note: If in this test verdict, if there are different instructions for
   // test result, the result may be undeterministic.
-  VerdictInstruction instruction = 10;
+  //
+  // This field is not populated when querying root invocations.
+  VerdictInstruction instruction = 10 [ deprecated = true ];
 }
 
 message VerdictInstruction {
@@ -96,6 +114,9 @@ message TestResultBundle {
 }
 
 // Status of a test variant.
+// References to test statuses in the description refer to legacy
+// status values, not status_v2.
+// DEPRECATED: Use luci.resultdb.v1.TestVerdict.Status instead.
 enum TestVariantStatus {
   // a test variant must not have this status.
   // This is only used when filtering variants.
@@ -121,7 +142,16 @@ enum TestVariantStatus {
 // Empty message matches all test variants.
 message TestVariantPredicate {
   // A test variant must have this status.
-  TestVariantStatus status = 1;
+  //
+  // DEPRECATED: Please use QueryTestVerdicts and its TestVerdictPredicate instead.
+  // For root invocations, the semantics of the TestVariantStatus filter changes
+  // as it is implemented as a filter on the v2 verdict status instead:
+  // - UNEXPECTED yields verdicts with a v2 status of FAILED,
+  // - UNEXPECTED_MASK yields verdicts with a v2 status of FAILED,
+  //   EXECUTION_ERRORED, PRECLUDED, FLAKY or EXONERATED.
+  //
+  // Only UNEXPECTED and UNEXPECTED_MASK are supported.
+  TestVariantStatus status = 1 [ deprecated = true ];
 }
 
 // The outcome of a test variant in a test run (a single invocation,

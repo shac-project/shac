@@ -15,12 +15,54 @@
 package errors
 
 import (
+	"errors"
 	"fmt"
+	"strings"
+)
+
+const (
+	maxErrors = 20
 )
 
 // MultiError is a simple `error` implementation which represents multiple
 // `error` objects in one.
 type MultiError []error
+
+// Unwrap turns MultiError to a slices of errors.
+//
+// This will make MultiError works with errors.Is or errors.As from stdlib.
+func (m MultiError) Unwrap() []error {
+	return m
+}
+
+// Is implements errors.Is.
+//
+// This implementation does not interfere with errors.Is, but DOES allow
+// matching, especially in tests, when matching a MultiError pattern against
+// another MultiError whose size matches exactly and whose contents recursively
+// match with `errors.Is`.
+//
+// This is necessary because the stdlib `errors.Is` will call `Unwrap() []error`
+// on the source `err`, but NOT the target `err`, meaning that without this
+// method, MultiError can NEVER be the right hand side of a successful
+// `errors.Is` call.
+//
+// If this returns false, `errors.Is` will continue its typical algorithm.
+func (m MultiError) Is(other error) bool {
+	omerr, ok := other.(MultiError)
+	if !ok {
+		return false
+	}
+	if len(omerr) != len(m) {
+		return false
+	}
+	for i, mine := range m {
+		if !errors.Is(mine, omerr[i]) {
+			return false
+		}
+	}
+	return true
+}
 
 // MaybeAdd will add `err` to `m` if `err` is not nil.
 func (m *MultiError) MaybeAdd(err error) {
@@ -31,16 +73,44 @@ func (m *MultiError) MaybeAdd(err error) {
 }
 
 func (m MultiError) Error() string {
-	n, e := m.Summary()
-	switch n {
+	total, e := m.Summary()
+	switch total {
 	case 0:
 		return "(0 errors)"
 	case 1:
 		return e.Error()
-	case 2:
-		return e.Error() + " (and 1 other error)"
 	}
-	return fmt.Sprintf("%s (and %d other errors)", e, n-1)
+	var sb strings.Builder
+	var printed int
+	var skipped int
+	for i, e := range m {
+		if printed >= maxErrors {
+			sb.WriteString(fmt.Sprintf("\nerr[%d:%d] ", i, len(m)))
+
+			if total == len(m)-skipped {
+				sb.WriteString("<omitted>")
+			} else {
+				remainingNonNil := total - printed
+				sb.WriteString(fmt.Sprintf("<omitted %d non-nil errors>", remainingNonNil))
+			}
+			break
+		}
+
+		if e == nil {
+			skipped += 1
+			continue
+		}
+
+		if printed >= 1 {
+			sb.WriteString("\n")
+		}
+		sb.WriteString(fmt.Sprintf("err[%d]: ", i))
+		sb.WriteString(e.Error())
+
+		printed += 1
+	}
+
+	return sb.String()
 }
 
 // AsError returns an `error` interface for this MultiError only if it has >0
@@ -73,15 +143,6 @@ func (m MultiError) First() error {
 		}
 	}
 	return nil
-}
-
-func (m MultiError) stackContext() stackContext {
-	n, _ := m.Summary()
-
-	return stackContext{
-		internalReason: fmt.Sprintf(
-			"MultiError %d/%d: following first non-nil error.", n, len(m)),
-	}
 }
 
 // NewMultiError create new multi error from given errors.

@@ -24,13 +24,15 @@ import "go.chromium.org/luci/resultdb/proto/v1/instruction.proto";
 import "go.chromium.org/luci/resultdb/proto/v1/predicate.proto";
 
 option go_package = "go.chromium.org/luci/resultdb/proto/v1;resultpb";
+option java_package = "com.google.luci.resultdb.v1";
+option java_multiple_files = true;
 
 // A conceptual container of results. Immutable once finalized.
 // It represents all results of some computation; examples: swarming task,
 // buildbucket build, CQ attempt.
 // Composable: can include other invocations, see inclusion.proto.
 //
-// Next id: 24.
+// Next id: 26.
 message Invocation {
   reserved 3; // bool interrupted, crbug.com/1078696.
   reserved 17,18; // step and test instructions.
@@ -68,7 +70,12 @@ message Invocation {
   // At creation time this can be set to FINALIZING e.g. if this invocation is
   // a simple wrapper of another and will itself not be modified.
   //
-  // Otherwise this is an output only field.
+  // When updating invocation, this can be set to FINALIZING. If set, this will trigger
+  // the finalization process of the invocation. This is useful for the cases when
+  // we want the update and the finalization to happen in the same transaction to
+  // prevent update-update race. This will guarantee eventual consistency.
+  //
+  // In other cases this is an output only field.
   State state = 2;
 
   // When the invocation was created.
@@ -80,6 +87,10 @@ message Invocation {
 
   // Invocation-level string key-value pairs.
   // A key can be repeated.
+  //
+  // These tags may be re-exported alongside each test result.
+  //
+  // Total size (as measured by proto.Size()) must be <= 16 KB.
   repeated StringPair tags = 5;
 
   // == Finalization ===========================================================
@@ -144,7 +155,16 @@ message Invocation {
   //
   // N.B. Export roots do not affect legacy BigQuery exports configured by the
   // BigQueryExports field.
-  bool is_export_root = 21;
+  bool is_export_root = 21 [ (google.api.field_behavior) = IMMUTABLE ];
+
+  // The module this invocation is reporting results for.
+  //
+  // If set, test results and artifacts uploaded to this invocation will need to
+  // match this module.
+  //
+  // Once this field is set to a non-empty value, it becomes invariant and may
+  // not be changed.
+  ModuleIdentifier module_id = 25;
 
   // bigquery_exports indicates what BigQuery table(s) that results in this
   // invocation should export to.
@@ -172,7 +192,7 @@ message Invocation {
   string realm = 12;
 
   // Deprecated. Values specified here are ignored.
-  HistoryOptions history_options = 13;
+  HistoryOptions history_options = 13 [ deprecated = true ];
 
   // Arbitrary JSON object that contains structured, domain-specific properties
   // of the invocation.
@@ -237,6 +257,10 @@ message Invocation {
   // It may also contain instructions for test results in included invocations.
   Instructions instructions = 23;
 
+  // Union of all variants of test results directly included by the invocation.
+  // This field will be populated by ResultDB during test result creation time.
+  Variant TestResultVariantUnion = 24 [ (google.api.field_behavior) = OUTPUT_ONLY ];
+
   // Additional JSON object(s) that contain additional structured data about the
   // invocation. Unlike `properties` this field is not included (denormalized)
   // in the test results export, it is only available in the finalized
@@ -254,9 +278,9 @@ message Invocation {
   //
   // Each key is limited to 63 characters matching
   // ^[a-z]([a-z0-9_]{0,61}[a-z0-9])?$.
-  // The size of each value is limited to <= 20,000 bytes.
+  // The size of each value is limited to <= 512 KB.
   // The total size of the map (as measured by proto.Size())
-  // is limited to <= 100,000 bytes.
+  // is limited to <= 2 MB.
   //
   // The following paths can be used for field masks:
   // * "extended_properties" to target the whole extended_properties,
@@ -303,12 +327,12 @@ message BigQueryExport {
 // Deprecated: do not use.
 message HistoryOptions {
   // Set this to index the results by the containing invocation's create_time.
-  bool use_invocation_timestamp = 1;
+  bool use_invocation_timestamp = 1 [ deprecated = true ];
 
   // Set this to index by commit position.
   // It's up to the creator of the invocation to set this consistently over
   // time across the same test variant.
-  CommitPosition commit = 2;
+  CommitPosition commit = 2 [ deprecated = true ];
 }
 
 // Specifies the source code that was tested in an invocation, either directly
@@ -359,32 +383,4 @@ message SourceSpec {
    // must include the same invocation multiple times, they should
    // make the source position via all paths the same.
    bool inherit = 2;
-}
-
-// Specifies the source code that was tested.
-message Sources {
-    // The base version of code sources checked out. Mandatory.
-    // If necessary, we could add support for non-gitiles sources here in
-    // future, using a oneof statement. E.g.
-    // oneof system {
-    //    GitilesCommit gitiles_commit = 1;
-    //    SubversionRevision svn_revision = 4;
-    //    ...
-    // }
-    GitilesCommit gitiles_commit = 1;
-
-    // The changelist(s) which were applied upon the base version of sources
-    // checked out. E.g. in commit queue tryjobs.
-    //
-    // At most 10 changelist(s) may be specified here. If there
-    // are more, only include the first 10 and set is_dirty.
-    repeated GerritChange changelists = 2;
-
-    // Whether there were any changes made to the sources, not described above.
-    // For example, a version of a dependency was upgraded before testing (e.g.
-    // in an autoroller recipe).
-    //
-    // Cherry-picking a changelist on top of the base checkout is not considered
-    // making the sources dirty as it is reported separately above.
-    bool is_dirty = 3;
 }

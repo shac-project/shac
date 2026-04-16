@@ -23,19 +23,70 @@ type DecoratedResultDB struct {
 	Postlude func(ctx context.Context, methodName string, rsp proto.Message, err error) error
 }
 
-func (s *DecoratedResultDB) GetInvocation(ctx context.Context, req *GetInvocationRequest) (rsp *Invocation, err error) {
+func (s *DecoratedResultDB) GetRootInvocation(ctx context.Context, req *GetRootInvocationRequest) (rsp *RootInvocation, err error) {
 	if s.Prelude != nil {
 		var newCtx context.Context
-		newCtx, err = s.Prelude(ctx, "GetInvocation", req)
+		newCtx, err = s.Prelude(ctx, "GetRootInvocation", req)
 		if err == nil {
 			ctx = newCtx
 		}
 	}
 	if err == nil {
-		rsp, err = s.Service.GetInvocation(ctx, req)
+		rsp, err = s.Service.GetRootInvocation(ctx, req)
 	}
 	if s.Postlude != nil {
-		err = s.Postlude(ctx, "GetInvocation", rsp, err)
+		err = s.Postlude(ctx, "GetRootInvocation", rsp, err)
+	}
+	return
+}
+
+func (s *DecoratedResultDB) GetWorkUnit(ctx context.Context, req *GetWorkUnitRequest) (rsp *WorkUnit, err error) {
+	if s.Prelude != nil {
+		var newCtx context.Context
+		newCtx, err = s.Prelude(ctx, "GetWorkUnit", req)
+		if err == nil {
+			ctx = newCtx
+		}
+	}
+	if err == nil {
+		rsp, err = s.Service.GetWorkUnit(ctx, req)
+	}
+	if s.Postlude != nil {
+		err = s.Postlude(ctx, "GetWorkUnit", rsp, err)
+	}
+	return
+}
+
+func (s *DecoratedResultDB) BatchGetWorkUnits(ctx context.Context, req *BatchGetWorkUnitsRequest) (rsp *BatchGetWorkUnitsResponse, err error) {
+	if s.Prelude != nil {
+		var newCtx context.Context
+		newCtx, err = s.Prelude(ctx, "BatchGetWorkUnits", req)
+		if err == nil {
+			ctx = newCtx
+		}
+	}
+	if err == nil {
+		rsp, err = s.Service.BatchGetWorkUnits(ctx, req)
+	}
+	if s.Postlude != nil {
+		err = s.Postlude(ctx, "BatchGetWorkUnits", rsp, err)
+	}
+	return
+}
+
+func (s *DecoratedResultDB) QueryWorkUnits(ctx context.Context, req *QueryWorkUnitsRequest) (rsp *QueryWorkUnitsResponse, err error) {
+	if s.Prelude != nil {
+		var newCtx context.Context
+		newCtx, err = s.Prelude(ctx, "QueryWorkUnits", req)
+		if err == nil {
+			ctx = newCtx
+		}
+	}
+	if err == nil {
+		rsp, err = s.Service.QueryWorkUnits(ctx, req)
+	}
+	if s.Postlude != nil {
+		err = s.Postlude(ctx, "QueryWorkUnits", rsp, err)
 	}
 	return
 }
@@ -142,23 +193,6 @@ func (s *DecoratedResultDB) QueryTestExonerations(ctx context.Context, req *Quer
 	return
 }
 
-func (s *DecoratedResultDB) QueryTestResultStatistics(ctx context.Context, req *QueryTestResultStatisticsRequest) (rsp *QueryTestResultStatisticsResponse, err error) {
-	if s.Prelude != nil {
-		var newCtx context.Context
-		newCtx, err = s.Prelude(ctx, "QueryTestResultStatistics", req)
-		if err == nil {
-			ctx = newCtx
-		}
-	}
-	if err == nil {
-		rsp, err = s.Service.QueryTestResultStatistics(ctx, req)
-	}
-	if s.Postlude != nil {
-		err = s.Postlude(ctx, "QueryTestResultStatistics", rsp, err)
-	}
-	return
-}
-
 func (s *DecoratedResultDB) QueryNewTestVariants(ctx context.Context, req *QueryNewTestVariantsRequest) (rsp *QueryNewTestVariantsResponse, err error) {
 	if s.Prelude != nil {
 		var newCtx context.Context
@@ -172,6 +206,108 @@ func (s *DecoratedResultDB) QueryNewTestVariants(ctx context.Context, req *Query
 	}
 	if s.Postlude != nil {
 		err = s.Postlude(ctx, "QueryNewTestVariants", rsp, err)
+	}
+	return
+}
+
+func (s *DecoratedResultDB) QueryTestMetadata(ctx context.Context, req *QueryTestMetadataRequest) (rsp *QueryTestMetadataResponse, err error) {
+	if s.Prelude != nil {
+		var newCtx context.Context
+		newCtx, err = s.Prelude(ctx, "QueryTestMetadata", req)
+		if err == nil {
+			ctx = newCtx
+		}
+	}
+	if err == nil {
+		rsp, err = s.Service.QueryTestMetadata(ctx, req)
+	}
+	if s.Postlude != nil {
+		err = s.Postlude(ctx, "QueryTestMetadata", rsp, err)
+	}
+	return
+}
+
+func (s *DecoratedResultDB) GetInstruction(ctx context.Context, req *GetInstructionRequest) (rsp *Instruction, err error) {
+	if s.Prelude != nil {
+		var newCtx context.Context
+		newCtx, err = s.Prelude(ctx, "GetInstruction", req)
+		if err == nil {
+			ctx = newCtx
+		}
+	}
+	if err == nil {
+		rsp, err = s.Service.GetInstruction(ctx, req)
+	}
+	if s.Postlude != nil {
+		err = s.Postlude(ctx, "GetInstruction", rsp, err)
+	}
+	return
+}
+
+func (s *DecoratedResultDB) QueryInstruction(ctx context.Context, req *QueryInstructionRequest) (rsp *QueryInstructionResponse, err error) {
+	if s.Prelude != nil {
+		var newCtx context.Context
+		newCtx, err = s.Prelude(ctx, "QueryInstruction", req)
+		if err == nil {
+			ctx = newCtx
+		}
+	}
+	if err == nil {
+		rsp, err = s.Service.QueryInstruction(ctx, req)
+	}
+	if s.Postlude != nil {
+		err = s.Postlude(ctx, "QueryInstruction", rsp, err)
+	}
+	return
+}
+
+func (s *DecoratedResultDB) QueryTestAggregations(ctx context.Context, req *QueryTestAggregationsRequest) (rsp *QueryTestAggregationsResponse, err error) {
+	if s.Prelude != nil {
+		var newCtx context.Context
+		newCtx, err = s.Prelude(ctx, "QueryTestAggregations", req)
+		if err == nil {
+			ctx = newCtx
+		}
+	}
+	if err == nil {
+		rsp, err = s.Service.QueryTestAggregations(ctx, req)
+	}
+	if s.Postlude != nil {
+		err = s.Postlude(ctx, "QueryTestAggregations", rsp, err)
+	}
+	return
+}
+
+func (s *DecoratedResultDB) QueryTestVerdicts(ctx context.Context, req *QueryTestVerdictsRequest) (rsp *QueryTestVerdictsResponse, err error) {
+	if s.Prelude != nil {
+		var newCtx context.Context
+		newCtx, err = s.Prelude(ctx, "QueryTestVerdicts", req)
+		if err == nil {
+			ctx = newCtx
+		}
+	}
+	if err == nil {
+		rsp, err = s.Service.QueryTestVerdicts(ctx, req)
+	}
+	if s.Postlude != nil {
+		err = s.Postlude(ctx, "QueryTestVerdicts", rsp, err)
+	}
+	return
+}
+
+func (s *DecoratedResultDB) BatchGetTestVerdicts(ctx context.Context, req *BatchGetTestVerdictsRequest) (rsp *BatchGetTestVerdictsResponse, err error) {
+	if s.Prelude != nil {
+		var newCtx context.Context
+		newCtx, err = s.Prelude(ctx, "BatchGetTestVerdicts", req)
+		if err == nil {
+			ctx = newCtx
+		}
+	}
+	if err == nil {
+		rsp, err = s.Service.BatchGetTestVerdicts(ctx, req)
+	}
+	if s.Postlude != nil {
+		err = s.Postlude(ctx, "BatchGetTestVerdicts", rsp, err)
 	}
 	return
 }
@@ -227,23 +363,6 @@ func (s *DecoratedResultDB) QueryArtifacts(ctx context.Context, req *QueryArtifa
 	return
 }
 
-func (s *DecoratedResultDB) QueryRunTestVerdicts(ctx context.Context, req *QueryRunTestVerdictsRequest) (rsp *QueryRunTestVerdictsResponse, err error) {
-	if s.Prelude != nil {
-		var newCtx context.Context
-		newCtx, err = s.Prelude(ctx, "QueryRunTestVerdicts", req)
-		if err == nil {
-			ctx = newCtx
-		}
-	}
-	if err == nil {
-		rsp, err = s.Service.QueryRunTestVerdicts(ctx, req)
-	}
-	if s.Postlude != nil {
-		err = s.Postlude(ctx, "QueryRunTestVerdicts", rsp, err)
-	}
-	return
-}
-
 func (s *DecoratedResultDB) ListArtifactLines(ctx context.Context, req *ListArtifactLinesRequest) (rsp *ListArtifactLinesResponse, err error) {
 	if s.Prelude != nil {
 		var newCtx context.Context
@@ -261,19 +380,138 @@ func (s *DecoratedResultDB) ListArtifactLines(ctx context.Context, req *ListArti
 	return
 }
 
-func (s *DecoratedResultDB) QueryArtifactFailureOnlyLines(ctx context.Context, req *QueryArtifactFailureOnlyLinesRequest) (rsp *QueryArtifactFailureOnlyLinesResponse, err error) {
+func (s *DecoratedResultDB) CompareArtifactLines(ctx context.Context, req *CompareArtifactLinesRequest) (rsp *CompareArtifactLinesResponse, err error) {
 	if s.Prelude != nil {
 		var newCtx context.Context
-		newCtx, err = s.Prelude(ctx, "QueryArtifactFailureOnlyLines", req)
+		newCtx, err = s.Prelude(ctx, "CompareArtifactLines", req)
 		if err == nil {
 			ctx = newCtx
 		}
 	}
 	if err == nil {
-		rsp, err = s.Service.QueryArtifactFailureOnlyLines(ctx, req)
+		rsp, err = s.Service.CompareArtifactLines(ctx, req)
 	}
 	if s.Postlude != nil {
-		err = s.Postlude(ctx, "QueryArtifactFailureOnlyLines", rsp, err)
+		err = s.Postlude(ctx, "CompareArtifactLines", rsp, err)
+	}
+	return
+}
+
+func (s *DecoratedResultDB) QueryTestVariantArtifactGroups(ctx context.Context, req *QueryTestVariantArtifactGroupsRequest) (rsp *QueryTestVariantArtifactGroupsResponse, err error) {
+	if s.Prelude != nil {
+		var newCtx context.Context
+		newCtx, err = s.Prelude(ctx, "QueryTestVariantArtifactGroups", req)
+		if err == nil {
+			ctx = newCtx
+		}
+	}
+	if err == nil {
+		rsp, err = s.Service.QueryTestVariantArtifactGroups(ctx, req)
+	}
+	if s.Postlude != nil {
+		err = s.Postlude(ctx, "QueryTestVariantArtifactGroups", rsp, err)
+	}
+	return
+}
+
+func (s *DecoratedResultDB) QueryTestVariantArtifacts(ctx context.Context, req *QueryTestVariantArtifactsRequest) (rsp *QueryTestVariantArtifactsResponse, err error) {
+	if s.Prelude != nil {
+		var newCtx context.Context
+		newCtx, err = s.Prelude(ctx, "QueryTestVariantArtifacts", req)
+		if err == nil {
+			ctx = newCtx
+		}
+	}
+	if err == nil {
+		rsp, err = s.Service.QueryTestVariantArtifacts(ctx, req)
+	}
+	if s.Postlude != nil {
+		err = s.Postlude(ctx, "QueryTestVariantArtifacts", rsp, err)
+	}
+	return
+}
+
+func (s *DecoratedResultDB) QueryInvocationVariantArtifactGroups(ctx context.Context, req *QueryInvocationVariantArtifactGroupsRequest) (rsp *QueryInvocationVariantArtifactGroupsResponse, err error) {
+	if s.Prelude != nil {
+		var newCtx context.Context
+		newCtx, err = s.Prelude(ctx, "QueryInvocationVariantArtifactGroups", req)
+		if err == nil {
+			ctx = newCtx
+		}
+	}
+	if err == nil {
+		rsp, err = s.Service.QueryInvocationVariantArtifactGroups(ctx, req)
+	}
+	if s.Postlude != nil {
+		err = s.Postlude(ctx, "QueryInvocationVariantArtifactGroups", rsp, err)
+	}
+	return
+}
+
+func (s *DecoratedResultDB) QueryInvocationVariantArtifacts(ctx context.Context, req *QueryInvocationVariantArtifactsRequest) (rsp *QueryInvocationVariantArtifactsResponse, err error) {
+	if s.Prelude != nil {
+		var newCtx context.Context
+		newCtx, err = s.Prelude(ctx, "QueryInvocationVariantArtifacts", req)
+		if err == nil {
+			ctx = newCtx
+		}
+	}
+	if err == nil {
+		rsp, err = s.Service.QueryInvocationVariantArtifacts(ctx, req)
+	}
+	if s.Postlude != nil {
+		err = s.Postlude(ctx, "QueryInvocationVariantArtifacts", rsp, err)
+	}
+	return
+}
+
+func (s *DecoratedResultDB) GetInvocation(ctx context.Context, req *GetInvocationRequest) (rsp *Invocation, err error) {
+	if s.Prelude != nil {
+		var newCtx context.Context
+		newCtx, err = s.Prelude(ctx, "GetInvocation", req)
+		if err == nil {
+			ctx = newCtx
+		}
+	}
+	if err == nil {
+		rsp, err = s.Service.GetInvocation(ctx, req)
+	}
+	if s.Postlude != nil {
+		err = s.Postlude(ctx, "GetInvocation", rsp, err)
+	}
+	return
+}
+
+func (s *DecoratedResultDB) QueryRootInvocationNames(ctx context.Context, req *QueryRootInvocationNamesRequest) (rsp *QueryRootInvocationNamesResponse, err error) {
+	if s.Prelude != nil {
+		var newCtx context.Context
+		newCtx, err = s.Prelude(ctx, "QueryRootInvocationNames", req)
+		if err == nil {
+			ctx = newCtx
+		}
+	}
+	if err == nil {
+		rsp, err = s.Service.QueryRootInvocationNames(ctx, req)
+	}
+	if s.Postlude != nil {
+		err = s.Postlude(ctx, "QueryRootInvocationNames", rsp, err)
+	}
+	return
+}
+
+func (s *DecoratedResultDB) QueryRunTestVerdicts(ctx context.Context, req *QueryRunTestVerdictsRequest) (rsp *QueryRunTestVerdictsResponse, err error) {
+	if s.Prelude != nil {
+		var newCtx context.Context
+		newCtx, err = s.Prelude(ctx, "QueryRunTestVerdicts", req)
+		if err == nil {
+			ctx = newCtx
+		}
+	}
+	if err == nil {
+		rsp, err = s.Service.QueryRunTestVerdicts(ctx, req)
+	}
+	if s.Postlude != nil {
+		err = s.Postlude(ctx, "QueryRunTestVerdicts", rsp, err)
 	}
 	return
 }
@@ -312,36 +550,19 @@ func (s *DecoratedResultDB) BatchGetTestVariants(ctx context.Context, req *Batch
 	return
 }
 
-func (s *DecoratedResultDB) QueryTestMetadata(ctx context.Context, req *QueryTestMetadataRequest) (rsp *QueryTestMetadataResponse, err error) {
+func (s *DecoratedResultDB) QueryTestResultStatistics(ctx context.Context, req *QueryTestResultStatisticsRequest) (rsp *QueryTestResultStatisticsResponse, err error) {
 	if s.Prelude != nil {
 		var newCtx context.Context
-		newCtx, err = s.Prelude(ctx, "QueryTestMetadata", req)
+		newCtx, err = s.Prelude(ctx, "QueryTestResultStatistics", req)
 		if err == nil {
 			ctx = newCtx
 		}
 	}
 	if err == nil {
-		rsp, err = s.Service.QueryTestMetadata(ctx, req)
+		rsp, err = s.Service.QueryTestResultStatistics(ctx, req)
 	}
 	if s.Postlude != nil {
-		err = s.Postlude(ctx, "QueryTestMetadata", rsp, err)
-	}
-	return
-}
-
-func (s *DecoratedResultDB) GetInstruction(ctx context.Context, req *GetInstructionRequest) (rsp *Instruction, err error) {
-	if s.Prelude != nil {
-		var newCtx context.Context
-		newCtx, err = s.Prelude(ctx, "GetInstruction", req)
-		if err == nil {
-			ctx = newCtx
-		}
-	}
-	if err == nil {
-		rsp, err = s.Service.GetInstruction(ctx, req)
-	}
-	if s.Postlude != nil {
-		err = s.Postlude(ctx, "GetInstruction", rsp, err)
+		err = s.Postlude(ctx, "QueryTestResultStatistics", rsp, err)
 	}
 	return
 }

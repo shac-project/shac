@@ -16,6 +16,7 @@ package prpc
 
 import (
 	"encoding/base64"
+	"iter"
 	"net/http"
 	"strings"
 
@@ -24,6 +25,18 @@ import (
 	"go.chromium.org/luci/common/errors"
 )
 
+// Standard HTTP headers that are vital for the pRPC protocol and should not
+// be messed with via prpc.SetHeader(...).
+var vitalHTTPHeaders = map[string]struct{}{
+	"Accept":                 {}, // content type negotiation
+	"Accept-Encoding":        {}, // content type negotiation
+	"Content-Encoding":       {}, // request/response compression
+	"Content-Length":         {}, // vital for HTTP
+	"Content-Type":           {}, // based on negotiated content type
+	"Vary":                   {}, // part of CORS response
+	"X-Content-Type-Options": {}, // always set to "nosniff"
+}
+
 // isReservedMetadataKey returns true for disallowed metadata keys.
 //
 // Keys are given in HTTP header canonical format.
@@ -31,21 +44,25 @@ import (
 // Setting metadata with such keys may break the protocol.
 // See also Client.prepareRequest.
 func isReservedMetadataKey(k string) bool {
-	switch {
-	case strings.HasPrefix(k, "X-Prpc-"):
+	// These standard HTTP headers are vital for the pRPC protocol and should not
+	// be messed with.
+	if _, yes := vitalHTTPHeaders[k]; yes {
 		return true
-
-	case k == "Accept",
-		k == "Accept-Encoding",
-		k == "Content-Encoding",
-		k == "Content-Length",
-		k == "Content-Type",
-		k == "X-Content-Type-Options":
-		return true
-
-	default:
-		return false
 	}
+
+	// These headers are used internally by pRPC protocol and should not be
+	// messed with.
+	if strings.HasPrefix(k, "X-Prpc-") {
+		return true
+	}
+
+	// CORS policies should be set via server.AccessControl callback, not via
+	// individual RPCs.
+	if strings.HasPrefix(k, "Access-Control-") {
+		return true
+	}
+
+	return false
 }
 
 // metaIntoHeaders merges outgoing metadata into the given set of headers.
@@ -55,7 +72,7 @@ func metaIntoHeaders(md metadata.MD, h http.Header) error {
 	for k, vs := range md {
 		canon := http.CanonicalHeaderKey(k)
 		if isReservedMetadataKey(canon) {
-			return errors.Reason("using reserved metadata key %q", k).Err()
+			return errors.Fmt("using reserved metadata key %q", k)
 		}
 		if !strings.HasSuffix(canon, "-Bin") {
 			h[canon] = append(h[canon], vs...)
@@ -78,7 +95,7 @@ func headerIntoMeta(key string, values []string, md metadata.MD) error {
 		md[key] = append(md[key], values...)
 		return nil
 	}
-	for _, v := range values {
+	for v := range iterHeaderValues(values) {
 		decoded, err := base64.StdEncoding.DecodeString(v)
 		if err != nil {
 			return err
@@ -101,8 +118,34 @@ func headersIntoMetadata(h http.Header) (md metadata.MD, err error) {
 			md = make(metadata.MD, len(h))
 		}
 		if err := headerIntoMeta(k, v, md); err != nil {
-			return nil, errors.Annotate(err, "can't decode header %q", k).Err()
+			return nil, errors.Fmt("can't decode header %q: %w", k, err)
 		}
 	}
 	return
+}
+
+// iterHeaderValues iterates over all values of the header taking into account
+// they may be joined by ",".
+//
+// See https://www.rfc-editor.org/rfc/rfc7230#section-3.2.2.
+func iterHeaderValues(values []string) iter.Seq[string] {
+	return func(yield func(string) bool) {
+		for _, v := range values {
+			// Note: do not use strings.Split to avoid unnecessary slice allocations.
+			for {
+				if comma := strings.IndexByte(v, ','); comma != -1 {
+					var chunk string
+					chunk, v = v[:comma], v[comma+1:]
+					if !yield(chunk) {
+						return
+					}
+				} else {
+					if !yield(v) {
+						return
+					}
+					break
+				}
+			}
+		}
+	}
 }
