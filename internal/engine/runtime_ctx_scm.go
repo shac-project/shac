@@ -106,6 +106,12 @@ func (f *fileImpl) getMetadata() starlark.Value {
 				return f.newLines, f.err
 			}),
 		})
+		// Freeze the metadata immediately after creation while holding the
+		// lock. This prevents data races later when builtinWrapper calls
+		// Freeze() on dictionaries containing this shared struct instance from
+		// concurrent checks. Starlark's Struct.Freeze() is not thread-safe for
+		// concurrent calls on non-frozen objects.
+		f.metadata.Freeze()
 	}
 	m := f.metadata
 	f.mu.Unlock()
