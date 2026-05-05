@@ -790,8 +790,7 @@ func (s *shacState) parse(ctx context.Context) error {
 	}
 	p := path.Join(s.subdir, s.entryPoint)
 	if _, err := s.env.load(ctx, sourceKey{orig: p, pkg: "__main__", relpath: p}, pi); err != nil {
-		var evalErr *starlark.EvalError
-		if errors.As(err, &evalErr) {
+		if evalErr, ok := errors.AsType[*starlark.EvalError](err); ok {
 			return &evalError{evalErr}
 		}
 		return err
@@ -853,8 +852,7 @@ func (c *registeredCheck) call(ctx context.Context, env *starlarkEnv, args starl
 			// fail() was called, return this error since this is an abnormal failure.
 			return c.failErr
 		}
-		var evalErr *starlark.EvalError
-		if errors.As(err, &evalErr) {
+		if evalErr, ok := errors.AsType[*starlark.EvalError](err); ok {
 			return &evalError{evalErr}
 		}
 		// The vast majority of errors should be caught by the above checks, if

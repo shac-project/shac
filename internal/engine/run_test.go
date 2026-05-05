@@ -2400,8 +2400,8 @@ func TestTestDataFailOrThrow(t *testing.T) {
 				t.Errorf("mismatch (-want +got):\n%s", diff)
 			}
 			expectTrace := data[i].trace != ""
-			var err2 BacktraceableError
-			if errors.As(err, &err2) != expectTrace {
+			err2, ok := errors.AsType[BacktraceableError](err)
+			if ok != expectTrace {
 				if expectTrace {
 					t.Fatal("expected BacktracableError")
 				} else {

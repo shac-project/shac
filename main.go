@@ -47,8 +47,7 @@ func main() {
 	}()
 
 	if err := cli.Main(ctx, os.Args); err != nil && !errors.Is(err, flag.ErrHelp) {
-		var stackerr engine.BacktraceableError
-		if errors.As(err, &stackerr) {
+		if stackerr, ok := errors.AsType[engine.BacktraceableError](err); ok {
 			_, _ = os.Stderr.WriteString(stackerr.Backtrace())
 		}
 		// If stderr is not a terminal, always print the error.

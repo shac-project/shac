@@ -179,9 +179,8 @@ func benchStarlarkPrint(b *testing.B, root, name string, all bool, want string) 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		if err := Run(context.Background(), &o); err != nil {
-			var err2 BacktraceableError
-			if errors.As(err, &err2) {
-				b.Fatal(err2.Backtrace())
+			if btErr, ok := errors.AsType[BacktraceableError](err); ok {
+				b.Fatal(btErr.Backtrace())
 			}
 			b.Fatal(err)
 		}

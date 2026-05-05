@@ -97,8 +97,7 @@ func (s *subprocess) wait() (starlark.Value, error) {
 func (s *subprocess) waitInner() (starlark.Value, error) {
 	retcode := 0
 	if err := <-s.errs; err != nil {
-		var errExit *exec.ExitError
-		if errors.As(err, &errExit) {
+		if errExit, ok := errors.AsType[*exec.ExitError](err); ok {
 			retcode = errExit.ExitCode()
 		} else {
 			// Something other than a normal non-zero exit.

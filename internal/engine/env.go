@@ -204,13 +204,11 @@ func (e *starlarkEnv) loadInner(th *starlark.Thread, sk sourceKey) (starlark.Str
 				fp := syntax.FilePortion{Content: d, FirstLine: 1, FirstCol: 1}
 				source.globals, source.err = starlark.ExecFileOptions(e.opts, th, sk.String(), fp, e.globals)
 				th.SetLocal("shac.pkg", oldsk)
-				var errl resolve.ErrorList
-				if errors.As(source.err, &errl) {
+				if errl, ok := errors.AsType[resolve.ErrorList](source.err); ok {
 					// Unwrap the error, only keep the first one.
 					source.err = errl[0]
 				}
-				var errre resolve.Error
-				if errors.As(source.err, &errre) {
+				if errre, ok := errors.AsType[resolve.Error](source.err); ok {
 					// Synthesize a BacktraceableError since it's nicer for the
 					// user. Sadly we can't get the function context even if the
 					// error is within a function implementation, so hardcode

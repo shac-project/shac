@@ -69,7 +69,7 @@ func runGitCmd(ctx context.Context, dir string, args ...string) (string, error) 
 	out := b.String()
 	buffers.push(b)
 	if err != nil {
-		if errExit := (&exec.ExitError{}); errors.As(err, &errExit) {
+		if _, ok := errors.AsType[*exec.ExitError](err); ok {
 			return "", fmt.Errorf("error running git %s: %w\n%s", strings.Join(args, " "), err, out)
 		}
 		return "", err
