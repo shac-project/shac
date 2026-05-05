@@ -63,7 +63,7 @@ func runGitCmd(ctx context.Context, dir string, args ...string) (string, error) 
 	b := buffers.get()
 	cmd.Stdout = b
 	cmd.Stderr = b
-	err := execsupport.Run(cmd)
+	err := execsupport.Run(ctx, cmd)
 	// Always make a copy of the output, since it could be persisted. Only reuse
 	// the temporary buffer.
 	out := b.String()

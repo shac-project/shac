@@ -424,7 +424,7 @@ func ctxOsExec(ctx context.Context, s *shacState, name string, args starlark.Tup
 			}
 			defer s.subprocessSem.Release(1)
 			log.Printf("Running command: %s", cmd)
-			return execsupport.Run(cmd)
+			return execsupport.Run(ctx, cmd)
 		}()
 		// Signals to subprocess.wait() that the subprocess is done, whether or
 		// not it was successful.

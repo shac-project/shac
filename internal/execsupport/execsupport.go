@@ -41,6 +41,7 @@
 package execsupport
 
 import (
+	"context"
 	"os/exec"
 	"sync"
 )
@@ -49,16 +50,13 @@ import (
 // will later be exec()'ed.
 var Mu sync.RWMutex
 
-// Start is a fork-safe wrapper around os/exec.Cmd.Start.
-func Start(cmd *exec.Cmd) error {
-	Mu.RLock()
-	defer Mu.RUnlock()
-	return cmd.Start()
-}
-
 // Run is a fork-safe wrapper around os/exec.Cmd.Run.
-func Run(cmd *exec.Cmd) error {
+func Run(ctx context.Context, cmd *exec.Cmd) error {
 	Mu.RLock()
 	defer Mu.RUnlock()
-	return cmd.Run()
+	err := cmd.Run()
+	if err != nil && ctx.Err() != nil {
+		return ctx.Err()
+	}
+	return err
 }
