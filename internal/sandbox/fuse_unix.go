@@ -20,32 +20,12 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"syscall"
 )
 
-// FUSE super_magic value. This value is returned by the stat() syscall on
-// FUSE filesystems.
-const fuseSuperMagic = 0x65735546
-
-// IsFuse checks if the given path is on a FUSE filesystem.
-func isFuse(path string) bool {
-	var buf syscall.Statfs_t
-	if err := syscall.Statfs(path, &buf); err != nil {
-		return false
-	}
-	return buf.Type == fuseSuperMagic
-}
-
-// resolveFuseMounts checks if the given mounts traverse FUSE-managed symlinks.
+// resolveMounts checks if the given mounts traverse symlinks.
 // If so, it returns a new list of mounts where such mounts are replaced by
 // mounts of their resolved target paths, binding them to the original destinations.
-func resolveFuseMounts(root, exe string, mounts []Mount) []Mount {
-	return resolveFuseMountsImpl(isFuse, root, exe, mounts)
-}
-
-func resolveFuseMountsImpl(fuseCheck func(path string) bool, root, exe string, mounts []Mount) []Mount {
-	isFuse := fuseCheck(root)
-
+func resolveMounts(root, exe string, mounts []Mount) []Mount {
 	seen := make(map[string]bool)
 	resolvedMounts := make([]Mount, 0, len(mounts)+1)
 
@@ -104,23 +84,16 @@ func resolveFuseMountsImpl(fuseCheck func(path string) bool, root, exe string, m
 
 				target := filepath.Clean(realPath)
 
-				isOutside := false
-				if rel, err := filepath.Rel(root, target); err != nil || strings.HasPrefix(rel, "..") {
-					isOutside = true
-				}
-
 				// Mount the real path at its real location. This ensures that
 				// the symlink target actually exists in the sandbox.
-				if isFuse || isOutside {
-					addMount(target, target, m.Writable)
+				addMount(target, target, m.Writable)
 
-					// Mount the real path at the symlink's location. This effectively
-					// "overlays" the real content onto the FUSE path. This is necessary
-					// because mounting directly from a FUSE source can be problematic
-					// (e.g. with MS_RDONLY remounts), and because we want to ensure
-					// the directory structure (siblings) is preserved via the real content.
-					addMount(target, path, m.Writable)
-				}
+				// Mount the real path at the symlink's location. This effectively
+				// "overlays" the real content onto the symlink path. This is necessary
+				// because mounting directly from a symlink source can be problematic
+				// (e.g. with MS_RDONLY remounts), and because we want to ensure
+				// the directory structure (siblings) is preserved via the real content.
+				addMount(target, path, m.Writable)
 			}
 		}
 
@@ -145,27 +118,17 @@ func resolveFuseMountsImpl(fuseCheck func(path string) bool, root, exe string, m
 
 		target := filepath.Clean(realPath)
 
-		isOutside := false
-		if rel, err := filepath.Rel(root, target); err != nil || strings.HasPrefix(rel, "..") {
-			isOutside = true
-		}
-
 		dest := m.Dest
 		if dest == "" {
 			dest = m.Path
 		}
 		dest = filepath.Clean(dest)
 
-		if isFuse || isOutside {
-			// Ensure RealPath is mounted at RealPath (Source=Real, Dest=Real).
-			addMount(target, target, m.Writable)
+		// Ensure RealPath is mounted at RealPath (Source=Real, Dest=Real).
+		addMount(target, target, m.Writable)
 
-			// Ensure RealPath is mounted at Requested Destination (Source=Real, Dest=Requested).
-			addMount(target, dest, m.Writable)
-		} else {
-			// If not FUSE and not pointing outside, just add the original mount.
-			addMount(m.Path, dest, m.Writable)
-		}
+		// Ensure RealPath is mounted at Requested Destination (Source=Real, Dest=Requested).
+		addMount(target, dest, m.Writable)
 	}
 	return resolvedMounts
 }

@@ -16,7 +16,7 @@
 
 package sandbox
 
-// We don't need to resolve FUSE mounts on Windows.
-func resolveFuseMounts(_root, _exe string, mounts []Mount) []Mount {
+// We don't need to resolve mounts on Windows.
+func resolveMounts(_root, _exe string, mounts []Mount) []Mount {
 	return mounts
 }

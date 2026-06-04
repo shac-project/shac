@@ -26,7 +26,7 @@ import (
 
 func TestResolveFuseMounts(t *testing.T) {
 	// Make sure to evaluate symlinks before comparing, since
-	// `ResolveFuseMounts` evaluates symlinks.
+	// `resolveMounts` evaluates symlinks.
 	tmpDir, err := filepath.EvalSymlinks(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
@@ -40,14 +40,16 @@ func TestResolveFuseMounts(t *testing.T) {
 	// root/
 	//   target/ (real dir)
 	//   link -> target
+	//   link_outside -> outside/target
 	// outside/
 	//   target/
-	//   link -> target
+	//   link -> root/target
 
 	targetPath := filepath.Join(rootDir, "target")
 	if err := os.Mkdir(targetPath, 0755); err != nil {
 		t.Fatal(err)
 	}
+
 	linkPath := filepath.Join(rootDir, "link")
 	if err := os.Symlink(targetPath, linkPath); err != nil {
 		t.Fatal(err)
@@ -57,12 +59,9 @@ func TestResolveFuseMounts(t *testing.T) {
 	if err := os.Mkdir(outsideDir, 0755); err != nil {
 		t.Fatal(err)
 	}
+
 	outTarget := filepath.Join(outsideDir, "target")
 	if err := os.Mkdir(outTarget, 0755); err != nil {
-		t.Fatal(err)
-	}
-	outLink := filepath.Join(outsideDir, "link")
-	if err := os.Symlink(outTarget, outLink); err != nil {
 		t.Fatal(err)
 	}
 
@@ -71,43 +70,21 @@ func TestResolveFuseMounts(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// Link outside root pointing to inside root.
+	outLink := filepath.Join(outsideDir, "link")
+	if err := os.Symlink(targetPath, outLink); err != nil {
+		t.Fatal(err)
+	}
+
 	tests := []struct {
 		name   string
-		isFuse bool
 		root   string
 		exe    string
 		mounts []Mount
 		want   []Mount
 	}{
 		{
-			name:   "NotFuse",
-			isFuse: false,
-			root:   rootDir,
-			mounts: []Mount{{Path: linkPath, Writable: true}},
-			want:   []Mount{{Path: linkPath, Dest: linkPath, Writable: true}},
-		},
-		{
-			name:   "NotFuseSymlinkOutside",
-			isFuse: false,
-			root:   rootDir,
-			mounts: []Mount{{Path: linkOutsidePath, Writable: true}},
-			want: []Mount{
-				{Path: outTarget, Dest: outTarget, Writable: true},
-				{Path: outTarget, Dest: linkOutsidePath, Writable: true},
-			},
-		},
-		{
-			name:   "FuseNoSymlink",
-			isFuse: true,
-			root:   rootDir,
-			mounts: []Mount{{Path: targetPath, Writable: true}},
-			want: []Mount{
-				{Path: targetPath, Dest: targetPath, Writable: true},
-			},
-		},
-		{
-			name:   "FuseSymlink",
-			isFuse: true,
+			name:   "LinkInsideRoot",
 			root:   rootDir,
 			mounts: []Mount{{Path: linkPath, Writable: true}},
 			want: []Mount{
@@ -116,10 +93,26 @@ func TestResolveFuseMounts(t *testing.T) {
 			},
 		},
 		{
+			name:   "LinkOutsideRoot",
+			root:   rootDir,
+			mounts: []Mount{{Path: linkOutsidePath, Writable: true}},
+			want: []Mount{
+				{Path: outTarget, Dest: outTarget, Writable: true},
+				{Path: outTarget, Dest: linkOutsidePath, Writable: true},
+			},
+		},
+		{
+			name:   "NoSymlink",
+			root:   rootDir,
+			mounts: []Mount{{Path: targetPath, Writable: true}},
+			want: []Mount{
+				{Path: targetPath, Dest: targetPath, Writable: true},
+			},
+		},
+		{
 			name: "ExeSymlink",
 			// Checks that if the executable itself is a symlink, it is resolved
 			// and mounted read-only (as executables are by default in the sandbox).
-			isFuse: true,
 			root:   rootDir,
 			exe:    linkPath,
 			mounts: []Mount{},
@@ -131,7 +124,6 @@ func TestResolveFuseMounts(t *testing.T) {
 		{
 			name: "ReadOnlyNoSymlink",
 			// Checks that a read-only mount of a regular directory is preserved as read-only.
-			isFuse: true,
 			root:   rootDir,
 			mounts: []Mount{{Path: targetPath, Writable: false}},
 			want: []Mount{
@@ -142,7 +134,6 @@ func TestResolveFuseMounts(t *testing.T) {
 			name: "ReadOnlySymlink",
 			// Checks that a read-only mount of a symlink is resolved to the target,
 			// and both the target and the symlink overlay are mounted read-only.
-			isFuse: true,
 			root:   rootDir,
 			mounts: []Mount{{Path: linkPath, Writable: false}},
 			want: []Mount{
@@ -154,7 +145,6 @@ func TestResolveFuseMounts(t *testing.T) {
 			name: "OutsideRoot",
 			// Checks that mounts outside the root directory are ignored by the resolution logic
 			// and mounted as-is.
-			isFuse: true,
 			root:   rootDir,
 			mounts: []Mount{{Path: outLink, Writable: true}},
 			// We expect this NOT to proceed to resolution, passing back the original mount
@@ -165,10 +155,7 @@ func TestResolveFuseMounts(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			checkFuse := func(path string) bool {
-				return test.isFuse
-			}
-			got := resolveFuseMountsImpl(checkFuse, test.root, test.exe, test.mounts)
+			got := resolveMounts(test.root, test.exe, test.mounts)
 
 			if diff := cmp.Diff(test.want, got); diff != "" {
 				t.Errorf("resolveFuseMounts mismatch (-want +got):\n%s", diff)

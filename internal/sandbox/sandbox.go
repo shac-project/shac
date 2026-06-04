@@ -120,7 +120,7 @@ func (s nsjailSandbox) Command(ctx context.Context, config *Config) *exec.Cmd {
 		args = append(args, "--env", fmt.Sprintf("%s=%s", k, v))
 	}
 
-	config.Mounts = resolveFuseMounts(config.Cwd, config.Cmd[0], config.Mounts)
+	config.Mounts = resolveMounts(config.Cwd, config.Cmd[0], config.Mounts)
 
 	// nsjail is strict about ordering of --bindmount flags. If /a and /a/b are
 	// both to be mounted (/a might be read-only while /a/b is writable), then
