@@ -184,9 +184,9 @@ func TestRun_Fail(t *testing.T) {
 			"invalid allowlist item",
 			func() Options {
 				root := t.TempDir()
-				writeFile(t, root, "shac.star", ""+
-					"def cb(ctx):\n"+
-					"    pass\n"+
+				writeFile(t, root, "shac.star",
+					"def cb(ctx):",
+					"    pass",
 					"shac.register_check(cb)")
 				return Options{
 					Dir: root,
@@ -201,9 +201,9 @@ func TestRun_Fail(t *testing.T) {
 			"invalid denylist item",
 			func() Options {
 				root := t.TempDir()
-				writeFile(t, root, "shac.star", ""+
-					"def cb(ctx):\n"+
-					"    pass\n"+
+				writeFile(t, root, "shac.star",
+					"def cb(ctx):",
+					"    pass",
 					"shac.register_check(cb)")
 				return Options{
 					Dir: root,
@@ -218,9 +218,9 @@ func TestRun_Fail(t *testing.T) {
 			"allowlisted and denylisted",
 			func() Options {
 				root := t.TempDir()
-				writeFile(t, root, "shac.star", ""+
-					"def cb(ctx):\n"+
-					"    pass\n"+
+				writeFile(t, root, "shac.star",
+					"def cb(ctx):",
+					"    pass",
 					"shac.register_check(cb)")
 				return Options{
 					Dir: root,
@@ -236,9 +236,9 @@ func TestRun_Fail(t *testing.T) {
 			"multiple invalid allowlist items",
 			func() Options {
 				root := t.TempDir()
-				writeFile(t, root, "shac.star", ""+
-					"def cb(ctx):\n"+
-					"    pass\n"+
+				writeFile(t, root, "shac.star",
+					"def cb(ctx):",
+					"    pass",
 					"shac.register_check(cb)")
 				return Options{
 					Dir: root,
@@ -253,9 +253,9 @@ func TestRun_Fail(t *testing.T) {
 			"invalid FormatterFiltering",
 			func() Options {
 				root := t.TempDir()
-				writeFile(t, root, "shac.star", ""+
-					"def cb(ctx):\n"+
-					"    pass\n"+
+				writeFile(t, root, "shac.star",
+					"def cb(ctx):",
+					"    pass",
 					"shac.register_check(cb)")
 				return Options{
 					Dir: root,
@@ -270,9 +270,9 @@ func TestRun_Fail(t *testing.T) {
 			"all checks filtered out",
 			func() Options {
 				root := t.TempDir()
-				writeFile(t, root, "shac.star", ""+
-					"def cb(ctx):\n"+
-					"    pass\n"+
+				writeFile(t, root, "shac.star",
+					"def cb(ctx):",
+					"    pass",
 					"shac.register_check(cb)")
 				return Options{
 					Dir: root,
@@ -646,13 +646,13 @@ func TestRun_Filtering(t *testing.T) {
 
 	root := resolvedTempDir(t)
 
-	writeFile(t, root, "shac.star", ""+
-		"def non_formatter(ctx):\n"+
-		"    print(\"non-formatter running\")\n"+
-		"def formatter(ctx):\n"+
-		"    print(\"formatter running\")\n"+
-		"shac.register_check(shac.check(formatter, formatter = True))\n"+
-		"shac.register_check(shac.check(non_formatter))\n")
+	writeFile(t, root, "shac.star",
+		"def non_formatter(ctx):",
+		"    print(\"non-formatter running\")",
+		"def formatter(ctx):",
+		"    print(\"formatter running\")",
+		"shac.register_check(shac.check(formatter, formatter = True))",
+		"shac.register_check(shac.check(non_formatter))")
 
 	data := []struct {
 		name   string
@@ -732,23 +732,23 @@ func TestRun_Filtering_MultipleFiles(t *testing.T) {
 	root := t.TempDir()
 
 	// Create a root shac.star that defines "check1".
-	writeFile(t, root, "shac.star", ""+
-		"def cb1(ctx):\n"+
-		"    print(\"check1 running\")\n"+
-		"shac.register_check(shac.check(cb1, name=\"check1\"))\n")
+	writeFile(t, root, "shac.star",
+		"def cb1(ctx):",
+		"    print(\"check1 running\")",
+		"shac.register_check(shac.check(cb1, name=\"check1\"))")
 
 	// Create a nested directory with a shac.star that defines "check2".
 	mkdirAll(t, filepath.Join(root, "nested"))
-	writeFile(t, root, filepath.Join("nested", "shac.star"), ""+
-		"def cb2(ctx):\n"+
-		"    print(\"check2 running\")\n"+
-		"shac.register_check(shac.check(cb2, name=\"check2\"))\n")
+	writeFile(t, root, filepath.Join("nested", "shac.star"),
+		"def cb2(ctx):",
+		"    print(\"check2 running\")",
+		"shac.register_check(shac.check(cb2, name=\"check2\"))")
 
 	// Create another nested directory with a shac.star that defines no checks
 	// but prints something when evaluating.
 	mkdirAll(t, filepath.Join(root, "nested2"))
-	writeFile(t, root, filepath.Join("nested2", "shac.star"), ""+
-		"print(\"nested2 evaluating\")\n")
+	writeFile(t, root, filepath.Join("nested2", "shac.star"),
+		"print(\"nested2 evaluating\")")
 
 	data := []struct {
 		name    string
@@ -1082,11 +1082,11 @@ func TestRun_Exec_InvalidPATHElements(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		cmd = "rundll32.exe"
 	}
-	writeFile(t, root, "shac.star", ""+
-		"def cb(ctx):\n"+
-		"    ctx.os.exec([\""+cmd+"\"]).wait()\n"+
-		"    print(\"success!\")\n"+
-		"shac.register_check(cb)\n")
+	writeFile(t, root, "shac.star",
+		"def cb(ctx):",
+		"    ctx.os.exec([\""+cmd+"\"]).wait()",
+		"    print(\"success!\")",
+		"shac.register_check(cb)")
 
 	want := "[//shac.star:3] success!\n"
 	testStarlarkPrint(t, root, "shac.star", false, false, want)
@@ -1669,37 +1669,37 @@ func TestRun_SCM_Git_Recursive(t *testing.T) {
 	runGit(t, root, "add", "a/a.txt")
 	runGit(t, root, "commit", "-m", "Initial commit")
 	// The affected files:
-	writeFile(t, root, "shac.star", ""+
-		"def cb(ctx):\n"+
-		"  name = \"root\"\n"+
-		"  for p, m in ctx.scm.affected_files().items():\n"+
-		"    if p.endswith(\".txt\"):\n"+
-		"      print(name + \": \" + p + \"=\" + m.new_lines()[0][1])\n"+
-		"      ctx.emit.finding(level=\"notice\", message=name, filepath=p)\n"+
-		"    else:\n"+
-		"      print(name + \": \" + p)\n"+
-		"shac.register_check(cb)\n")
-	writeFile(t, root, "a/shac.star", ""+
-		"def cb(ctx):\n"+
-		"  name = \"a\"\n"+
-		"  for p, m in ctx.scm.affected_files().items():\n"+
-		"    if p.endswith(\".txt\"):\n"+
-		"      print(name + \": \" + p + \"=\" + m.new_lines()[0][1])\n"+
-		"      ctx.emit.finding(level=\"notice\", message=name, filepath=p)\n"+
-		"    else:\n"+
-		"      print(name + \": \" + p)\n"+
-		"shac.register_check(cb)\n")
+	writeFile(t, root, "shac.star",
+		"def cb(ctx):",
+		"  name = \"root\"",
+		"  for p, m in ctx.scm.affected_files().items():",
+		"    if p.endswith(\".txt\"):",
+		"      print(name + \": \" + p + \"=\" + m.new_lines()[0][1])",
+		"      ctx.emit.finding(level=\"notice\", message=name, filepath=p)",
+		"    else:",
+		"      print(name + \": \" + p)",
+		"shac.register_check(cb)")
+	writeFile(t, root, "a/shac.star",
+		"def cb(ctx):",
+		"  name = \"a\"",
+		"  for p, m in ctx.scm.affected_files().items():",
+		"    if p.endswith(\".txt\"):",
+		"      print(name + \": \" + p + \"=\" + m.new_lines()[0][1])",
+		"      ctx.emit.finding(level=\"notice\", message=name, filepath=p)",
+		"    else:",
+		"      print(name + \": \" + p)",
+		"shac.register_check(cb)")
 	writeFile(t, root, "b/b.txt", "content b")
-	writeFile(t, root, "b/shac.star", ""+
-		"def cb(ctx):\n"+
-		"  name = \"b\"\n"+
-		"  for p, m in ctx.scm.affected_files().items():\n"+
-		"    if p.endswith(\".txt\"):\n"+
-		"      print(name + \": \" + p + \"=\" + m.new_lines()[0][1])\n"+
-		"      ctx.emit.finding(level=\"notice\", message=name, filepath=p)\n"+
-		"    else:\n"+
-		"      print(name + \": \" + p)\n"+
-		"shac.register_check(cb)\n")
+	writeFile(t, root, "b/shac.star",
+		"def cb(ctx):",
+		"  name = \"b\"",
+		"  for p, m in ctx.scm.affected_files().items():",
+		"    if p.endswith(\".txt\"):",
+		"      print(name + \": \" + p + \"=\" + m.new_lines()[0][1])",
+		"      ctx.emit.finding(level=\"notice\", message=name, filepath=p)",
+		"    else:",
+		"      print(name + \": \" + p)",
+		"shac.register_check(cb)")
 	runGit(t, root, "add", ".")
 	runGit(t, root, "commit", "-m", "Second commit")
 	r := reportEmitPrint{reportPrint: reportPrint{reportNoPrint: reportNoPrint{t: t}}}
@@ -1773,10 +1773,10 @@ func TestRun_SCM_Git_Recursive_Symlink(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	writeFile(t, root, "shared/shac.star", ""+
-		"def cb(ctx):\n"+
-		"  print(\"shared\")\n"+
-		"shac.register_check(cb)\n")
+	writeFile(t, root, "shared/shac.star",
+		"def cb(ctx):",
+		"  print(\"shared\")",
+		"shac.register_check(cb)")
 
 	// Create symlink a/shac.star -> ../shared/shac.star
 	err := os.Symlink("../shared/shac.star", filepath.Join(root, "a", "shac.star"))
@@ -1784,10 +1784,10 @@ func TestRun_SCM_Git_Recursive_Symlink(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	writeFile(t, root, "shac.star", ""+
-		"def cb(ctx):\n"+
-		"  print(\"root\")\n"+
-		"shac.register_check(cb)\n")
+	writeFile(t, root, "shac.star",
+		"def cb(ctx):",
+		"  print(\"root\")",
+		"shac.register_check(cb)")
 
 	runGit(t, root, "add", ".")
 	runGit(t, root, "commit", "-m", "Second commit")
@@ -1840,29 +1840,29 @@ func TestRun_SCM_Git_Recursive_Shared(t *testing.T) {
 
 	// The affected files:
 	writeFile(t, root, "a/b.txt", "content b")
-	writeFile(t, root, "a/shac.star", ""+
+	writeFile(t, root, "a/shac.star",
 		// Loads a file relative to the root.
-		"load(\"//common/shared.star\", \"cb\")\n"+
-		"shac.register_check(cb)\n")
-	writeFile(t, root, "common/shared.star", ""+
+		"load(\"//common/shared.star\", \"cb\")",
+		"shac.register_check(cb)")
+	writeFile(t, root, "common/shared.star",
 		// Loads a file relative to the current directory.
-		"load(\"internal/internal.star\", \"cbinner\")\n"+
+		"load(\"internal/internal.star\", \"cbinner\")",
 		"cb = cbinner")
 	writeFile(t, root, "common/c.txt", "content c")
-	writeFile(t, root, "common/internal/internal.star", ""+
+	writeFile(t, root, "common/internal/internal.star",
 		// Loads a file relative to the current directory, going higher up.
-		"load(\"../../d/shared2.star\", \"cb\")\n"+
+		"load(\"../../d/shared2.star\", \"cb\")",
 		"cbinner = cb")
-	writeFile(t, root, "d/shared2.star", ""+
+	writeFile(t, root, "d/shared2.star",
 		// This function sees the files affected from the perspective of the
 		// importer, which is a/shac.star.
-		"def cb(ctx):\n"+
-		"  for p, m in ctx.scm.affected_files().items():\n"+
-		"    if p.endswith(\".txt\"):\n"+
-		"      print(p + \"=\" + m.new_lines()[0][1])\n"+
-		"      ctx.emit.finding(level=\"notice\", message=\"internal\", filepath=p)\n"+
-		"    else:\n"+
-		"      print(p)\n")
+		"def cb(ctx):",
+		"  for p, m in ctx.scm.affected_files().items():",
+		"    if p.endswith(\".txt\"):",
+		"      print(p + \"=\" + m.new_lines()[0][1])",
+		"      ctx.emit.finding(level=\"notice\", message=\"internal\", filepath=p)",
+		"    else:",
+		"      print(p)")
 	runGit(t, root, "add", ".")
 	runGit(t, root, "commit", "-m", "Second commit")
 	r := reportEmitPrint{reportPrint: reportPrint{reportNoPrint: reportNoPrint{t: t}}}
@@ -2994,8 +2994,9 @@ func copyFile(t testing.TB, dst, src string) {
 	writeFileBytes(t, dst, filepath.Base(src), d, s.Mode()&0o700)
 }
 
-func writeFile(t testing.TB, root, path, content string) {
+func writeFile(t testing.TB, root, path string, lines ...string) {
 	t.Helper()
+	content := strings.Join(lines, "\n")
 	writeFileBytes(t, root, path, []byte(content), 0o600)
 }
 
