@@ -26,6 +26,19 @@ def cb(ctx):
     # Test with no match
     for path, _ in ctx.scm.all_files(glob = "nothing-matches.txt").items():
         out += "glob=nothing-matches.txt: " + path + "\n"
+
+    # 1. No Slashes: matches recursively
+    for path, _ in ctx.scm.all_files(glob = "nested.star").items():
+        out += "glob=nested.star: " + path + "\n"
+
+    # 2. Slashes: does not match recursively
+    for path, _ in ctx.scm.all_files(glob = "subdir/nested.star").items():
+        out += "glob=subdir/nested.star: " + path + "\n"
+
+    # 3. **/ matches recursively
+    for path, _ in ctx.scm.all_files(glob = "**/subdir/nested.star").items():
+        out += "glob=**/subdir/nested.star: " + path + "\n"
+
     print(out)
 
 shac.register_check(cb)

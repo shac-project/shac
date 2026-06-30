@@ -1096,12 +1096,18 @@ func TestRun_SCM_Raw(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
 	writeFile(t, root, "a.txt", "First file")
+	writeFile(t, root, "nested.star", "root nested")
+	writeFile(t, root, "subdir/nested.star", "subdir nested")
+	writeFile(t, root, "bar/subdir/nested.star", "bar subdir nested")
 	copySCM(t, root)
 	t.Run("affected", func(t *testing.T) {
 		t.Parallel()
 		want := "[//ctx-scm-affected_files.star:19] \n" +
 			"a.txt: \n" +
+			"bar/subdir/nested.star: \n" +
 			scmStarlarkFiles("") +
+			"nested.star: \n" +
+			"subdir/nested.star: \n" +
 			"\n"
 		testStarlarkPrint(t, root, "ctx-scm-affected_files.star", false, false, want)
 	})
@@ -1115,22 +1121,37 @@ func TestRun_SCM_Raw(t *testing.T) {
 		t.Parallel()
 		want := "[//ctx-scm-all_files.star:19] \n" +
 			"a.txt: \n" +
+			"bar/subdir/nested.star: \n" +
 			scmStarlarkFiles("") +
+			"nested.star: \n" +
+			"subdir/nested.star: \n" +
 			"\n"
 		testStarlarkPrint(t, root, "ctx-scm-all_files.star", false, false, want)
 	})
 	t.Run("all-glob", func(t *testing.T) {
 		t.Parallel()
-		want := "[//ctx-scm-all_files-glob.star:29] \n" +
+		want := "[//ctx-scm-all_files-glob.star:42] \n" +
 			"glob=*all_files.star: ctx-scm-all_files.star\n" +
-			"glob=[*all_files.star, non-existent.star]: ctx-scm-all_files.star\n\n"
+			"glob=[*all_files.star, non-existent.star]: ctx-scm-all_files.star\n" +
+			"glob=nested.star: bar/subdir/nested.star\n" +
+			"glob=nested.star: nested.star\n" +
+			"glob=nested.star: subdir/nested.star\n" +
+			"glob=subdir/nested.star: subdir/nested.star\n" +
+			"glob=**/subdir/nested.star: bar/subdir/nested.star\n" +
+			"glob=**/subdir/nested.star: subdir/nested.star\n\n"
 		testStarlarkPrint(t, root, "ctx-scm-all_files-glob.star", false, false, want)
 	})
 	t.Run("affected-glob", func(t *testing.T) {
 		t.Parallel()
-		want := "[//ctx-scm-affected_files-glob.star:29] \n" +
+		want := "[//ctx-scm-affected_files-glob.star:42] \n" +
 			"glob=*affected_files.star: ctx-scm-affected_files.star\n" +
-			"glob=[*affected_files.star, non-existent.star]: ctx-scm-affected_files.star\n\n"
+			"glob=[*affected_files.star, non-existent.star]: ctx-scm-affected_files.star\n" +
+			"glob=nested.star: bar/subdir/nested.star\n" +
+			"glob=nested.star: nested.star\n" +
+			"glob=nested.star: subdir/nested.star\n" +
+			"glob=subdir/nested.star: subdir/nested.star\n" +
+			"glob=**/subdir/nested.star: bar/subdir/nested.star\n" +
+			"glob=**/subdir/nested.star: subdir/nested.star\n\n"
 		testStarlarkPrint(t, root, "ctx-scm-affected_files-glob.star", false, false, want)
 	})
 	t.Run("all-negative-glob", func(t *testing.T) {

@@ -464,6 +464,12 @@ def _ctx_scm_affected_files(glob = None, include_deleted = False, include_symlin
       glob: (optional) A string or sequence of strings containing patterns to
         filter files. Patterns follow gitignore syntax. If specified, only
         files matching at least one pattern are returned.
+        Patterns without slashes (e.g. `BUILD.bazel`) match recursively at any
+        level. Patterns containing slashes (e.g. `/BUILD.bazel` or
+        `testing/foo.py`) are relative to the repository root and do not match
+        recursively. `**/` can be used to force patterns containing slashes to
+        match recursively (e.g. `**/testing/foo.py` matches `testing/foo.py` as
+        well as `bar/testing/foo.py`).
       include_deleted: (optional) Whether to include deleted files. By default
         deleted files are excluded.
       include_symlinks: (optional) Whether to include symlinks to files. By
@@ -500,6 +506,12 @@ def _ctx_scm_all_files(glob = None, include_deleted = False, include_symlinks = 
       glob: (optional) A string or sequence of strings containing patterns to
         filter files. Patterns follow gitignore syntax. If specified, only
         files matching at least one pattern are returned.
+        Patterns without slashes (e.g. `BUILD.bazel`) match recursively at any
+        level. Patterns containing slashes (e.g. `/BUILD.bazel` or
+        `testing/foo.py`) are relative to the repository root and do not match
+        recursively. `**/` can be used to force patterns containing slashes to
+        match recursively (e.g. `**/testing/foo.py` matches `testing/foo.py` as
+        well as `bar/testing/foo.py`).
       include_deleted: (optional) Whether to include deleted files. By default
         deleted files are excluded.
       include_symlinks: (optional) Whether to include symlinks to files. By
