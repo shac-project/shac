@@ -108,6 +108,14 @@ func TestGitHub(t *testing.T) {
 	if err := r.EmitFinding(ctx, "mycheck", engine.Notice, "message6", "", "testdata/file.txt", engine.Span{Start: engine.Cursor{Line: 10, Col: 1}, End: engine.Cursor{Line: 12, Col: 2}}, nil); err != nil {
 		t.Fatal(err)
 	}
+	// handle edge cases around end column being unset despite a start column being provided
+	if err := r.EmitFinding(ctx, "mycheck", engine.Notice, "message7", "", "testdata/file.txt", engine.Span{Start: engine.Cursor{Line: 10, Col: 1}, End: engine.Cursor{Line: 12}}, nil); err != nil {
+		t.Fatal(err)
+	}
+	// handle edge cases around start  column being 0 and providing an end column
+	if err := r.EmitFinding(ctx, "mycheck", engine.Notice, "message8", "", "testdata/file.txt", engine.Span{Start: engine.Cursor{Line: 10}, End: engine.Cursor{Line: 12, Col: 2}}, nil); err != nil {
+		t.Fatal(err)
+	}
 	if err := r.EmitArtifact(ctx, "mycheck", "", "testdata/file.txt", []byte("content")); err == nil {
 		t.Fatal("expected failure")
 	}
@@ -120,11 +128,13 @@ func TestGitHub(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := "::notice ::title=mycheck::message1\n" +
-		"::notice ::file=testdata/file.txttitle=mycheck::message2\n" +
+		"::notice ::file=testdata/file.txt,title=mycheck::message2\n" +
 		"::notice ::file=testdata/file.txt,line=10,title=mycheck::message3\n" +
 		"::notice ::file=testdata/file.txt,line=10,col=1,title=mycheck::message4\n" +
 		"::notice ::file=testdata/file.txt,line=10,endLine=12,title=mycheck::message5\n" +
 		"::notice ::file=testdata/file.txt,line=10,col=1,endLine=12,endCol=2,title=mycheck::message6\n" +
+		"::notice ::file=testdata/file.txt,line=10,col=1,endLine=12,title=mycheck::message7\n" +
+		"::notice ::file=testdata/file.txt,line=10,endLine=12,endCol=2,title=mycheck::message8\n" +
 		"::debug::[src.star:12] debugmsg\n" +
 		"::debug::mycheck [src.star:12] debugmsg\n"
 	if diff := cmp.Diff(want, buf.String()); diff != "" {

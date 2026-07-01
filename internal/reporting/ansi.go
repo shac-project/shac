@@ -33,7 +33,8 @@ func (a ansiCode) String() string {
 
 const (
 	// Styling codes.
-	reset ansiCode = iota
+	unknownAnsi ansiCode = iota
+	reset
 	bold
 	faint
 	italic

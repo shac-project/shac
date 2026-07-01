@@ -22,6 +22,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -124,16 +125,7 @@ func (b *basic) Close() error {
 }
 
 func (b *basic) EmitFinding(ctx context.Context, check string, level engine.Level, message, root, file string, s engine.Span, replacements []string) error {
-	if file != "" {
-		// TODO(maruel): Do not drop span and replacements!
-		if s.Start.Line > 0 {
-			_, err := fmt.Fprintf(b.out, "[%s/%s] %s(%d): %s\n", check, level, file, s.Start.Line, message)
-			return err
-		}
-		_, err := fmt.Fprintf(b.out, "[%s/%s] %s: %s\n", check, level, file, message)
-		return err
-	}
-	_, err := fmt.Fprintf(b.out, "[%s/%s] %s\n", check, level, message)
+	_, err := fmt.Fprint(b.out, overviewString(false, unknownAnsi, check, level, message, root, file, s, replacements))
 	return err
 }
 
@@ -177,32 +169,29 @@ func (g *github) Close() error {
 }
 
 func (g *github) EmitFinding(ctx context.Context, check string, level engine.Level, message, root, file string, s engine.Span, replacements []string) error {
+	var builder strings.Builder
+	fmt.Fprintf(&builder, "::%s ", level)
+	titlePrefix := "::"
 	if file != "" {
+		titlePrefix = ","
+		fmt.Fprintf(&builder, "::file=%s", file)
 		// TODO(maruel): Do not drop replacements!
 		if s.Start.Line > 0 {
-			if s.End.Line > 0 {
-				if s.End.Col > 0 {
-					_, err := fmt.Fprintf(g.out, "::%s ::file=%s,line=%d,col=%d,endLine=%d,endCol=%d,title=%s::%s\n",
-						level, file, s.Start.Line, s.Start.Col, s.End.Line, s.End.Col, check, message)
-					return err
-				}
-				_, err := fmt.Fprintf(g.out, "::%s ::file=%s,line=%d,endLine=%d,title=%s::%s\n",
-					level, file, s.Start.Line, s.End.Line, check, message)
-				return err
-			}
+			fmt.Fprintf(&builder, ",line=%d", s.Start.Line)
 			if s.Start.Col > 0 {
-				_, err := fmt.Fprintf(g.out, "::%s ::file=%s,line=%d,col=%d,title=%s::%s\n",
-					level, file, s.Start.Line, s.Start.Col, check, message)
-				return err
+				fmt.Fprintf(&builder, ",col=%d", s.Start.Col)
 			}
-			_, err := fmt.Fprintf(g.out, "::%s ::file=%s,line=%d,title=%s::%s\n",
-				level, file, s.Start.Line, check, message)
-			return err
+			if s.End.Line > 0 {
+				fmt.Fprintf(&builder, ",endLine=%d", s.End.Line)
+				if s.End.Col > 0 {
+					fmt.Fprintf(&builder, ",endCol=%d", s.End.Col)
+				}
+			}
 		}
-		_, err := fmt.Fprintf(g.out, "::%s ::file=%stitle=%s::%s\n", level, file, check, message)
-		return err
 	}
-	_, err := fmt.Fprintf(g.out, "::%s ::title=%s::%s\n", level, check, message)
+	fmt.Fprintf(&builder, "%stitle=%s::%s", titlePrefix, check, message)
+	builder.WriteString("\n")
+	_, err := fmt.Fprint(g.out, builder.String())
 	return err
 }
 
@@ -233,71 +222,89 @@ func (i *interactive) Close() error {
 	return nil
 }
 
+func overviewString(withColor bool, color ansiCode, check string, level engine.Level, message, root, file string, s engine.Span, replacements []string) string {
+	var builder strings.Builder
+	if withColor {
+		fmt.Fprintf(&builder, "%s[%s%s%s/%s%s%s] ", reset, fgHiCyan, check, reset, color, level, reset)
+	} else {
+		fmt.Fprintf(&builder, "[%s/%s] ", check, level)
+	}
+	if file != "" {
+		builder.WriteString(file)
+		if s.Start.Line > 0 {
+			fmt.Fprintf(&builder, "(%d)", s.Start.Line)
+		}
+		builder.WriteString(": ")
+	}
+	builder.WriteString(message)
+	// TODO(maruel): Do not drop replacements!
+	builder.WriteString("\n")
+	return builder.String()
+}
+
 func (i *interactive) EmitFinding(ctx context.Context, check string, level engine.Level, message, root, file string, s engine.Span, replacements []string) error {
 	c := levelColor[level]
-	if file != "" {
-		// TODO(maruel): Do not drop replacements!
-		if s.Start.Line > 0 {
-			fmt.Fprintf(i.out, "%s[%s%s%s/%s%s%s] %s(%d): %s\n", reset, fgHiCyan, check, reset, c, level, reset, file, s.Start.Line, message)
-
-			// Emit the line and a bit of context in interactive mode.
-			b, err := os.ReadFile(filepath.Join(root, file))
-			if err != nil {
-				return err
-			}
-			lines := bytes.Split(b, []byte("\n"))
-			end := s.End.Line
-			if end == 0 {
-				end = s.Start.Line
-			}
-			if s.Start.Line >= len(lines) {
-				// Consider raising an alert so the check can be fixed.
-				return nil
-			}
-			fmt.Fprintf(i.out, "\n")
-			for l := s.Start.Line - 2; l <= end && l < len(lines); l++ {
-				if l < 0 {
-					continue
-				}
-				if l == s.Start.Line-1 {
-					// First highlighted line.
-					if s.Start.Col > 0 {
-						if s.End.Line == s.Start.Line && s.End.Col > 0 {
-							// Silently ignore when the ending offset is misaligned. It's easy to get wrong.
-							// Consider raising an alert so the check can be fixed.
-							ec := min(s.End.Col, len(lines[l])+1)
-							// Intra-line highlight.
-							fmt.Fprintf(i.out, "  %s%s%s%s%s\n", lines[l][:s.Start.Col-1], c, lines[l][s.Start.Col-1:ec-1], reset, lines[l][ec-1:])
-						} else {
-							fmt.Fprintf(i.out, "  %s%s%s%s\n", lines[l][:s.Start.Col-1], c, lines[l][s.Start.Col-1:], reset)
-						}
-					} else {
-						fmt.Fprintf(i.out, "  %s%s%s\n", c, lines[l], reset)
-					}
-				} else if l > s.Start.Line-1 && l < end-1 {
-					// Middle lines.
-					fmt.Fprintf(i.out, "  %s%s%s\n", c, lines[l], reset)
-				} else if l >= s.Start.Line && l == end-1 {
-					// Last highlighted line.
-					if s.End.Col > 0 {
-						// Silently ignore when the ending offset is misaligned. It's easy to get wrong.
-						// Consider raising an alert so the check can be fixed.
-						ec := min(s.End.Col, len(lines[l])+1)
-						fmt.Fprintf(i.out, "  %s%s%s%s\n", c, lines[l][:ec-1], reset, lines[l][ec-1:])
-					} else {
-						fmt.Fprintf(i.out, "  %s%s%s\n", c, lines[l], reset)
-					}
-				} else {
-					fmt.Fprintf(i.out, "  %s\n", lines[l])
-				}
-			}
-			_, err = fmt.Fprintf(i.out, "\n")
-			return err
-		}
-		_, err := fmt.Fprintf(i.out, "%s[%s%s%s/%s%s%s] %s: %s\n", reset, fgHiCyan, check, reset, c, level, reset, file, message)
+	_, err := fmt.Fprint(i.out, overviewString(true, c, check, level, message, root, file, s, replacements))
+	if err != nil {
 		return err
 	}
-	_, err := fmt.Fprintf(i.out, "%s[%s%s%s/%s%s%s] %s\n", reset, fgHiCyan, check, reset, c, level, reset, message)
+	// If there is no file or start line we can fast exit
+	if file == "" || s.Start.Line <= 0 {
+		return nil
+	}
+
+	// Emit the line and a bit of context in interactive mode.
+	b, err := os.ReadFile(filepath.Join(root, file))
+	if err != nil {
+		return err
+	}
+	lines := bytes.Split(b, []byte("\n"))
+	end := s.End.Line
+	if end == 0 {
+		end = s.Start.Line
+	}
+	if s.Start.Line >= len(lines) {
+		// Consider raising an alert so the check can be fixed.
+		return nil
+	}
+	fmt.Fprintf(i.out, "\n")
+	for l := s.Start.Line - 2; l <= end && l < len(lines); l++ {
+		if l < 0 {
+			continue
+		}
+		if l == s.Start.Line-1 {
+			// First highlighted line.
+			if s.Start.Col > 0 {
+				if s.End.Line == s.Start.Line && s.End.Col > 0 {
+					// Silently ignore when the ending offset is misaligned. It's easy to get wrong.
+					// Consider raising an alert so the check can be fixed.
+					ec := min(s.End.Col, len(lines[l])+1)
+					// Intra-line highlight.
+					fmt.Fprintf(i.out, "  %s%s%s%s%s\n", lines[l][:s.Start.Col-1], c, lines[l][s.Start.Col-1:ec-1], reset, lines[l][ec-1:])
+				} else {
+					fmt.Fprintf(i.out, "  %s%s%s%s\n", lines[l][:s.Start.Col-1], c, lines[l][s.Start.Col-1:], reset)
+				}
+			} else {
+				fmt.Fprintf(i.out, "  %s%s%s\n", c, lines[l], reset)
+			}
+		} else if l > s.Start.Line-1 && l < end-1 {
+			// Middle lines.
+			fmt.Fprintf(i.out, "  %s%s%s\n", c, lines[l], reset)
+		} else if l >= s.Start.Line && l == end-1 {
+			// Last highlighted line.
+			if s.End.Col > 0 {
+				// Silently ignore when the ending offset is misaligned. It's easy to get wrong.
+				// Consider raising an alert so the check can be fixed.
+				ec := min(s.End.Col, len(lines[l])+1)
+				fmt.Fprintf(i.out, "  %s%s%s%s\n", c, lines[l][:ec-1], reset, lines[l][ec-1:])
+			} else {
+				fmt.Fprintf(i.out, "  %s%s%s\n", c, lines[l], reset)
+			}
+		} else {
+			fmt.Fprintf(i.out, "  %s\n", lines[l])
+		}
+	}
+	_, err = fmt.Fprintf(i.out, "\n")
 	return err
 }
 
