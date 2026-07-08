@@ -29,6 +29,7 @@ import (
 	"go.fuchsia.dev/shac-project/shac/internal/engine"
 	"go.fuchsia.dev/shac-project/shac/internal/sarif"
 	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/types/known/structpb"
 )
 
 // SarifReport converts findings into SARIF JSON output.
@@ -40,7 +41,7 @@ type SarifReport struct {
 	resultsByCheck map[string][]*sarif.Result
 }
 
-func (sr *SarifReport) EmitFinding(ctx context.Context, check string, level engine.Level, message, root, file string, s engine.Span, replacements []string) error {
+func (sr *SarifReport) EmitFinding(ctx context.Context, check string, level engine.Level, message, root, file string, s engine.Span, replacements []string, props map[string]string) error {
 	levelMap := map[engine.Level]string{
 		engine.Notice:  sarif.Note,
 		engine.Warning: sarif.Warning,
@@ -76,6 +77,19 @@ func (sr *SarifReport) EmitFinding(ctx context.Context, check string, level engi
 		})
 	}
 
+	var propsProto *structpb.Struct
+	if props != nil {
+		p := make(map[string]any, len(props))
+		for k, v := range props {
+			p[k] = v
+		}
+		var err error
+		propsProto, err = structpb.NewStruct(p)
+		if err != nil {
+			return err
+		}
+	}
+
 	result := &sarif.Result{
 		// TODO(olivernewman): Set RuleId field. The SARIF specification states
 		// that ruleId "SHALL" be set, and "Not all existing analysis tools emit
@@ -94,7 +108,8 @@ func (sr *SarifReport) EmitFinding(ctx context.Context, check string, level engi
 				},
 			},
 		},
-		Fixes: fixes,
+		Fixes:      fixes,
+		Properties: propsProto,
 	}
 
 	sr.mu.Lock()

@@ -21,6 +21,8 @@ syntax = "proto3";
 // SARIF spec requires camelCase field names.
 package sarif;
 
+import "google/protobuf/struct.proto";
+
 option go_package = "go.fuchsia.dev/shac-project/shac/internal/sarif";
 
 // Document is the type of the top-level JSON object in SARIF output.
@@ -70,6 +72,9 @@ message Result {
   // The code locations that the result applies to.
   repeated Location locations = 3;
   repeated Fix fixes = 4;
+  // Property bag
+  // https://docs.oasis-open.org/sarif/sarif/v2.1.0/csprd01/sarif-v2.1.0-csprd01.html#_Toc10540886
+  google.protobuf.Struct properties = 5;
 }
 
 // Message is a user-facing message for the result.

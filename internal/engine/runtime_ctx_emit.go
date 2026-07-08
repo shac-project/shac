@@ -37,6 +37,9 @@ func ctxEmitFinding(ctx context.Context, s *shacState, name string, args starlar
 	var argendCol starlark.Int
 	var argendLine starlark.Int
 	var argreplacements starlark.Sequence
+	var argproperties = findingsPropertyBag{
+		allowedProperties: s.allowedFindingsProperties,
+	}
 	if err := starlark.UnpackArgs(name, args, kwargs,
 		"level", &arglevel,
 		"message?", &argmessage,
@@ -50,6 +53,7 @@ func ctxEmitFinding(ctx context.Context, s *shacState, name string, args starlar
 		"end_line??", &argendLine,
 		"end_col??", &argendCol,
 		"replacements??", &argreplacements,
+		"properties??", &argproperties,
 	); err != nil {
 		return err
 	}
@@ -131,6 +135,11 @@ func ctxEmitFinding(ctx context.Context, s *shacState, name string, args starlar
 		}
 	}
 
+	var props map[string]string
+	if argproperties.unpackedProperties != nil {
+		props = argproperties.unpackedProperties
+	}
+
 	if c.highestLevel == "" || level == Error || (level == Warning && c.highestLevel != Error) {
 		c.highestLevel = level
 	}
@@ -146,7 +155,7 @@ func ctxEmitFinding(ctx context.Context, s *shacState, name string, args starlar
 			return fmt.Errorf("for parameter \"filepath\": %s is not tracked", argfilepath)
 		}
 	}
-	if err := s.r.EmitFinding(ctx, c.name, level, message, root, file, span, replacements); err != nil {
+	if err := s.r.EmitFinding(ctx, c.name, level, message, root, file, span, replacements, props); err != nil {
 		return fmt.Errorf("failed to emit: %w", err)
 	}
 	return nil

@@ -37,6 +37,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"google.golang.org/protobuf/encoding/prototext"
+	"google.golang.org/protobuf/testing/protocmp"
 )
 
 func TestRun_Fail(t *testing.T) {
@@ -2028,6 +2029,22 @@ func TestTestDataFailOrThrow(t *testing.T) {
 			"  //ctx-emit-finding-message.star:16:21: in cb\n",
 		},
 		{
+			"ctx-emit-finding-properties-invalid-key-name.star",
+			`ctx.emit.finding: for parameter "properties": key "fail-if-missing-label" not found in ` +
+				`allowed_findings_properties`,
+			"  //ctx-emit-finding-properties-invalid-key-name.star:16:21: in cb\n",
+		},
+		{
+			"ctx-emit-finding-properties-invalid-key-type.star",
+			"ctx.emit.finding: for parameter \"properties\": dict key must be string, got int",
+			"  //ctx-emit-finding-properties-invalid-key-type.star:16:21: in cb\n",
+		},
+		{
+			"ctx-emit-finding-properties-invalid-type.star",
+			"ctx.emit.finding: for parameter \"properties\": got string, want dict",
+			"  //ctx-emit-finding-properties-invalid-type.star:16:21: in cb\n",
+		},
+		{
 			"ctx-emit-finding-replacements-limit.star",
 			"ctx.emit.finding: for parameter \"replacements\": excessive number (101) of replacements",
 			"  //ctx-emit-finding-replacements-limit.star:17:21: in cb\n",
@@ -2503,6 +2520,10 @@ func TestRun_NetworkSandbox(t *testing.T) {
 func TestTestDataEmit(t *testing.T) {
 	t.Parallel()
 	root, got := enumDir(t, "emit")
+	emitFindingProperties := map[string]string{
+		"failIfMissingLabel": "Problem-Review",
+		"str_key":            "str",
+	}
 	data := []struct {
 		name      string
 		findings  []finding
@@ -2623,6 +2644,14 @@ func TestTestDataEmit(t *testing.T) {
 					File:         "file.txt",
 					Replacements: []string{"this text is a replacement\nfor the entire file\n"},
 				},
+				{
+					Check:      "cb",
+					Level:      "warning",
+					Message:    "contains properties",
+					Root:       root,
+					File:       "file.txt",
+					Properties: emitFindingProperties,
+				},
 			},
 			nil,
 			"",
@@ -2635,11 +2664,14 @@ func TestTestDataEmit(t *testing.T) {
 	if diff := cmp.Diff(want, got); diff != "" {
 		t.Fatalf("mismatch (-want +got):\n%s", diff)
 	}
+	cmp_opts := []cmp.Option{
+		protocmp.Transform(),
+	}
 	for i := range data {
 		t.Run(data[i].name, func(t *testing.T) {
 			t.Parallel()
 			r := reportEmitNoPrint{reportNoPrint: reportNoPrint{t: t}}
-			o := Options{Report: &r, Dir: root, EntryPoint: data[i].name, config: "../config/valid.textproto"}
+			o := Options{Report: &r, Dir: root, EntryPoint: data[i].name}
 			err := Run(context.Background(), &o)
 			if data[i].err != "" {
 				if err == nil {
@@ -2652,7 +2684,7 @@ func TestTestDataEmit(t *testing.T) {
 			} else if err != nil {
 				t.Fatal(err)
 			}
-			if diff := cmp.Diff(data[i].findings, r.findings); diff != "" {
+			if diff := cmp.Diff(data[i].findings, r.findings, cmp_opts...); diff != "" {
 				t.Errorf("mismatch (-want +got):\n%s", diff)
 			}
 			if diff := cmp.Diff(data[i].artifacts, r.artifacts); diff != "" {
@@ -3073,8 +3105,8 @@ type reportNoPrint struct {
 	t testing.TB
 }
 
-func (r *reportNoPrint) EmitFinding(ctx context.Context, check string, level Level, message, root, file string, s Span, replacements []string) error {
-	r.t.Errorf("unexpected finding: %s: %s, %q, %s, %s, %# v, %v", check, level, message, root, file, s, replacements)
+func (r *reportNoPrint) EmitFinding(ctx context.Context, check string, level Level, message, root, file string, s Span, replacements []string, props map[string]string) error {
+	r.t.Errorf("unexpected finding: %s: %s, %q, %s, %s, %# v, %v, %v", check, level, message, root, file, s, replacements, props)
 	return errors.New("not implemented")
 }
 
@@ -3110,6 +3142,7 @@ type finding struct {
 	File         string
 	Span         Span
 	Replacements []string
+	Properties   map[string]string
 }
 
 type artifact struct {
@@ -3126,7 +3159,7 @@ type reportEmitNoPrint struct {
 	artifacts []artifact
 }
 
-func (r *reportEmitNoPrint) EmitFinding(ctx context.Context, check string, level Level, message, root, file string, s Span, replacements []string) error {
+func (r *reportEmitNoPrint) EmitFinding(ctx context.Context, check string, level Level, message, root, file string, s Span, replacements []string, props map[string]string) error {
 	r.mu.Lock()
 	r.findings = append(r.findings, finding{
 		Check:        check,
@@ -3136,6 +3169,7 @@ func (r *reportEmitNoPrint) EmitFinding(ctx context.Context, check string, level
 		File:         file,
 		Span:         s,
 		Replacements: replacements,
+		Properties:   props,
 	})
 	r.mu.Unlock()
 	return nil
@@ -3154,7 +3188,7 @@ type reportEmitPrint struct {
 	artifacts []artifact
 }
 
-func (r *reportEmitPrint) EmitFinding(ctx context.Context, check string, level Level, message, root, file string, s Span, replacements []string) error {
+func (r *reportEmitPrint) EmitFinding(ctx context.Context, check string, level Level, message, root, file string, s Span, replacements []string, props map[string]string) error {
 	r.mu.Lock()
 	r.findings = append(r.findings, finding{
 		Check:        check,
@@ -3164,6 +3198,7 @@ func (r *reportEmitPrint) EmitFinding(ctx context.Context, check string, level L
 		File:         file,
 		Span:         s,
 		Replacements: replacements,
+		Properties:   props,
 	})
 	r.mu.Unlock()
 	return nil
@@ -3239,6 +3274,135 @@ shac.register_check(cb)`)
 shac.register_check(cb)`)
 		testStarlarkPrint(t, root, "test2.star", false, true, want)
 	})
+}
+
+func TestRun_PropertiesValidation(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name           string
+		shac_textproto string
+		star           string
+		wantErr        string
+		wantFinding    bool
+	}{
+		{
+			name:           "omitted schema disallows any property",
+			shac_textproto: ``,
+			star: `
+def cb(ctx):
+    ctx.emit.finding(level = "notice", message = "foo", properties = {"any_prop": "val"})
+shac.register_check(cb)
+`,
+			wantErr: ` for parameter "properties": no properties are supported in allowed_findings_properties field`,
+		},
+		{
+			name: "empty schema allows no properties",
+			shac_textproto: `
+allowed_findings_properties: {}
+`,
+			star: `
+def cb(ctx):
+    ctx.emit.finding(level = "notice", message = "foo", properties = {"any_prop": "val"})
+shac.register_check(cb)
+`,
+			wantErr: ` for parameter "properties": no properties are supported in allowed_findings_properties field`,
+		},
+		{
+			name: "empty schema allows empty properties",
+			shac_textproto: `
+allowed_findings_properties: {}
+`,
+			star: `
+def cb(ctx):
+    ctx.emit.finding(level = "notice", message = "foo", properties = {})
+shac.register_check(cb)
+`,
+			wantFinding: true,
+		},
+		{
+			name: "empty schema allows omitted properties",
+			shac_textproto: `
+allowed_findings_properties: {}
+`,
+			star: `
+def cb(ctx):
+    ctx.emit.finding(level = "notice", message = "foo")
+shac.register_check(cb)
+`,
+			wantFinding: true,
+		},
+		{
+			name: "validated properties success",
+			shac_textproto: `
+allowed_findings_properties: {
+  properties: [
+    {
+      name: "str_prop"
+    }
+  ]
+}
+`,
+			star: `
+def cb(ctx):
+    ctx.emit.finding(level = "notice", message = "foo", properties = {"str_prop": "val"})
+shac.register_check(cb)
+`,
+			wantFinding: true,
+		},
+		{
+			name: "validated properties invalid key",
+			shac_textproto: `
+allowed_findings_properties: {
+  properties: [
+    {
+      name: "str_prop"
+    }
+  ]
+}
+`,
+			star: `
+def cb(ctx):
+    ctx.emit.finding(level = "notice", message = "foo", properties = {"invalid_prop": "val"})
+shac.register_check(cb)
+`,
+			wantErr: `key "invalid_prop" not found in allowed_findings_properties`,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			root := t.TempDir()
+			writeFile(t, root, "shac.star", tc.star)
+			writeFile(t, root, "shac.textproto", tc.shac_textproto)
+			var report reportEmitNoPrint
+			o := Options{
+				Dir:        root,
+				Report:     &report,
+				EntryPoint: "shac.star",
+			}
+			err := Run(context.Background(), &o)
+			if tc.wantErr != "" {
+				if err == nil {
+					t.Fatal("expected error, got nil")
+				}
+				if !strings.Contains(err.Error(), tc.wantErr) {
+					t.Errorf("expected error to contain %q, got %q", tc.wantErr, err)
+				}
+			} else {
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+				if tc.wantFinding {
+					report.mu.Lock()
+					findingsLen := len(report.findings)
+					report.mu.Unlock()
+					if findingsLen == 0 {
+						t.Error("expected a finding to be emitted, got none")
+					}
+				}
+			}
+		})
+	}
 }
 
 func init() {

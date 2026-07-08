@@ -76,4 +76,14 @@ def cb(ctx):
         replacements = ["this text is a replacement\nfor the entire file\n"],
     )
 
+    ctx.emit.finding(
+        level = "warning",
+        message = "contains properties",
+        filepath = "file.txt",
+        properties = {
+            "failIfMissingLabel": "Problem-Review",
+            "str_key": "str",
+        },
+    )
+
 shac.register_check(cb)

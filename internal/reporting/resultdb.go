@@ -21,9 +21,11 @@ import (
 	"fmt"
 	"html"
 	"io"
+	"maps"
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"sync"
 	"time"
 
@@ -113,22 +115,25 @@ func (l *luci) Close() error {
 	return l.eg.Wait()
 }
 
-func (l *luci) EmitFinding(ctx context.Context, check string, level engine.Level, message, root, file string, s engine.Span, replacements []string) error {
+func (l *luci) EmitFinding(ctx context.Context, check string, level engine.Level, message, root, file string, s engine.Span, replacements []string, props map[string]string) error {
 	r := l.getTestResult(check)
-	check = html.EscapeString(check)
-	lev := html.EscapeString(string(level))
-	file = html.EscapeString(file)
-	message = html.EscapeString(message)
-	if file != "" {
-		// TODO(maruel): Do not drop span and replacements!
-		if s.Start.Line > 0 {
-			r.SummaryHtml += fmt.Sprintf("[%s/%s] %s(%d): %s<br>", check, lev, file, s.Start.Line, message)
-			return nil
+
+	overview := overviewString(false, unknownAnsi, check, level, message, root, file, s, replacements, nil)
+
+	r.SummaryHtml += html.EscapeString(overview) + "<br>"
+
+	if props != nil {
+		keys := slices.Collect(maps.Keys(props))
+		slices.Sort(keys)
+
+		for _, k := range keys {
+			r.Tags = append(r.Tags, &resultpb.StringPair{
+				Key:   k,
+				Value: fmt.Sprintf("%v", props[k]),
+			})
 		}
-		r.SummaryHtml += fmt.Sprintf("[%s/%s] %s: %s<br>", check, lev, file, message)
-		return nil
 	}
-	r.SummaryHtml += fmt.Sprintf("[%s/%s] %s<br>", check, lev, message)
+
 	return nil
 }
 

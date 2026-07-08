@@ -259,16 +259,27 @@ def cb(ctx):
 shac.register_check(cb)
 ```
 
-### Arguments
+### Args
 
-* **level**: One of "notice", "warning" or "error".
-* **message**: Message of the finding. May be omitted for checks marked with formatter=True, as long as filepath is specified, level is "error", and replacements has a length of 1.
-* **filepath**: (optional) Path to the source file to annotate.
-* **line**: (optional) Line where the finding should start. 1 based.
-* **col**: (optional) Column where the finding should start. 1 based.
-* **end_line**: (optional) Line where the finding should end if it represents a span, inclusive. 1 based.
-* **end_col**: (optional) Column where the finding should end if it represents a span, exclusive. 1 based.
-* **replacements**: (optional) A sequence of str, representing possible replacement suggestions. The sequence can be a list or a tuple. The replacements apply to the entire file if no span is specified for the finding. Replacements that apply to entire lines should include trailing newlines, unless the line should be removed.
+level: One of "notice", "warning" or "error".
+message: Message of the finding. May be omitted for checks marked with
+  formatter=True, as long as filepath is specified, level is "error", and
+  replacements has a length of 1.
+filepath: (optional) Path to the source file to annotate.
+line: (optional) Line where the finding should start. 1 based.
+col: (optional) Column where the finding should start. 1 based.
+end_line: (optional) Line where the finding should end if it represents a
+  span, inclusive. 1 based.
+end_col: (optional) Column where the finding should end if it represents a
+  span, exclusive. 1 based.
+replacements: (optional) A sequence of str, representing possible
+  replacement suggestions. The sequence can be a list or a tuple. The
+  replacements apply to the entire file if no span is specified for the
+  finding. Replacements that apply to entire lines should include trailing
+  newlines, unless the line should be removed.
+properties (optional): A dictionary with str keys, additional key-value
+  metadata that may be interpreted by downstream tooling.
+
 
 ## ctx.emit.artifact
 

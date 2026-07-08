@@ -42,6 +42,10 @@ message Document {
   repeated Var vars = 8;
   // Environment variables to pass through the sandbox.
   repeated PassthroughEnv passthrough_env = 9;
+
+  // Allowed properties for findings.
+  // To disallow any properties, explicitly specify an empty AllowedProperties.
+  AllowedProperties allowed_findings_properties = 10;
 }
 
 // Var specifies a variable that may be passed into checks at runtime by the
@@ -113,4 +117,14 @@ message VersionDigest {
   // digest is the hash of the content of the dependency. It uses the same
   // hashing algorithm than go.sum. See https://golang.org/x/mod/sumdb/dirhash.
   string digest = 2;
+}
+
+// Property is a property name.
+message Property {
+  string name = 1;
+}
+
+// AllowedProperties is a sequence of allowed properties.
+message AllowedProperties {
+  repeated Property properties = 1;
 }

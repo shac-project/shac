@@ -30,9 +30,9 @@ type MultiReport struct {
 
 var _ Report = (*MultiReport)(nil)
 
-func (t *MultiReport) EmitFinding(ctx context.Context, check string, level engine.Level, message, root, file string, s engine.Span, replacements []string) error {
+func (t *MultiReport) EmitFinding(ctx context.Context, check string, level engine.Level, message, root, file string, s engine.Span, replacements []string, props map[string]string) error {
 	return t.do(func(r Report) error {
-		return r.EmitFinding(ctx, check, level, message, root, file, s, replacements)
+		return r.EmitFinding(ctx, check, level, message, root, file, s, replacements, props)
 	})
 }
 

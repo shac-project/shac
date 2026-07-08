@@ -200,7 +200,7 @@ type findingCollector struct {
 
 var _ Report = (*findingCollector)(nil)
 
-func (c *findingCollector) EmitFinding(ctx context.Context, check string, level Level, message, root, file string, s Span, replacements []string) error {
+func (c *findingCollector) EmitFinding(ctx context.Context, check string, level Level, message, root, file string, s Span, replacements []string, props map[string]string) error {
 	// Only findings with a single replacement will be automatically fixed.
 	// Findings with more than one replacement do not have a single fix that can
 	// be automatically chosen.

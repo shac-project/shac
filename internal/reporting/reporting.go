@@ -22,6 +22,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -92,10 +93,10 @@ func (s *synchronized) Close() error {
 	return s.r.Close()
 }
 
-func (s *synchronized) EmitFinding(ctx context.Context, check string, level engine.Level, message, root, file string, span engine.Span, replacements []string) error {
+func (s *synchronized) EmitFinding(ctx context.Context, check string, level engine.Level, message, root, file string, span engine.Span, replacements []string, props map[string]string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.r.EmitFinding(ctx, check, level, message, root, file, span, replacements)
+	return s.r.EmitFinding(ctx, check, level, message, root, file, span, replacements, props)
 }
 
 func (s *synchronized) EmitArtifact(ctx context.Context, check, root, file string, content []byte) error {
@@ -124,8 +125,8 @@ func (b *basic) Close() error {
 	return nil
 }
 
-func (b *basic) EmitFinding(ctx context.Context, check string, level engine.Level, message, root, file string, s engine.Span, replacements []string) error {
-	_, err := fmt.Fprint(b.out, overviewString(false, unknownAnsi, check, level, message, root, file, s, replacements))
+func (b *basic) EmitFinding(ctx context.Context, check string, level engine.Level, message, root, file string, s engine.Span, replacements []string, props map[string]string) error {
+	_, err := fmt.Fprintln(b.out, overviewString(false, unknownAnsi, check, level, message, root, file, s, replacements, props))
 	return err
 }
 
@@ -168,10 +169,12 @@ func (g *github) Close() error {
 	return nil
 }
 
-func (g *github) EmitFinding(ctx context.Context, check string, level engine.Level, message, root, file string, s engine.Span, replacements []string) error {
+func (g *github) EmitFinding(ctx context.Context, check string, level engine.Level, message, root, file string, s engine.Span, replacements []string, props map[string]string) error {
 	var builder strings.Builder
 	fmt.Fprintf(&builder, "::%s ", level)
 	titlePrefix := "::"
+	// TODO(eakammer): properties does not have an analog in github actions; however, we could
+	// consider including the information in the title or error message
 	if file != "" {
 		titlePrefix = ","
 		fmt.Fprintf(&builder, "::file=%s", file)
@@ -222,7 +225,7 @@ func (i *interactive) Close() error {
 	return nil
 }
 
-func overviewString(withColor bool, color ansiCode, check string, level engine.Level, message, root, file string, s engine.Span, replacements []string) string {
+func overviewString(withColor bool, color ansiCode, check string, level engine.Level, message, root, file string, s engine.Span, replacements []string, props map[string]string) string {
 	var builder strings.Builder
 	if withColor {
 		fmt.Fprintf(&builder, "%s[%s%s%s/%s%s%s] ", reset, fgHiCyan, check, reset, color, level, reset)
@@ -238,13 +241,24 @@ func overviewString(withColor bool, color ansiCode, check string, level engine.L
 	}
 	builder.WriteString(message)
 	// TODO(maruel): Do not drop replacements!
-	builder.WriteString("\n")
+	if props != nil {
+		// create a string for each property then sort them to keep this deterministic
+		propStrs := make([]string, 0, len(props))
+		for k, v := range props {
+			propStrs = append(propStrs, fmt.Sprintf("%q:%v", k, v))
+		}
+		slices.Sort(propStrs)
+
+		builder.WriteString(" properties: {")
+		builder.WriteString(strings.Join(propStrs, ", "))
+		builder.WriteString("}")
+	}
 	return builder.String()
 }
 
-func (i *interactive) EmitFinding(ctx context.Context, check string, level engine.Level, message, root, file string, s engine.Span, replacements []string) error {
+func (i *interactive) EmitFinding(ctx context.Context, check string, level engine.Level, message, root, file string, s engine.Span, replacements []string, props map[string]string) error {
 	c := levelColor[level]
-	_, err := fmt.Fprint(i.out, overviewString(true, c, check, level, message, root, file, s, replacements))
+	_, err := fmt.Fprintln(i.out, overviewString(true, c, check, level, message, root, file, s, replacements, props))
 	if err != nil {
 		return err
 	}
@@ -252,7 +266,6 @@ func (i *interactive) EmitFinding(ctx context.Context, check string, level engin
 	if file == "" || s.Start.Line <= 0 {
 		return nil
 	}
-
 	// Emit the line and a bit of context in interactive mode.
 	b, err := os.ReadFile(filepath.Join(root, file))
 	if err != nil {

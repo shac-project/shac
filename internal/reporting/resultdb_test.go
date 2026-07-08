@@ -87,9 +87,17 @@ func TestResultDBReporter(t *testing.T) {
 	startTime := time.Now().Add(-time.Minute)
 	r.CheckCompleted(
 		ctx, "passing-check", startTime, time.Second, engine.Notice, nil)
+
+	r.EmitFinding(ctx, "props-check", engine.Error, "message with props", "", "bar.py", engine.Span{}, nil, map[string]string{
+		"a": "b",
+		"c": "1",
+	})
+	r.CheckCompleted(
+		ctx, "props-check", startTime.Add(20*time.Second), time.Second, engine.Error, nil)
+
 	msg := "found an issue"
 	for i := 0; i <= resultDBMaxSummaryHTMLLength; i += len(msg) {
-		r.EmitFinding(ctx, "failing-check", engine.Error, msg, "", "foo.py", engine.Span{}, nil)
+		r.EmitFinding(ctx, "failing-check", engine.Error, msg, "", "foo.py", engine.Span{}, nil, nil)
 	}
 	r.CheckCompleted(
 		ctx, "failing-check", startTime.Add(5*time.Second), 2*time.Second, engine.Error, nil)
@@ -116,6 +124,17 @@ func TestResultDBReporter(t *testing.T) {
 					Expected:  true,
 					StartTime: timestamppb.New(startTime),
 					Duration:  durationpb.New(time.Second),
+				},
+				{
+					TestId:      "shac/props-check",
+					Status:      resultpb.TestStatus_FAIL,
+					StartTime:   timestamppb.New(startTime.Add(20 * time.Second)),
+					Duration:    durationpb.New(time.Second),
+					SummaryHtml: "[props-check/error] bar.py: message with props<br>",
+					Tags: []*resultpb.StringPair{
+						{Key: "a", Value: "b"},
+						{Key: "c", Value: "1"},
+					},
 				},
 				{
 					TestId:    "shac/failing-check",

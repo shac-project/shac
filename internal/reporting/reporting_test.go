@@ -29,6 +29,7 @@ import (
 	"go.fuchsia.dev/shac-project/shac/internal/sarif"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/testing/protocmp"
+	"google.golang.org/protobuf/types/known/structpb"
 )
 
 func TestGet(t *testing.T) {
@@ -46,15 +47,22 @@ func TestBasic(t *testing.T) {
 	r := basic{out: &buf}
 	ctx := context.Background()
 	// No context.
-	if err := r.EmitFinding(ctx, "mycheck", engine.Notice, "message1", "", "", engine.Span{}, nil); err != nil {
+	if err := r.EmitFinding(ctx, "mycheck", engine.Notice, "message1", "", "", engine.Span{}, nil, nil); err != nil {
 		t.Fatal(err)
 	}
 	// Only a file.
-	if err := r.EmitFinding(ctx, "mycheck", engine.Notice, "message2", "", "testdata/file.txt", engine.Span{}, nil); err != nil {
+	if err := r.EmitFinding(ctx, "mycheck", engine.Notice, "message2", "", "testdata/file.txt", engine.Span{}, nil, nil); err != nil {
 		t.Fatal(err)
 	}
 	// File and line number. More than this is ignored.
-	if err := r.EmitFinding(ctx, "mycheck", engine.Notice, "message3", "", "testdata/file.txt", engine.Span{Start: engine.Cursor{Line: 10}}, nil); err != nil {
+	if err := r.EmitFinding(ctx, "mycheck", engine.Notice, "message3", "", "testdata/file.txt", engine.Span{Start: engine.Cursor{Line: 10}}, nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	p := map[string]string{
+		"str1": "foo",
+		"str2": "bar",
+	}
+	if err := r.EmitFinding(ctx, "mycheck", engine.Notice, "message4", "", "", engine.Span{}, nil, p); err != nil {
 		t.Fatal(err)
 	}
 	if err := r.EmitArtifact(ctx, "mycheck", "", "testdata/file.txt", []byte("content")); err == nil {
@@ -71,6 +79,7 @@ func TestBasic(t *testing.T) {
 	want := "[mycheck/notice] message1\n" +
 		"[mycheck/notice] testdata/file.txt: message2\n" +
 		"[mycheck/notice] testdata/file.txt(10): message3\n" +
+		`[mycheck/notice] message4 properties: {"str1":foo, "str2":bar}` + "\n" +
 		"- mycheck (success in 1ms)\n" +
 		"- badcheck (error in 1ms): bad\n" +
 		"[src.star:12] debugmsg\n" +
@@ -85,35 +94,40 @@ func TestGitHub(t *testing.T) {
 	r := github{out: &buf}
 	ctx := context.Background()
 	// No context.
-	if err := r.EmitFinding(ctx, "mycheck", engine.Notice, "message1", "", "", engine.Span{}, nil); err != nil {
+	if err := r.EmitFinding(ctx, "mycheck", engine.Notice, "message1", "", "", engine.Span{}, nil, nil); err != nil {
 		t.Fatal(err)
 	}
 	// Only a file.
-	if err := r.EmitFinding(ctx, "mycheck", engine.Notice, "message2", "", "testdata/file.txt", engine.Span{}, nil); err != nil {
+	if err := r.EmitFinding(ctx, "mycheck", engine.Notice, "message2", "", "testdata/file.txt", engine.Span{}, nil, nil); err != nil {
 		t.Fatal(err)
 	}
 	// File and line number.
-	if err := r.EmitFinding(ctx, "mycheck", engine.Notice, "message3", "", "testdata/file.txt", engine.Span{Start: engine.Cursor{Line: 10}}, nil); err != nil {
+	if err := r.EmitFinding(ctx, "mycheck", engine.Notice, "message3", "", "testdata/file.txt", engine.Span{Start: engine.Cursor{Line: 10}}, nil, nil); err != nil {
 		t.Fatal(err)
 	}
 	// File, line number and column.
-	if err := r.EmitFinding(ctx, "mycheck", engine.Notice, "message4", "", "testdata/file.txt", engine.Span{Start: engine.Cursor{Line: 10, Col: 1}}, nil); err != nil {
+	if err := r.EmitFinding(ctx, "mycheck", engine.Notice, "message4", "", "testdata/file.txt", engine.Span{Start: engine.Cursor{Line: 10, Col: 1}}, nil, nil); err != nil {
 		t.Fatal(err)
 	}
 	// File, two line numbers.
-	if err := r.EmitFinding(ctx, "mycheck", engine.Notice, "message5", "", "testdata/file.txt", engine.Span{Start: engine.Cursor{Line: 10}, End: engine.Cursor{Line: 12}}, nil); err != nil {
+	if err := r.EmitFinding(ctx, "mycheck", engine.Notice, "message5", "", "testdata/file.txt", engine.Span{Start: engine.Cursor{Line: 10}, End: engine.Cursor{Line: 12}}, nil, nil); err != nil {
 		t.Fatal(err)
 	}
 	// file, start and end span on separate lines.
-	if err := r.EmitFinding(ctx, "mycheck", engine.Notice, "message6", "", "testdata/file.txt", engine.Span{Start: engine.Cursor{Line: 10, Col: 1}, End: engine.Cursor{Line: 12, Col: 2}}, nil); err != nil {
+	if err := r.EmitFinding(ctx, "mycheck", engine.Notice, "message6", "", "testdata/file.txt", engine.Span{Start: engine.Cursor{Line: 10, Col: 1}, End: engine.Cursor{Line: 12, Col: 2}}, nil, nil); err != nil {
 		t.Fatal(err)
 	}
 	// handle edge cases around end column being unset despite a start column being provided
-	if err := r.EmitFinding(ctx, "mycheck", engine.Notice, "message7", "", "testdata/file.txt", engine.Span{Start: engine.Cursor{Line: 10, Col: 1}, End: engine.Cursor{Line: 12}}, nil); err != nil {
+	if err := r.EmitFinding(ctx, "mycheck", engine.Notice, "message7", "", "testdata/file.txt", engine.Span{Start: engine.Cursor{Line: 10, Col: 1}, End: engine.Cursor{Line: 12}}, nil, nil); err != nil {
 		t.Fatal(err)
 	}
 	// handle edge cases around start  column being 0 and providing an end column
-	if err := r.EmitFinding(ctx, "mycheck", engine.Notice, "message8", "", "testdata/file.txt", engine.Span{Start: engine.Cursor{Line: 10}, End: engine.Cursor{Line: 12, Col: 2}}, nil); err != nil {
+	if err := r.EmitFinding(ctx, "mycheck", engine.Notice, "message8", "", "testdata/file.txt", engine.Span{Start: engine.Cursor{Line: 10}, End: engine.Cursor{Line: 12, Col: 2}}, nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	// properties
+	p := map[string]string{"foo": "bar"}
+	if err := r.EmitFinding(ctx, "mycheck", engine.Warning, "message9", "", "", engine.Span{}, nil, p); err != nil {
 		t.Fatal(err)
 	}
 	if err := r.EmitArtifact(ctx, "mycheck", "", "testdata/file.txt", []byte("content")); err == nil {
@@ -135,6 +149,7 @@ func TestGitHub(t *testing.T) {
 		"::notice ::file=testdata/file.txt,line=10,col=1,endLine=12,endCol=2,title=mycheck::message6\n" +
 		"::notice ::file=testdata/file.txt,line=10,col=1,endLine=12,title=mycheck::message7\n" +
 		"::notice ::file=testdata/file.txt,line=10,endLine=12,endCol=2,title=mycheck::message8\n" +
+		"::warning ::title=mycheck::message9\n" +
 		"::debug::[src.star:12] debugmsg\n" +
 		"::debug::mycheck [src.star:12] debugmsg\n"
 	if diff := cmp.Diff(want, buf.String()); diff != "" {
@@ -342,7 +357,7 @@ func TestInteractive_Finding(t *testing.T) {
 			// Note that many of the ANSI code are hacked out in ansi_test.go.
 			r := interactive{out: colorable.NewNonColorable(&buf)}
 			ctx := context.Background()
-			if err := r.EmitFinding(ctx, "mycheck", l.l, "message1", "testdata", l.filepath, l.span, nil); err != nil {
+			if err := r.EmitFinding(ctx, "mycheck", l.l, "message1", "testdata", l.filepath, l.span, nil, nil); err != nil {
 				t.Fatal(err)
 			}
 			if err := r.Close(); err != nil {
@@ -400,10 +415,13 @@ func TestSARIF(t *testing.T) {
 		"foo/bar.c",
 		engine.Span{},
 		nil,
+		nil,
 	); err != nil {
 		t.Fatal(err)
 	}
 
+	props := map[string]string{"foo": "bar"}
+	propsForProto := map[string]any{"foo": "bar"}
 	if err := r.EmitFinding(
 		ctx,
 		"check1",
@@ -416,6 +434,7 @@ func TestSARIF(t *testing.T) {
 			End:   engine.Cursor{Line: 6, Col: 2},
 		},
 		[]string{"blah", "meh"},
+		props,
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -431,6 +450,7 @@ func TestSARIF(t *testing.T) {
 			Start: engine.Cursor{Line: 2, Col: 3},
 		},
 		nil,
+		nil,
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -442,6 +462,11 @@ func TestSARIF(t *testing.T) {
 	var got sarif.Document
 	if err := protojson.Unmarshal(buf.Bytes(), &got); err != nil {
 		t.Fatal(err)
+	}
+
+	wantProperties, err := structpb.NewStruct(propsForProto)
+	if err != nil {
+		t.Fatalf("invalid test configruation for wantProperties: %s", err)
 	}
 
 	want := sarif.Document{
@@ -532,6 +557,7 @@ func TestSARIF(t *testing.T) {
 								},
 							},
 						},
+						Properties: wantProperties,
 					},
 				},
 			},

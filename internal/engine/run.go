@@ -247,7 +247,7 @@ func (l Level) isValid() bool {
 type Report interface {
 	// EmitFinding emits a finding by a check for a specific file. This is not a
 	// failure by itself, unless level "error" is used.
-	EmitFinding(ctx context.Context, check string, level Level, message, root, file string, s Span, replacements []string) error
+	EmitFinding(ctx context.Context, check string, level Level, message, root, file string, s Span, replacements []string, props map[string]string) error
 	// EmitArtifact emits an artifact by a check.
 	//
 	// Only one of root or content can be specified. If root is specified, it is
@@ -452,21 +452,33 @@ func runInner(ctx context.Context, o *Options, tmpdir string) error {
 			}
 			scm = &subdirSCM{s: scm, subdir: normalized}
 		}
+		var allowedFindingsProps map[string]bool
+		if doc.AllowedFindingsProperties != nil {
+			allowedFindingsProps = make(map[string]bool, len(doc.AllowedFindingsProperties.Properties))
+
+			for _, p := range doc.AllowedFindingsProperties.Properties {
+				if _, exists := allowedFindingsProps[p.Name]; exists {
+					return nil, fmt.Errorf("cannot contain duplicate property name in allowed_findings_properties: %s", p.Name)
+				}
+				allowedFindingsProps[p.Name] = true
+			}
+		}
 		return &shacState{
-			allowNetwork:   doc.AllowNetwork,
-			env:            &env,
-			filter:         o.Filter,
-			entryPoint:     entryPoint,
-			r:              o.Report,
-			root:           root,
-			sandbox:        sb,
-			scm:            scm,
-			subdir:         subdir,
-			subprocessSem:  subprocessSem,
-			tmpdir:         filepath.Join(tmpdir, strconv.Itoa(idx)),
-			writableRoot:   doc.WritableRoot,
-			vars:           vars,
-			passthroughEnv: doc.PassthroughEnv,
+			allowNetwork:              doc.AllowNetwork,
+			env:                       &env,
+			filter:                    o.Filter,
+			entryPoint:                entryPoint,
+			r:                         o.Report,
+			root:                      root,
+			sandbox:                   sb,
+			scm:                       scm,
+			subdir:                    subdir,
+			subprocessSem:             subprocessSem,
+			tmpdir:                    filepath.Join(tmpdir, strconv.Itoa(idx)),
+			writableRoot:              doc.WritableRoot,
+			vars:                      vars,
+			passthroughEnv:            doc.PassthroughEnv,
+			allowedFindingsProperties: allowedFindingsProps,
 		}, nil
 	}
 	var shacStates []*shacState
@@ -751,6 +763,9 @@ type shacState struct {
 	// filter controls which checks run. If nil, all checks will run.
 	filter         CheckFilter
 	passthroughEnv []*PassthroughEnv
+
+	// allowedFindingsProperties is a map of the allowed property names for shac results.
+	allowedFindingsProperties map[string]bool
 
 	// Limits the number of concurrent subprocesses launched by ctx.os.exec().
 	subprocessSem *semaphore.Weighted
