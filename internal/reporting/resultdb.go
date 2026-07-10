@@ -34,6 +34,7 @@ import (
 	"go.fuchsia.dev/shac-project/shac/internal/engine"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -44,7 +45,13 @@ const (
 	resultDBMaxSummaryHTMLLength = 4 * 1024
 	// https://source.chromium.org/chromium/infra/infra/+/main:go/src/go.chromium.org/luci/resultdb/pbutil/test_result.go;l=41;drc=1eaf63ee80de3e7de3139800ebe7d0d5497a42e2
 	resultDBMaxFailureReasonLength = 1024
+	// https://source.chromium.org/chromium/infra/infra_superproject/+/main:infra/go/src/go.chromium.org/luci/resultdb/pbutil/strpair.go;l=34;drc=498d2495ab53115e897fd1e6afca361adc7b46e2
+	resultDBMaxTagLength = 16 * 1024
 )
+
+type tagPair struct {
+	key, val string
+}
 
 type luci struct {
 	doneChecks chan *sinkpb.TestResult
@@ -54,8 +61,12 @@ type luci struct {
 	// Overrideable to allow better determinism during tests.
 	batchWaitDuration time.Duration
 
+	eg errgroup.Group
+
+	// mu protects liveChecks across different checks
+	// any calls for an individual check are guaranteed to be sequential and do not need to be guarded
+	// by mu
 	mu         sync.Mutex
-	eg         errgroup.Group
 	liveChecks map[string]*sinkpb.TestResult
 }
 
@@ -153,18 +164,45 @@ func (l *luci) EmitArtifact(ctx context.Context, check, root, file string, conte
 	return nil
 }
 
+func makeTagsUniqueAndValid(tags []*resultpb.StringPair) ([]*resultpb.StringPair, string) {
+	var size int
+	tagCheck := map[tagPair]bool{}
+	uniqueTags := []*resultpb.StringPair{}
+	for _, t := range tags {
+		tp := tagPair{key: t.Key, val: t.Value}
+		if _, exists := tagCheck[tp]; !exists {
+			tagCheck[tp] = true
+			tagSize := proto.Size(t)
+			if size+tagSize > resultDBMaxTagLength {
+				return uniqueTags, "<br>Tags truncated<br>"
+			} else {
+				size += tagSize
+				uniqueTags = append(uniqueTags, t)
+			}
+		}
+	}
+	return uniqueTags, ""
+}
+
+func maybeTruncateMessage(msg string, tagMsg string, maxSize int) string {
+	truncationNotice := "... (truncated)"
+	if len(msg)+len(tagMsg) > maxSize {
+		sizeToRemove := len(truncationNotice) + len(tagMsg)
+		// TODO(olivernewman): Be careful not to truncate in the middle of an
+		// HTML tag.
+		return msg[:maxSize-sizeToRemove] + truncationNotice + tagMsg
+	} else {
+		return msg + tagMsg
+	}
+}
+
 func (l *luci) CheckCompleted(ctx context.Context, check string, start time.Time, d time.Duration, level engine.Level, err error) {
 	r := l.getTestResult(check)
 	r.StartTime = timestamppb.New(start)
 	r.Duration = durationpb.New(d)
-	truncationNotice := "... (truncated)"
 	if err != nil {
 		r.Status = resultpb.TestStatus_CRASH
-		msg := err.Error()
-		if len(msg) > resultDBMaxFailureReasonLength {
-			msg = msg[:resultDBMaxFailureReasonLength-len(truncationNotice)]
-			msg = msg + truncationNotice
-		}
+		msg := maybeTruncateMessage(err.Error(), "", resultDBMaxFailureReasonLength)
 		r.FailureReason = &resultpb.FailureReason{PrimaryErrorMessage: msg}
 	} else if level == engine.Error {
 		r.Status = resultpb.TestStatus_FAIL
@@ -172,12 +210,10 @@ func (l *luci) CheckCompleted(ctx context.Context, check string, start time.Time
 		r.Status = resultpb.TestStatus_PASS
 		r.Expected = true
 	}
-	if len(r.SummaryHtml) > resultDBMaxSummaryHTMLLength {
-		// TODO(olivernewman): Be careful not to truncate in the middle of an
-		// HTML tag.
-		r.SummaryHtml = r.SummaryHtml[:resultDBMaxSummaryHTMLLength-len(truncationNotice)] + truncationNotice
-	}
 	// TODO(maruel): Tag r.Tags with "shac".
+	tags, tagMsg := makeTagsUniqueAndValid(r.Tags)
+	r.SummaryHtml = maybeTruncateMessage(r.SummaryHtml, tagMsg, resultDBMaxSummaryHTMLLength)
+	r.Tags = tags
 	l.mu.Lock()
 	delete(l.liveChecks, check)
 	l.mu.Unlock()

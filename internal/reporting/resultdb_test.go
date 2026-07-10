@@ -24,6 +24,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -167,6 +168,67 @@ func TestResultDBReporter(t *testing.T) {
 	}
 	if diff := cmp.Diff(expected, got, protocmp.Transform()); diff != "" {
 		t.Errorf("Unexpected requests (-want +got):\n%s", diff)
+	}
+}
+
+func TestResultDBReporter_TagDeduplication(t *testing.T) {
+	ctx := context.Background()
+	var got []*sinkpb.ReportTestResultsRequest
+	var mu sync.Mutex
+	handler := http.HandlerFunc(func(resp http.ResponseWriter, req *http.Request) {
+		b, _ := io.ReadAll(req.Body)
+		_ = req.Body.Close()
+		var res sinkpb.ReportTestResultsRequest
+		_ = protojson.Unmarshal(b, &res)
+		mu.Lock()
+		got = append(got, &res)
+		mu.Unlock()
+	})
+	server := httptest.NewServer(handler)
+	defer server.Close()
+	luciContextPath := filepath.Join(t.TempDir(), "luci_context.json")
+	t.Setenv("LUCI_CONTEXT", luciContextPath)
+	writeJSON(t, luciContextPath, luciContext{
+		ResultDB:   resultDB{CurrentInvocation: resultDBInvocation{Name: "foo"}},
+		ResultSink: resultSinkContext{AuthToken: "s3cr3t", ResultSinkAddr: strings.TrimPrefix(server.URL, "http://")},
+	})
+	r := luci{batchWaitDuration: 24 * time.Hour}
+	r.init(ctx)
+	// Emit multiple findings with duplicate and unique properties
+	for i := range 50 {
+		_ = r.EmitFinding(ctx, "dedupe-check", engine.Warning, fmt.Sprintf("finding %d", i),
+			"",
+			"foo.rs",
+			engine.Span{},
+			nil,
+			map[string]string{
+				"other_finding": "finding",
+				"finding_id":    fmt.Sprintf("id-%d", i%2), // Only 2 unique IDs
+			},
+		)
+	}
+	r.CheckCompleted(ctx, "dedupe-check", time.Now(), time.Second, engine.Warning, nil)
+	if err := r.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || len(got[0].TestResults) != 1 {
+		t.Fatalf("Expected 1 TestResult, got %d requests", len(got))
+	}
+	res := got[0].TestResults[0]
+	// Sort tags alphabetically by Key then Value for deterministic comparison
+	slices.SortFunc(res.Tags, func(a, b *resultpb.StringPair) int {
+		if c := strings.Compare(a.Key, b.Key); c != 0 {
+			return c
+		}
+		return strings.Compare(a.Value, b.Value)
+	})
+	expectedTags := []*resultpb.StringPair{
+		{Key: "finding_id", Value: "id-0"},
+		{Key: "finding_id", Value: "id-1"},
+		{Key: "other_finding", Value: "finding"},
+	}
+	if diff := cmp.Diff(expectedTags, res.Tags, protocmp.Transform()); diff != "" {
+		t.Errorf("Unexpected Tags (-want +got):\n%s", diff)
 	}
 }
 

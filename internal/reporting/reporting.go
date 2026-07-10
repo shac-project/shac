@@ -33,6 +33,11 @@ import (
 )
 
 // Report is a closable engine.Report.
+//
+// Concurrency contract:
+//   - Methods may be called concurrently across different check names.
+//   - For any single check name, calls to EmitFinding, EmitArtifact, and CheckCompleted
+//     are guaranteed to be called sequentially.
 type Report interface {
 	io.Closer
 	engine.Report
