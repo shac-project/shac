@@ -26,6 +26,7 @@ import (
 	"unsafe"
 
 	"go.starlark.net/starlark"
+	"go.starlark.net/starlarkstruct"
 )
 
 func ctxEmitFinding(ctx context.Context, s *shacState, name string, args starlark.Tuple, kwargs []starlark.Tuple) error {
@@ -63,50 +64,13 @@ func ctxEmitFinding(ctx context.Context, s *shacState, name string, args starlar
 	}
 
 	file := string(argfilepath)
-	span := Span{
-		Start: Cursor{
-			Line: intToInt(argline),
-			Col:  intToInt(argcol),
-		},
-		End: Cursor{
-			Line: intToInt(argendLine),
-			Col:  intToInt(argendCol),
-		},
+	span, err := parseSpan(argline, argcol, argendLine, argendCol)
+	if err != nil {
+		return err
 	}
-	if span.Start.Line <= -1 {
-		return fmt.Errorf("for parameter \"line\": got %s, line are 1 based", argline)
-	} else if span.Start.Col <= -1 {
-		return fmt.Errorf("for parameter \"col\": got %s, line are 1 based", argcol)
-	} else if span.End.Line <= -1 {
-		return fmt.Errorf("for parameter \"end_line\": got %s, line are 1 based", argendLine)
-	} else if span.End.Col <= -1 {
-		return fmt.Errorf("for parameter \"end_col\": got %s, line are 1 based", argendCol)
-	}
-	if span.Start.Col == 0 && span.End.Col > 0 {
-		return errors.New("for parameter \"end_col\": \"col\" must be specified")
-	}
-	if span.Start.Line > 0 {
-		if file == "" {
-			return errors.New("for parameter \"line\": \"filepath\" must be specified")
-		}
-		if span.End.Line > 0 {
-			if span.End.Line < span.Start.Line {
-				return fmt.Errorf("for parameter \"end_line\": \"end_line\" (%d) must be greater than or equal to \"line\" (%d)", span.End.Line, span.Start.Line)
-			} else if span.End.Line == span.Start.Line && span.End.Col > 0 && span.End.Col < span.Start.Col {
-				return fmt.Errorf("for parameter \"end_col\": \"end_col\" (%d) must be greater than or equal to \"col\" (%d)", span.End.Col, span.Start.Col)
-			}
-		} else if span.End.Col > 0 {
-			// If end_col is set but end_line is unset, assume that end_line is
-			// equal to line.
-			span.End.Line = span.Start.Line
-		}
-	} else {
-		if span.End.Line > 0 {
-			return errors.New("for parameter \"end_line\": \"line\" must be specified")
-		}
-		if span.Start.Col > 0 {
-			return errors.New("for parameter \"col\": \"line\" must be specified")
-		}
+
+	if span.Start.Line > 0 && file == "" {
+		return errors.New("for parameter \"line\": \"filepath\" must be specified")
 	}
 	var replacements []string
 	if argreplacements != nil {
@@ -220,6 +184,53 @@ func sequenceToStrings(s starlark.Sequence) []string {
 	return out
 }
 
+func parseSpan(argline, argcol, argendLine, argendCol starlark.Int) (Span, error) {
+	span := Span{
+		Start: Cursor{
+			Line: intToInt(argline),
+			Col:  intToInt(argcol),
+		},
+		End: Cursor{
+			Line: intToInt(argendLine),
+			Col:  intToInt(argendCol),
+		},
+	}
+	if span.Start.Line <= -1 {
+		return span, fmt.Errorf("for parameter \"line\": got %s, line are 1 based", argline)
+	} else if span.Start.Col <= -1 {
+		return span, fmt.Errorf("for parameter \"col\": got %s, line are 1 based", argcol)
+	} else if span.End.Line <= -1 {
+		return span, fmt.Errorf("for parameter \"end_line\": got %s, line are 1 based", argendLine)
+	} else if span.End.Col <= -1 {
+		return span, fmt.Errorf("for parameter \"end_col\": got %s, line are 1 based", argendCol)
+	}
+	if span.Start.Col == 0 && span.End.Col > 0 {
+		return span, errors.New("for parameter \"end_col\": \"col\" must be specified")
+	}
+
+	if span.Start.Line > 0 {
+		if span.End.Line > 0 {
+			if span.End.Line < span.Start.Line {
+				return span, fmt.Errorf("for parameter \"end_line\": \"end_line\" (%d) must be greater than or equal to \"line\" (%d)", span.End.Line, span.Start.Line)
+			} else if span.End.Line == span.Start.Line && span.End.Col > 0 && span.End.Col < span.Start.Col {
+				return span, fmt.Errorf("for parameter \"end_col\": \"end_col\" (%d) must be greater than or equal to \"col\" (%d)", span.End.Col, span.Start.Col)
+			}
+		} else if span.End.Col > 0 {
+			// If end_col is set but end_line is unset, assume that end_line is
+			// equal to line.
+			span.End.Line = span.Start.Line
+		}
+	} else {
+		if span.End.Line > 0 {
+			return span, errors.New("for parameter \"end_line\": \"line\" must be specified")
+		}
+		if span.Start.Col > 0 {
+			return span, errors.New("for parameter \"col\": \"line\" must be specified")
+		}
+	}
+	return span, nil
+}
+
 // intToInt returns -1 on failure.
 func intToInt(i starlark.Int) int {
 	i64, ok := i.Int64()
@@ -233,4 +244,87 @@ func intToInt(i starlark.Int) int {
 func unsafeByteSlice(s string) []byte {
 	// #nosec G103
 	return unsafe.Slice(unsafe.StringData(s), len(s))
+}
+
+func ctxEmitCommitMessageFinding(ctx context.Context, s *shacState, name string, args starlark.Tuple, kwargs []starlark.Tuple) error {
+	var arglevel starlark.String
+	var argmessage starlark.String
+	var argcommit starlark.Value
+	var argline starlark.Int
+	var argcol starlark.Int
+	var argendCol starlark.Int
+	var argendLine starlark.Int
+	var argproperties = findingsPropertyBag{
+		allowedProperties: s.allowedFindingsProperties,
+	}
+
+	if err := starlark.UnpackArgs(name, args, kwargs,
+		"level", &arglevel,
+		"message", &argmessage,
+		"commit", &argcommit,
+		"line??", &argline,
+		"col??", &argcol,
+		"end_line??", &argendLine,
+		"end_col??", &argendCol,
+		"properties??", &argproperties,
+	); err != nil {
+		return err
+	}
+
+	level := Level(string(arglevel))
+	if !level.isValid() {
+		return fmt.Errorf("for parameter \"level\": got %s, want one of %q, %q or %q", arglevel, Notice, Warning, Error)
+	}
+
+	sStruct, ok := argcommit.(*starlarkstruct.Struct)
+	if !ok {
+		return fmt.Errorf("for parameter \"commit\": got %s, want commit object", argcommit.Type())
+	}
+
+	if ctor := sStruct.Constructor(); ctor != starlark.String("commit") {
+		return fmt.Errorf("for parameter \"commit\": got %s, want commit object", ctor)
+	}
+
+	hashVal, err := sStruct.Attr("hash")
+	if err != nil || hashVal == nil {
+		return fmt.Errorf("for parameter \"commit\": missing 'hash' field")
+	}
+	hashStr, ok := hashVal.(starlark.String)
+	if !ok {
+		return fmt.Errorf("for parameter \"commit\": 'hash' field must be string")
+	}
+
+	msgVal, err := sStruct.Attr("message")
+	if err != nil || msgVal == nil {
+		return fmt.Errorf("for parameter \"commit\": missing 'message' field")
+	}
+	msgStr, ok := msgVal.(starlark.String)
+	if !ok {
+		return fmt.Errorf("for parameter \"commit\": 'message' field must be string")
+	}
+
+	span, err := parseSpan(argline, argcol, argendLine, argendCol)
+	if err != nil {
+		return err
+	}
+
+	c := ctxCheck(ctx)
+	message := string(argmessage)
+	if len(message) == 0 {
+		return fmt.Errorf("for parameter \"message\": must not be empty")
+	}
+
+	if c.highestLevel == "" || level == Error || (level == Warning && c.highestLevel != Error) {
+		c.highestLevel = level
+	}
+
+	var props map[string]string
+	if argproperties.unpackedProperties != nil {
+		props = argproperties.unpackedProperties
+	}
+
+	if err := s.r.EmitCommitMessageFinding(ctx, c.name, level, message, hashStr.GoString(), msgStr.GoString(), span, props); err != nil {
+		return fmt.Errorf("failed to emit: %w", err)
+	}
+	return nil
 }

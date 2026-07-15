@@ -113,6 +113,9 @@ message ArtifactChange {
 message ArtifactLocation {
   // URI is the relative path to the referenced file, e.g. "foo/bar/baz.c".
   string uri = 1;
+  // Property bag
+  // https://docs.oasis-open.org/sarif/sarif/v2.1.0/csprd01/sarif-v2.1.0-csprd01.html#_Toc10540886
+  google.protobuf.Struct properties = 2;
 }
 
 // Replacement indicates the replacement of a region of a file.

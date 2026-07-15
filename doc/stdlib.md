@@ -184,6 +184,7 @@ ctx.emit is the object that exposes the API to emit results for checks.
 Fields:
 
 - finding
+- commit_message_finding
 - artifact
 
 ## ctx.emit.finding
@@ -280,6 +281,35 @@ replacements: (optional) A sequence of str, representing possible
 properties (optional): A dictionary with str keys, additional key-value
   metadata that may be interpreted by downstream tooling.
 
+
+## ctx.emit.commit_message_finding
+
+Emits a finding related to a commit message.
+
+### Example
+
+```python
+def cb(ctx):
+    for commit in ctx.scm.commits():
+        if "WIP" in commit.message:
+            ctx.emit.commit_message_finding(
+                level="warning",
+                message="Avoid 'WIP' in commit messages",
+                commit=commit,
+            )
+
+shac.register_check(cb)
+```
+
+### Arguments
+
+* **level**: One of "notice", "warning" or "error".
+* **message**: Message of the finding.
+* **commit**: The commit object (from `ctx.scm.commits()`) this finding applies to.
+* **line**: (optional) Line where the finding should start. 1 based.
+* **col**: (optional) Column where the finding should start. 1 based.
+* **end_line**: (optional) Line where the finding should end if it represents a span, inclusive. 1 based.
+* **end_col**: (optional) Column where the finding should end if it represents a span, exclusive. 1 based.
 
 ## ctx.emit.artifact
 
@@ -509,6 +539,7 @@ Fields:
 - root
 - affected_files
 - all_files
+- commits
 
 ## ctx.scm.root
 
@@ -591,6 +622,33 @@ https://git-scm.com/docs/git-diff#Documentation/git-diff.txt---diff-filterACDMRT
 
 If a file was not modified relative to the upstream commit, the action
 field will be an empty string.
+
+## ctx.scm.commits
+
+Returns the list of commits since the upstream.
+
+### Example
+
+```python
+def check_commit_messages(ctx):
+    for commit in ctx.scm.commits():
+        if "WIP" in commit.message:
+            ctx.emit.commit_message_finding(
+                level = "warning",
+                message = "Avoid putting WIP in commit messages.",
+                commit = commit,
+                line = 1,
+            )
+
+shac.register_check(check_commit_messages)
+```
+
+
+### Returns
+
+A tuple of structs, each with `hash` (str) and `message` (str) fields.
+The commits are returned in reverse chronological order (newest first).
+Note: if running shac in a subdirectory, this still returns all commits in the repository range.
 
 ## ctx.vars
 

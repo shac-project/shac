@@ -259,6 +259,36 @@ def _ctx_emit_finding(level, message, filepath = None, line = None, col = None, 
     """
     pass
 
+def _ctx_emit_commit_message_finding(level, message, commit, line = None, col = None, end_line = None, end_col = None):
+    """Emits a finding related to a commit message.
+
+    Example:
+      ```python
+      def cb(ctx):
+          for commit in ctx.scm.commits():
+              if "WIP" in commit.message:
+                  ctx.emit.commit_message_finding(
+                      level="warning",
+                      message="Avoid 'WIP' in commit messages",
+                      commit=commit,
+                  )
+
+      shac.register_check(cb)
+      ```
+
+    Args:
+      level: One of "notice", "warning" or "error".
+      message: Message of the finding.
+      commit: The commit object (from `ctx.scm.commits()`) this finding applies to.
+      line: (optional) Line where the finding should start. 1 based.
+      col: (optional) Column where the finding should start. 1 based.
+      end_line: (optional) Line where the finding should end if it represents a
+        span, inclusive. 1 based.
+      end_col: (optional) Column where the finding should end if it represents a
+        span, exclusive. 1 based.
+    """
+    pass
+
 def _ctx_emit_artifact(filepath, content = None):
     """Emits an artifact from the current check.
 
@@ -488,6 +518,31 @@ def _ctx_scm_affected_files(glob = None, include_deleted = False, include_symlin
     """
     pass
 
+def _ctx_scm_commits():
+    """Returns the list of commits since the upstream.
+
+    Example:
+      ```python
+      def check_commit_messages(ctx):
+          for commit in ctx.scm.commits():
+              if "WIP" in commit.message:
+                  ctx.emit.commit_message_finding(
+                      level = "warning",
+                      message = "Avoid putting WIP in commit messages.",
+                      commit = commit,
+                      line = 1,
+                  )
+
+      shac.register_check(check_commit_messages)
+      ```
+
+    Returns:
+      A tuple of structs, each with `hash` (str) and `message` (str) fields.
+      The commits are returned in reverse chronological order (newest first).
+      Note: if running shac in a subdirectory, this still returns all commits in the repository range.
+    """
+    pass
+
 def _ctx_scm_all_files(glob = None, include_deleted = False, include_symlinks = False):
     """Returns all files found in the current workspace.
 
@@ -568,6 +623,7 @@ ctx = struct(
     # ctx.emit is the object that exposes the API to emit results for checks.
     emit = struct(
         finding = _ctx_emit_finding,
+        commit_message_finding = _ctx_emit_commit_message_finding,
         artifact = _ctx_emit_artifact,
     ),
     # ctx.io is the object that exposes the API to interact with the file system.
@@ -606,6 +662,7 @@ ctx = struct(
         root = "",
         affected_files = _ctx_scm_affected_files,
         all_files = _ctx_scm_all_files,
+        commits = _ctx_scm_commits,
     ),
     # ctx.vars provides access to runtime-configurable variables.
     vars = struct(

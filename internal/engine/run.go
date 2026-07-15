@@ -253,6 +253,8 @@ type Report interface {
 	// EmitFinding emits a finding by a check for a specific file. This is not a
 	// failure by itself, unless level "error" is used.
 	EmitFinding(ctx context.Context, check string, level Level, message, root, file string, s Span, replacements []string, props map[string]string) error
+	// EmitCommitMessageFinding emits a finding related to a commit message.
+	EmitCommitMessageFinding(ctx context.Context, check string, level Level, message string, commitHash string, commitMessage string, s Span, props map[string]string) error
 	// EmitArtifact emits an artifact by a check.
 	//
 	// Only one of root or content can be specified. If root is specified, it is

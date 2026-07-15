@@ -36,6 +36,12 @@ func (t *MultiReport) EmitFinding(ctx context.Context, check string, level engin
 	})
 }
 
+func (t *MultiReport) EmitCommitMessageFinding(ctx context.Context, check string, level engine.Level, message string, commitHash string, commitMessage string, s engine.Span, props map[string]string) error {
+	return t.do(func(r Report) error {
+		return r.EmitCommitMessageFinding(ctx, check, level, message, commitHash, commitMessage, s, props)
+	})
+}
+
 func (t *MultiReport) EmitArtifact(ctx context.Context, check, root, file string, content []byte) error {
 	return t.do(func(r Report) error {
 		return r.EmitArtifact(ctx, check, root, file, content)

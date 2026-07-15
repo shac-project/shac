@@ -104,6 +104,12 @@ func (s *synchronized) EmitFinding(ctx context.Context, check string, level engi
 	return s.r.EmitFinding(ctx, check, level, message, root, file, span, replacements, props)
 }
 
+func (s *synchronized) EmitCommitMessageFinding(ctx context.Context, check string, level engine.Level, message string, commitHash string, commitMessage string, span engine.Span, props map[string]string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.r.EmitCommitMessageFinding(ctx, check, level, message, commitHash, commitMessage, span, props)
+}
+
 func (s *synchronized) EmitArtifact(ctx context.Context, check, root, file string, content []byte) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -132,6 +138,13 @@ func (b *basic) Close() error {
 
 func (b *basic) EmitFinding(ctx context.Context, check string, level engine.Level, message, root, file string, s engine.Span, replacements []string, props map[string]string) error {
 	_, err := fmt.Fprintln(b.out, overviewString(false, unknownAnsi, check, level, message, root, file, s, replacements, props))
+	return err
+}
+
+func (b *basic) EmitCommitMessageFinding(ctx context.Context, check string, level engine.Level, message string, commitHash string, commitMessage string, s engine.Span, props map[string]string) error {
+	// Use "Commit <hash>" as the file name to reuse standard formatting.
+	hashLen := min(len(commitHash), 8)
+	_, err := fmt.Fprintln(b.out, overviewString(false, unknownAnsi, check, level, message, "", "Commit "+commitHash[:hashLen], s, nil, nil))
 	return err
 }
 
@@ -198,6 +211,23 @@ func (g *github) EmitFinding(ctx context.Context, check string, level engine.Lev
 		}
 	}
 	fmt.Fprintf(&builder, "%stitle=%s::%s", titlePrefix, check, message)
+	builder.WriteString("\n")
+	_, err := fmt.Fprint(g.out, builder.String())
+	return err
+}
+
+func (g *github) EmitCommitMessageFinding(ctx context.Context, check string, level engine.Level, message string, commitHash string, commitMessage string, s engine.Span, props map[string]string) error {
+	var builder strings.Builder
+	fmt.Fprintf(&builder, "::%s ", level)
+	// GitHub Actions doesn't support commit message annotations directly in a way
+	// that ties them to relations chains. Emit as a top-level finding with clarifying text.
+	hashLen := min(len(commitHash), 8)
+	msg := fmt.Sprintf("Commit %s", commitHash[:hashLen])
+	if s.Start.Line > 0 {
+		msg += fmt.Sprintf("(%d)", s.Start.Line)
+	}
+	msg += ": " + message
+	fmt.Fprintf(&builder, "::title=%s::%s", check, msg)
 	builder.WriteString("\n")
 	_, err := fmt.Fprint(g.out, builder.String())
 	return err
@@ -277,6 +307,10 @@ func (i *interactive) EmitFinding(ctx context.Context, check string, level engin
 		return err
 	}
 	lines := bytes.Split(b, []byte("\n"))
+	return i.printHighlightedLines(lines, s, c)
+}
+
+func (i *interactive) printHighlightedLines(lines [][]byte, s engine.Span, c ansiCode) error {
 	end := s.End.Line
 	if end == 0 {
 		end = s.Start.Line
@@ -322,8 +356,23 @@ func (i *interactive) EmitFinding(ctx context.Context, check string, level engin
 			fmt.Fprintf(i.out, "  %s\n", lines[l])
 		}
 	}
-	_, err = fmt.Fprintf(i.out, "\n")
+	_, err := fmt.Fprintf(i.out, "\n")
 	return err
+}
+
+func (i *interactive) EmitCommitMessageFinding(ctx context.Context, check string, level engine.Level, message string, commitHash string, commitMessage string, s engine.Span, props map[string]string) error {
+	c := levelColor[level]
+	// Use "Commit <hash>" as the file name to reuse standard formatting.
+	hashLen := min(len(commitHash), 8)
+	_, err := fmt.Fprintln(i.out, overviewString(true, c, check, level, message, "", "Commit "+commitHash[:hashLen], s, nil, nil))
+	if err != nil {
+		return err
+	}
+	if s.Start.Line <= 0 {
+		return nil
+	}
+	lines := bytes.Split([]byte(commitMessage), []byte("\n"))
+	return i.printHighlightedLines(lines, s, c)
 }
 
 func (i *interactive) EmitArtifact(ctx context.Context, root, check, file string, content []byte) error {

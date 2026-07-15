@@ -33,8 +33,9 @@ func getCtx(root string, vars map[string]string) (starlark.Value, error) {
 	return toValue("ctx", starlark.StringDict{
 		// Implemented in runtime_ctx_emit.go
 		"emit": toValue("ctx.emit", starlark.StringDict{
-			"finding":  newBuiltinNone("ctx.emit.finding", ctxEmitFinding),
-			"artifact": newBuiltinNone("ctx.emit.artifact", ctxEmitArtifact),
+			"finding":                newBuiltinNone("ctx.emit.finding", ctxEmitFinding),
+			"artifact":               newBuiltinNone("ctx.emit.artifact", ctxEmitArtifact),
+			"commit_message_finding": newBuiltinNone("ctx.emit.commit_message_finding", ctxEmitCommitMessageFinding),
 		}),
 		"io": toValue("ctx.io", starlark.StringDict{
 			"read_file": newBuiltin("ctx.io.read_file", ctxIoReadFile),
@@ -58,6 +59,7 @@ func getCtx(root string, vars map[string]string) (starlark.Value, error) {
 			"root":           starlark.String(root),
 			"affected_files": newBuiltin("ctx.scm.affected_files", ctxScmAffectedFiles),
 			"all_files":      newBuiltin("ctx.scm.all_files", ctxScmAllFiles),
+			"commits":        newBuiltin("ctx.scm.commits", ctxScmCommits),
 		}),
 		// Implemented in runtime_ctx_vars.go
 		"vars": toValue("ctx.vars", starlark.StringDict{

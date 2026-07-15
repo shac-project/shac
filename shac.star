@@ -33,6 +33,19 @@ def suggest_version_bump(ctx):
                 filepath = version_file,
             )
 
+def check_commit_subject_length(ctx):
+    """Checks that the first line of the commit message is under 50 chars."""
+    for commit in ctx.scm.commits():
+        lines = commit.message.splitlines()
+        if lines and len(lines[0]) > 50:
+            ctx.emit.commit_message_finding(
+                level = "warning",
+                message = "Commit message subject line should be under 50 characters",
+                commit = commit,
+                line = 1,
+                col = 51,
+            )
+
 def _is_todo_valid(ctx, s):
     """Returns True if the x part of "TODO(x): y" is valid."""
 
@@ -70,6 +83,7 @@ def new_todos(ctx):
             )
 
 shac.register_check(buildifier)
+shac.register_check(check_commit_subject_length)
 shac.register_check(check_docs)
 shac.register_check(check_license_headers)
 shac.register_check(gofmt)

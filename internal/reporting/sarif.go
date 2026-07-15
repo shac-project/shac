@@ -41,12 +41,13 @@ type SarifReport struct {
 	resultsByCheck map[string][]*sarif.Result
 }
 
+var levelMap = map[engine.Level]string{
+	engine.Notice:  sarif.Note,
+	engine.Warning: sarif.Warning,
+	engine.Error:   sarif.Error,
+}
+
 func (sr *SarifReport) EmitFinding(ctx context.Context, check string, level engine.Level, message, root, file string, s engine.Span, replacements []string, props map[string]string) error {
-	levelMap := map[engine.Level]string{
-		engine.Notice:  sarif.Note,
-		engine.Warning: sarif.Warning,
-		engine.Error:   sarif.Error,
-	}
 	region := &sarif.Region{
 		StartLine:   int32(s.Start.Line), // #nosec G115
 		EndLine:     int32(s.End.Line),   // #nosec G115
@@ -110,6 +111,55 @@ func (sr *SarifReport) EmitFinding(ctx context.Context, check string, level engi
 		},
 		Fixes:      fixes,
 		Properties: propsProto,
+	}
+
+	sr.mu.Lock()
+	if sr.resultsByCheck == nil {
+		sr.resultsByCheck = make(map[string][]*sarif.Result)
+	}
+	sr.resultsByCheck[check] = append(sr.resultsByCheck[check], result)
+	sr.mu.Unlock()
+
+	return nil
+}
+
+func (sr *SarifReport) EmitCommitMessageFinding(ctx context.Context, check string, level engine.Level, message string, commitHash string, commitMessage string, s engine.Span, props map[string]string) error {
+	region := &sarif.Region{
+		StartLine:   int32(s.Start.Line), // #nosec G115
+		EndLine:     int32(s.End.Line),   // #nosec G115
+		StartColumn: int32(s.Start.Col),  // #nosec G115
+		EndColumn:   int32(s.End.Col),    // #nosec G115
+	}
+
+	// Attach the commit hash so downstream processors can attribute this finding to the
+	// correct commit in a stack.
+	p := map[string]any{
+		"commit": commitHash,
+	}
+	for k, v := range props {
+		p[k] = v
+	}
+	propsProto, err := structpb.NewStruct(p)
+	if err != nil {
+		return err
+	}
+
+	result := &sarif.Result{
+		Level:   levelMap[level],
+		Message: &sarif.Message{Text: message},
+		Locations: []*sarif.Location{
+			{
+				PhysicalLocation: &sarif.PhysicalLocation{
+					ArtifactLocation: &sarif.ArtifactLocation{
+						// Use a placeholder URI recognizable by downstream tools (like Gerrit) as
+						// representing the commit message.
+						Uri:        "/COMMIT_MSG",
+						Properties: propsProto,
+					},
+					Region: region,
+				},
+			},
+		},
 	}
 
 	sr.mu.Lock()

@@ -1920,6 +1920,83 @@ func TestRun_SCM_Git_Recursive_Shared(t *testing.T) {
 	}
 }
 
+func TestRun_CommitMessageFindings(t *testing.T) {
+	t.Parallel()
+	root := makeGit(t)
+	// makeGit creates 2 commits. Let's set upstream to HEAD~1 to have 1 commit in range.
+	runGit(t, root, "checkout", "-b", "up", "HEAD~1")
+	runGit(t, root, "checkout", "master")
+	runGit(t, root, "branch", "--set-upstream-to", "up")
+
+	writeFile(t, root, "shac.star",
+		"def cb(ctx):",
+		"  commits = ctx.scm.commits()",
+		"  if len(commits) != 1:",
+		"    fail('expected 1 commit, got %d' % len(commits))",
+		"  commit = commits[0]",
+		"  ctx.emit.commit_message_finding(level='notice', message='found it', commit=commit, line=1)",
+		"",
+		"shac.register_check(cb)",
+	)
+
+	var r reportEmitNoPrint
+	r.t = t
+	o := Options{Report: &r, Dir: root, EntryPoint: "shac.star"}
+
+	if err := Run(context.Background(), &o); err != nil {
+		t.Fatal(err)
+	}
+
+	if len(r.commitMessageFindings) != 1 {
+		t.Fatalf("expected 1 commit message finding, got %d", len(r.commitMessageFindings))
+	}
+
+	f := r.commitMessageFindings[0]
+	if f.Check != "cb" {
+		t.Errorf("expected check 'cb', got %q", f.Check)
+	}
+	if f.Level != "notice" {
+		t.Errorf("expected level 'notice', got %q", f.Level)
+	}
+	if f.Message != "found it" {
+		t.Errorf("expected message 'found it', got %q", f.Message)
+	}
+	// We don't know if it has trailing newline or not yet for sure,
+	// let's check it containing "Second commit".
+	if !strings.Contains(f.CommitMessage, "Second commit") {
+		t.Errorf("expected commit message to contain 'Second commit', got %q", f.CommitMessage)
+	}
+	if f.Span.Start.Line != 1 {
+		t.Errorf("expected span start line 1, got %d", f.Span.Start.Line)
+	}
+
+	// Test with 0 commits (upstream is at same HEAD)
+	runGit(t, root, "checkout", "-b", "same", "master")
+	runGit(t, root, "checkout", "master")
+	runGit(t, root, "branch", "--set-upstream-to", "same")
+	var r2 reportEmitNoPrint
+	r2.t = t
+	o2 := Options{Report: &r2, Dir: root, EntryPoint: "shac.star"}
+
+	// Update shac.star to expect 0 commits
+	writeFile(t, root, "shac.star",
+		"def cb(ctx):",
+		"  commits = ctx.scm.commits()",
+		"  if len(commits) != 0:",
+		"    fail('expected 0 commits, got %d' % len(commits))",
+		"",
+		"shac.register_check(cb)",
+	)
+
+	if err := Run(context.Background(), &o2); err != nil {
+		t.Fatal(err)
+	}
+
+	if len(r2.commitMessageFindings) != 0 {
+		t.Fatalf("expected 0 commit message findings, got %d", len(r2.commitMessageFindings))
+	}
+}
+
 // TestTestDataFailOrThrow runs all the files under testdata/fail_or_throw/.
 //
 // These test cases call fail() or throw an exception.
@@ -1963,6 +2040,24 @@ func TestTestDataFailOrThrow(t *testing.T) {
 			"ctx.emit.artifact: for parameter \"filepath\": \"foo\\\\bar\" use POSIX style path",
 			"  //ctx-emit-artifact-windows.star:16:22: in cb\n",
 		},
+
+		{
+			"ctx-emit-commit_message_finding-commit-struct.star",
+			"ctx.emit.commit_message_finding: for parameter \"commit\": got \"struct\", want commit object",
+			"  //ctx-emit-commit_message_finding-commit-struct.star:16:36: in cb\n",
+		},
+
+		{
+			"ctx-emit-commit_message_finding-commit-type.star",
+			"ctx.emit.commit_message_finding: for parameter \"commit\": got int, want commit object",
+			"  //ctx-emit-commit_message_finding-commit-type.star:16:36: in cb\n",
+		},
+		{
+			"ctx-emit-commit_message_finding-level.star",
+			"ctx.emit.commit_message_finding: for parameter \"level\": got \"invalid\", want one of \"notice\", \"warning\" or \"error\"",
+			"  //ctx-emit-commit_message_finding-level.star:16:36: in cb\n",
+		},
+
 		{
 			"ctx-emit-finding-col-line.star",
 			"ctx.emit.finding: for parameter \"col\": \"line\" must be specified",
@@ -2255,6 +2350,7 @@ func TestTestDataFailOrThrow(t *testing.T) {
 			"ctx.scm.all_files: unexpected keyword argument \"unexpected\"",
 			"  //ctx-scm-all_files-kwarg.star:16:22: in cb\n",
 		},
+
 		{
 			"ctx-vars-empty.star",
 			"ctx.vars.get: for parameter \"name\": must not be empty",
@@ -3110,6 +3206,11 @@ func (r *reportNoPrint) EmitFinding(ctx context.Context, check string, level Lev
 	return errors.New("not implemented")
 }
 
+func (r *reportNoPrint) EmitCommitMessageFinding(ctx context.Context, check string, level Level, message string, commitHash string, commitMessage string, s Span, props map[string]string) error {
+	r.t.Errorf("unexpected commit message finding: %s: %s, %q, %s, %s, %# v", check, level, message, commitHash, commitMessage, s)
+	return errors.New("not implemented")
+}
+
 func (r *reportNoPrint) EmitArtifact(ctx context.Context, check, root, file string, content []byte) error {
 	r.t.Errorf("unexpected artifact: %s: %s", check, file)
 	return errors.New("not implemented")
@@ -3145,6 +3246,15 @@ type finding struct {
 	Properties   map[string]string
 }
 
+type commitMessageFinding struct {
+	Check         string
+	Level         Level
+	Message       string
+	CommitHash    string
+	CommitMessage string
+	Span          Span
+}
+
 type artifact struct {
 	Check   string
 	Root    string
@@ -3154,9 +3264,10 @@ type artifact struct {
 
 type reportEmitNoPrint struct {
 	reportNoPrint
-	mu        sync.Mutex
-	findings  []finding
-	artifacts []artifact
+	mu                    sync.Mutex
+	findings              []finding
+	commitMessageFindings []commitMessageFinding
+	artifacts             []artifact
 }
 
 func (r *reportEmitNoPrint) EmitFinding(ctx context.Context, check string, level Level, message, root, file string, s Span, replacements []string, props map[string]string) error {
@@ -3170,6 +3281,20 @@ func (r *reportEmitNoPrint) EmitFinding(ctx context.Context, check string, level
 		Span:         s,
 		Replacements: replacements,
 		Properties:   props,
+	})
+	r.mu.Unlock()
+	return nil
+}
+
+func (r *reportEmitNoPrint) EmitCommitMessageFinding(ctx context.Context, check string, level Level, message string, commitHash string, commitMessage string, s Span, props map[string]string) error {
+	r.mu.Lock()
+	r.commitMessageFindings = append(r.commitMessageFindings, commitMessageFinding{
+		Check:         check,
+		Level:         level,
+		Message:       message,
+		CommitHash:    commitHash,
+		CommitMessage: commitMessage,
+		Span:          s,
 	})
 	r.mu.Unlock()
 	return nil

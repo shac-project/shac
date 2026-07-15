@@ -220,6 +220,10 @@ func (c *findingCollector) EmitFinding(ctx context.Context, check string, level 
 	return nil
 }
 
+func (c *findingCollector) EmitCommitMessageFinding(ctx context.Context, check string, level Level, message string, commitHash string, commitMessage string, s Span, props map[string]string) error {
+	return nil
+}
+
 func (c *findingCollector) EmitArtifact(context.Context, string, string, string, []byte) error {
 	return nil
 }

@@ -148,6 +148,23 @@ func (l *luci) EmitFinding(ctx context.Context, check string, level engine.Level
 	return nil
 }
 
+func (l *luci) EmitCommitMessageFinding(ctx context.Context, check string, level engine.Level, message string, commitHash string, commitMessage string, s engine.Span, props map[string]string) error {
+	r := l.getTestResult(check)
+
+	// Use "Commit <hash>" as the file name to reuse standard formatting.
+	hashLen := min(len(commitHash), 8)
+	overview := overviewString(false, unknownAnsi, check, level, message, "", "Commit "+commitHash[:hashLen], s, nil, nil)
+
+	r.SummaryHtml += html.EscapeString(overview) + "<br>"
+
+	r.Tags = append(r.Tags, &resultpb.StringPair{
+		Key:   "commit",
+		Value: commitHash,
+	})
+
+	return nil
+}
+
 func (l *luci) EmitArtifact(ctx context.Context, check, root, file string, content []byte) error {
 	r := l.getTestResult(check)
 	if content != nil {

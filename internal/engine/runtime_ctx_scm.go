@@ -48,6 +48,18 @@ type commitRef struct {
 	ref string
 }
 
+type scmCommit struct {
+	hash    string
+	message string
+}
+
+func (c *scmCommit) getMetadata() starlark.Value {
+	return toValue("commit", starlark.StringDict{
+		"hash":    starlark.String(c.hash),
+		"message": starlark.String(c.message),
+	})
+}
+
 type file interface {
 	// rootedpath is the path relative to the project root.
 	rootedpath() string
@@ -141,6 +153,7 @@ type scmCheckout interface {
 	affectedFiles(ctx context.Context, filter fileFilter) ([]file, error)
 	allFiles(ctx context.Context, filter fileFilter) ([]file, error)
 	newLines(ctx context.Context, f file) (starlark.Value, error)
+	commits(ctx context.Context) ([]scmCommit, error)
 }
 
 type filteredSCM struct {
@@ -160,6 +173,10 @@ func (f *filteredSCM) allFiles(ctx context.Context, filter fileFilter) ([]file, 
 
 func (f *filteredSCM) newLines(ctx context.Context, fi file) (starlark.Value, error) {
 	return f.scm.newLines(ctx, fi)
+}
+
+func (f *filteredSCM) commits(ctx context.Context) ([]scmCommit, error) {
+	return f.scm.commits(ctx)
 }
 
 // filter modifies the input slice of files in-place, removing any items that
@@ -210,7 +227,14 @@ func (s *inMemoryFile) allFiles(ctx context.Context, filter fileFilter) ([]file,
 }
 
 func (s *inMemoryFile) newLines(ctx context.Context, f file) (starlark.Value, error) {
+	if f.rootedpath() != s.targetFile.rootedpath() {
+		return nil, fmt.Errorf("file %q is not managed", f.rootedpath())
+	}
 	return newLinesWholeBytes(s.data)
+}
+
+func (s *inMemoryFile) commits(ctx context.Context) ([]scmCommit, error) {
+	return nil, nil
 }
 
 // specifiedFilesOnly is an scm that returns only a specified set of files.
@@ -231,9 +255,11 @@ func (s *specifiedFilesOnly) allFiles(ctx context.Context, filter fileFilter) ([
 }
 
 func (s *specifiedFilesOnly) newLines(ctx context.Context, f file) (starlark.Value, error) {
-	// TODO(olivernewman): Use the actual scm to get the real affected lines if
-	// the file is tracked.
-	return newLinesWhole(s.root, f.rootedpath())
+	return s.base.newLines(ctx, f)
+}
+
+func (s *specifiedFilesOnly) commits(ctx context.Context) ([]scmCommit, error) {
+	return s.base.commits(ctx)
 }
 
 // shacFileDirs returns all directories containing shac.star files that apply to
@@ -309,6 +335,10 @@ func (s *subdirSCM) newLines(ctx context.Context, f file) (starlark.Value, error
 	return s.s.newLines(ctx, f)
 }
 
+func (s *subdirSCM) commits(ctx context.Context) ([]scmCommit, error) {
+	return s.s.commits(ctx)
+}
+
 // Git support.
 
 // getSCM returns the scmCheckout implementation relevant for directory root.
@@ -360,8 +390,11 @@ type cachingSCM struct {
 
 	mu sync.Mutex
 	// Mutable. Lazy loaded.
-	affected map[fileFilter][]file
-	all      map[fileFilter][]file
+	affected      map[fileFilter][]file
+	all           map[fileFilter][]file
+	commitsVal    []scmCommit
+	commitsLoaded bool
+	commitsErr    error
 }
 
 func (c *cachingSCM) affectedFiles(ctx context.Context, filter fileFilter) ([]file, error) {
@@ -392,6 +425,16 @@ func (c *cachingSCM) allFiles(ctx context.Context, filter fileFilter) ([]file, e
 
 func (c *cachingSCM) newLines(ctx context.Context, fi file) (starlark.Value, error) {
 	return c.scm.newLines(ctx, fi)
+}
+
+func (c *cachingSCM) commits(ctx context.Context) ([]scmCommit, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if !c.commitsLoaded {
+		c.commitsVal, c.commitsErr = c.scm.commits(ctx)
+		c.commitsLoaded = true
+	}
+	return c.commitsVal, c.commitsErr
 }
 
 const (
@@ -733,13 +776,7 @@ func (g *gitCheckout) newLines(ctx context.Context, f file) (starlark.Value, err
 	// TODO(maruel): Perf-optimize by using Index() and going on the fly
 	// without creating a []string.
 	items := strings.Split(o, "\n")
-	c := 0
-	for _, l := range items {
-		if strings.HasPrefix(l, "+") {
-			c++
-		}
-	}
-	t := make(starlark.Tuple, 0, c)
+	res := make([]starlark.Value, 0, len(items))
 	curr := 0
 	for _, l := range items {
 		if strings.HasPrefix(l, "@@ ") {
@@ -757,13 +794,41 @@ func (g *gitCheckout) newLines(ctx context.Context, f file) (starlark.Value, err
 			}
 		} else if strings.HasPrefix(l, "+") {
 			// Track the current line number.
-			t = append(t, starlark.Tuple{starlark.MakeInt(curr), starlark.String(l[1:])})
+			res = append(res, starlark.Tuple{starlark.MakeInt(curr), starlark.String(l[1:])})
 			curr++
-		} else if !strings.HasPrefix(l, "-") && l != "\\ No newline at end of file" {
+		} else if !strings.HasPrefix(l, "-") && l != "\\ No newline at end of file" && l != "" {
 			panic(fmt.Sprintf("unexpected line %q", l))
 		}
 	}
-	return t, nil
+	return starlark.Tuple(res), nil
+}
+
+func (g *gitCheckout) commits(ctx context.Context) ([]scmCommit, error) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if g.err != nil {
+		return nil, g.err
+	}
+	o := g.run(ctx, "log", "--format=%H%n%B", "-z", g.upstream.hash+".."+g.head.hash)
+	if g.err != nil {
+		return nil, g.err
+	}
+	if o == "" {
+		return nil, nil
+	}
+	parts := strings.Split(o, "\x00")
+	var commits []scmCommit
+	for _, p := range parts {
+		if p == "" {
+			continue
+		}
+		hash, message, ok := strings.Cut(p, "\n")
+		if !ok {
+			continue
+		}
+		commits = append(commits, scmCommit{hash: hash, message: message})
+	}
+	return commits, nil
 }
 
 // Generic support.
@@ -826,6 +891,10 @@ func (r *rawTree) newLines(ctx context.Context, f file) (starlark.Value, error) 
 	return newLinesWhole(r.root, f.rootedpath())
 }
 
+func (r *rawTree) commits(ctx context.Context) ([]scmCommit, error) {
+	return nil, nil
+}
+
 // Starlark adapter code.
 
 // ctxScmAffectedFiles implements native function ctx.scm.affected_files().
@@ -886,6 +955,26 @@ func ctxScmAllFiles(ctx context.Context, s *shacState, name string, args starlar
 		return nil, err
 	}
 	return ctxScmFilesReturnValue(files), nil
+}
+
+// ctxScmCommits implements native function ctx.scm.commits().
+//
+// It returns a tuple of structs.
+//
+// Make sure to update //doc/stdlib.star whenever this function is modified.
+func ctxScmCommits(ctx context.Context, s *shacState, name string, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+	if err := starlark.UnpackArgs(name, args, kwargs); err != nil {
+		return nil, err
+	}
+	commits, err := s.scm.commits(ctx)
+	if err != nil {
+		return nil, err
+	}
+	res := make([]starlark.Value, 0, len(commits))
+	for _, c := range commits {
+		res = append(res, c.getMetadata())
+	}
+	return starlark.Tuple(res), nil
 }
 
 // ctxScmFilesReturnValue converts a list of files into a starlark.Dict to
