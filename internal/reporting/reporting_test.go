@@ -466,7 +466,7 @@ func TestSARIF(t *testing.T) {
 
 	wantProperties, err := structpb.NewStruct(propsForProto)
 	if err != nil {
-		t.Fatalf("invalid test configruation for wantProperties: %s", err)
+		t.Fatalf("invalid test configuration for wantProperties: %s", err)
 	}
 
 	want := sarif.Document{
