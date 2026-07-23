@@ -19,7 +19,6 @@ package sandbox
 import (
 	"os"
 	"path/filepath"
-	"strings"
 )
 
 // resolveMounts checks if the given mounts traverse symlinks.
@@ -55,16 +54,9 @@ func resolveMounts(root, exe string, mounts []Mount) []Mount {
 	}
 
 	for _, m := range mountsToProcess {
-		// If the mount is outside the root, we shouldn't attempt to resolve it
-		// or its parents.
-		if rel, err := filepath.Rel(root, m.Path); err != nil || strings.HasPrefix(rel, "..") {
-			dest := m.Dest
-			if dest == "" {
-				dest = m.Path
-			}
-			addMount(m.Path, dest, m.Writable)
-			continue
-		}
+		// We resolve symlinks for all mounts (including those outside the root)
+		// to avoid nsjail remount errors (MS_RDONLY) when mounting paths containing
+		// symlinks (such as prebuilt directories pointing to packages).
 
 		// Walk up the tree to see if any of the parents are a symlink.
 		// This is crucial for tools (like python) that rely on sibling directories
@@ -72,29 +64,35 @@ func resolveMounts(root, exe string, mounts []Mount) []Mount {
 		// the final path, we might mount the binary file itself but not the
 		// surrounding directory structure that contains necessary libraries.
 		// Stop if we reach the root or the current directory (".") in the case of relative paths.
-		for path := m.Path; path != root && path != "."; path = filepath.Dir(path) {
+		// Track the previous path to detect the filesystem root (where filepath.Dir(path) == path)
+		// and avoid infinite loops.
+		var prev string
+		for path := m.Path; path != root && path != "." && path != prev; path = filepath.Dir(path) {
+			prev = path
 			info, err := os.Lstat(path)
-			if err == nil && info.Mode()&os.ModeSymlink != 0 {
-				// We found a symlink, so we need to resolve it and mount the destination.
-				realPath, err := filepath.EvalSymlinks(path)
-				if err != nil {
-					// If we can't resolve the symlink, just skip it.
-					continue
-				}
-
-				target := filepath.Clean(realPath)
-
-				// Mount the real path at its real location. This ensures that
-				// the symlink target actually exists in the sandbox.
-				addMount(target, target, m.Writable)
-
-				// Mount the real path at the symlink's location. This effectively
-				// "overlays" the real content onto the symlink path. This is necessary
-				// because mounting directly from a symlink source can be problematic
-				// (e.g. with MS_RDONLY remounts), and because we want to ensure
-				// the directory structure (siblings) is preserved via the real content.
-				addMount(target, path, m.Writable)
+			if err != nil || info.Mode()&os.ModeSymlink == 0 {
+				continue
 			}
+
+			// We found a symlink, so we need to resolve it and mount the destination.
+			realPath, err := filepath.EvalSymlinks(path)
+			if err != nil {
+				// If we can't resolve the symlink, just skip it.
+				continue
+			}
+
+			target := filepath.Clean(realPath)
+
+			// Mount the real path at its real location. This ensures that
+			// the symlink target actually exists in the sandbox.
+			addMount(target, target, m.Writable)
+
+			// Mount the real path at the symlink's location. This effectively
+			// "overlays" the real content onto the symlink path. This is necessary
+			// because mounting directly from a symlink source can be problematic
+			// (e.g. with MS_RDONLY remounts), and because we want to ensure
+			// the directory structure (siblings) is preserved via the real content.
+			addMount(target, path, m.Writable)
 		}
 
 		// Handle the leaf path itself.

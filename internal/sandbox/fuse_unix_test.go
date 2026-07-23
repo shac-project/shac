@@ -143,13 +143,13 @@ func TestResolveFuseMounts(t *testing.T) {
 		},
 		{
 			name: "OutsideRoot",
-			// Checks that mounts outside the root directory are ignored by the resolution logic
-			// and mounted as-is.
+			// Checks that mounts outside the root directory are resolved correctly.
 			root:   rootDir,
 			mounts: []Mount{{Path: outLink, Writable: true}},
-			// We expect this NOT to proceed to resolution, passing back the original mount
-			// because it is outside the root.
-			want: []Mount{{Path: outLink, Dest: outLink, Writable: true}},
+			want: []Mount{
+				{Path: targetPath, Dest: targetPath, Writable: true},
+				{Path: targetPath, Dest: outLink, Writable: true},
+			},
 		},
 	}
 
