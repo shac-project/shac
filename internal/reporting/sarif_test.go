@@ -67,13 +67,11 @@ func TestReplacementsForDiff(t *testing.T) {
 	b = slices.Insert(b, 24, "\n")
 	want = append(want, &sarif.Replacement{
 		DeletedRegion: &sarif.Region{
-			StartLine:   25,
-			EndLine:     25,
-			StartColumn: 1,
-			EndColumn:   1,
+			StartLine: 25,
+			EndLine:   25,
 		},
 		InsertedContent: &sarif.ArtifactContent{
-			Text: "\n",
+			Text: "\nY\n",
 		},
 	})
 

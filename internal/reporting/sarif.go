@@ -246,11 +246,6 @@ func replacementsForDiff(oldLines, newLines []string) []*sarif.Replacement {
 		startLine, endLine := group[0].I1, group[len(group)-1].I2
 		var startCol, endCol int32
 
-		if startLine == endLine {
-			endLine++
-			startCol, endCol = 1, 1
-		}
-
 		var lines []string
 		for _, op := range group {
 			switch op.Tag {
@@ -264,6 +259,19 @@ func replacementsForDiff(oldLines, newLines []string) []*sarif.Replacement {
 			default:
 				log.Panicf("Invalid opcode during diff %s", string(op.Tag))
 			}
+		}
+
+		if startLine == endLine {
+			if startLine < len(oldLines) {
+				// Gerrit doesn't cleanly handle 0-length comment ranges that
+				// represent pure insertions, so we expand the region to cover the
+				// adjacent original line and append the original content to the
+				// inserted content.
+				lines = append(lines, oldLines[startLine])
+			} else {
+				startCol, endCol = 1, 1
+			}
+			endLine++
 		}
 
 		res = append(res, &sarif.Replacement{
