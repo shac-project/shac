@@ -301,7 +301,7 @@ func TestResultDBCheckCompletedException(t *testing.T) {
 	if tr.FailureReason.PrimaryErrorMessage != "fail: test" {
 		t.Errorf("expected failure reason %q, got %q", "fail: test", tr.FailureReason.PrimaryErrorMessage)
 	}
-	if !strings.Contains(tr.SummaryHtml, "<pre>Traceback:\n  file:1\nfail: test</pre>") {
+	if !strings.Contains(tr.SummaryHtml, "<pre>fail: test\n\nTraceback:\n  file:1\nfail: test</pre>") {
 		t.Errorf("expected backtrace in SummaryHtml, got %s", tr.SummaryHtml)
 	}
 }

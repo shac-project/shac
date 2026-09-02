@@ -223,7 +223,7 @@ func (l *luci) CheckCompleted(ctx context.Context, check string, start time.Time
 		msg := maybeTruncateMessage(err.Error(), "", resultDBMaxFailureReasonLength)
 		r.FailureReason = &resultpb.FailureReason{PrimaryErrorMessage: msg}
 		if stackerr, ok := errors.AsType[engine.BacktraceableError](err); ok {
-			backtrace := html.EscapeString(stackerr.Backtrace())
+			backtrace := html.EscapeString(err.Error() + "\n\n" + stackerr.Backtrace())
 			r.SummaryHtml += "<pre>" + backtrace + "</pre><br>"
 		}
 	} else if level == engine.Error {

@@ -138,8 +138,9 @@ func TestSarifReportCheckCompletedException(t *testing.T) {
 	if res.Level != sarif.Error {
 		t.Errorf("expected level %s, got %s", sarif.Error, res.Level)
 	}
-	if res.Message.Text != err.trace {
-		t.Errorf("expected message text %q, got %q", err.trace, res.Message.Text)
+	want := err.msg + "\n\n" + err.trace
+	if res.Message.Text != want {
+		t.Errorf("expected message text %q, got %q", want, res.Message.Text)
 	}
 
 	// Test regular error without backtrace.

@@ -209,7 +209,7 @@ func (sr *SarifReport) CheckCompleted(ctx context.Context, check string, start t
 		Message: &sarif.Message{Text: err.Error()},
 	}
 	if stackerr, ok := errors.AsType[engine.BacktraceableError](err); ok {
-		result.Message.Text = stackerr.Backtrace()
+		result.Message.Text = err.Error() + "\n\n" + stackerr.Backtrace()
 	}
 
 	sr.mu.Lock()
