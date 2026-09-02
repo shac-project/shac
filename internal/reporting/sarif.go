@@ -16,6 +16,7 @@ package reporting
 
 import (
 	"context"
+	"errors"
 	"io"
 	"log"
 	"os"
@@ -199,6 +200,24 @@ func (sr *SarifReport) EmitArtifact(ctx context.Context, root, check, file strin
 }
 
 func (sr *SarifReport) CheckCompleted(ctx context.Context, check string, start time.Time, d time.Duration, level engine.Level, err error) {
+	if err == nil {
+		return
+	}
+
+	result := &sarif.Result{
+		Level:   sarif.Error,
+		Message: &sarif.Message{Text: err.Error()},
+	}
+	if stackerr, ok := errors.AsType[engine.BacktraceableError](err); ok {
+		result.Message.Text = stackerr.Backtrace()
+	}
+
+	sr.mu.Lock()
+	if sr.resultsByCheck == nil {
+		sr.resultsByCheck = make(map[string][]*sarif.Result)
+	}
+	sr.resultsByCheck[check] = append(sr.resultsByCheck[check], result)
+	sr.mu.Unlock()
 }
 
 func (sr *SarifReport) Print(context.Context, string, string, int, string) {}

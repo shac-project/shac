@@ -18,6 +18,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"html"
 	"io"
@@ -221,6 +222,10 @@ func (l *luci) CheckCompleted(ctx context.Context, check string, start time.Time
 		r.Status = resultpb.TestStatus_CRASH
 		msg := maybeTruncateMessage(err.Error(), "", resultDBMaxFailureReasonLength)
 		r.FailureReason = &resultpb.FailureReason{PrimaryErrorMessage: msg}
+		if stackerr, ok := errors.AsType[engine.BacktraceableError](err); ok {
+			backtrace := html.EscapeString(stackerr.Backtrace())
+			r.SummaryHtml += "<pre>" + backtrace + "</pre><br>"
+		}
 	} else if level == engine.Error {
 		r.Status = resultpb.TestStatus_FAIL
 	} else {

@@ -15,11 +15,14 @@
 package reporting
 
 import (
+	"errors"
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/go-cmp/cmp"
+	"go.fuchsia.dev/shac-project/shac/internal/engine"
 	"go.fuchsia.dev/shac-project/shac/internal/sarif"
 	"google.golang.org/protobuf/testing/protocmp"
 )
@@ -104,5 +107,47 @@ func TestReplacementsForDiff(t *testing.T) {
 
 	if d := cmp.Diff(want, got, protocmp.Transform()); d != "" {
 		t.Errorf("Wrong parsed diff (-want +got):\n%s", d)
+	}
+}
+
+type mockBacktraceableError struct {
+	msg   string
+	trace string
+}
+
+func (m mockBacktraceableError) Error() string     { return m.msg }
+func (m mockBacktraceableError) Backtrace() string { return m.trace }
+
+func TestSarifReportCheckCompletedException(t *testing.T) {
+	sr := &SarifReport{}
+	ctx := t.Context()
+	start := time.Now()
+
+	err := mockBacktraceableError{
+		msg:   "fail: something crashed",
+		trace: "Traceback:\n  file.star:10\nfail: something crashed",
+	}
+
+	sr.CheckCompleted(ctx, "my-check", start, time.Second, engine.Error, err)
+
+	if len(sr.resultsByCheck["my-check"]) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(sr.resultsByCheck["my-check"]))
+	}
+
+	res := sr.resultsByCheck["my-check"][0]
+	if res.Level != sarif.Error {
+		t.Errorf("expected level %s, got %s", sarif.Error, res.Level)
+	}
+	if res.Message.Text != err.trace {
+		t.Errorf("expected message text %q, got %q", err.trace, res.Message.Text)
+	}
+
+	// Test regular error without backtrace.
+	err2 := errors.New("regular error")
+	sr.CheckCompleted(ctx, "my-check2", start, time.Second, engine.Error, err2)
+
+	res2 := sr.resultsByCheck["my-check2"][0]
+	if res2.Message.Text != "regular error" {
+		t.Errorf("expected message text %q, got %q", "regular error", res2.Message.Text)
 	}
 }

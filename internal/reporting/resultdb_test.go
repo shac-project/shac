@@ -240,3 +240,68 @@ func writeJSON(t *testing.T, path string, obj any) {
 		t.Fatal(err)
 	}
 }
+func TestResultDBCheckCompletedException(t *testing.T) {
+	ctx := t.Context()
+
+	var got []*sinkpb.ReportTestResultsRequest
+	var mu sync.Mutex
+
+	handler := http.HandlerFunc(func(resp http.ResponseWriter, req *http.Request) {
+		b, _ := io.ReadAll(req.Body)
+		_ = req.Body.Close()
+		var res sinkpb.ReportTestResultsRequest
+		_ = protojson.Unmarshal(b, &res)
+		mu.Lock()
+		got = append(got, &res)
+		mu.Unlock()
+		fmt.Fprint(resp, "")
+	})
+	server := httptest.NewServer(handler)
+	defer server.Close()
+	luciContextPath := filepath.Join(t.TempDir(), "luci_context.json")
+	t.Setenv("LUCI_CONTEXT", luciContextPath)
+	writeJSON(t, luciContextPath, luciContext{
+		ResultDB: resultDB{
+			CurrentInvocation: resultDBInvocation{Name: "foo"},
+		},
+		ResultSink: resultSinkContext{
+			AuthToken:      "s3cr3t",
+			ResultSinkAddr: strings.TrimPrefix(server.URL, "http://"),
+		},
+	})
+	r := luci{
+		batchWaitDuration: 24 * time.Hour,
+	}
+	r.init(ctx)
+
+	mockErr := mockBacktraceableError{
+		msg:   "fail: test",
+		trace: "Traceback:\n  file:1\nfail: test",
+	}
+
+	r.CheckCompleted(ctx, "my-check", time.Now(), time.Second, engine.Error, mockErr)
+	r.Close()
+
+	if len(got) == 0 {
+		t.Fatal("expected results, got none")
+	}
+
+	var tr *sinkpb.TestResult
+	for _, req := range got {
+		for _, res := range req.TestResults {
+			if res.TestId == "shac/my-check" {
+				tr = res
+			}
+		}
+	}
+	if tr == nil {
+		t.Fatal("did not find test result")
+	}
+
+	if tr.FailureReason.PrimaryErrorMessage != "fail: test" {
+		t.Errorf("expected failure reason %q, got %q", "fail: test", tr.FailureReason.PrimaryErrorMessage)
+	}
+	if !strings.Contains(tr.SummaryHtml, "<pre>Traceback:\n  file:1\nfail: test</pre>") {
+		t.Errorf("expected backtrace in SummaryHtml, got %s", tr.SummaryHtml)
+	}
+}
