@@ -210,7 +210,7 @@ func TestPackageManager(t *testing.T) {
 			},
 		},
 	}
-	_, err := p.RetrievePackages(context.Background(), root, &doc)
+	_, err := p.RetrievePackages(t.Context(), root, &doc)
 	if err != nil {
 		t.Error(err)
 	}
@@ -233,18 +233,18 @@ func TestPackageManager_Err(t *testing.T) {
 	doc := Document{}
 	d := t.TempDir()
 	p := NewPackageManager("foo")
-	if _, err := p.RetrievePackages(context.Background(), d, &doc); err == nil {
+	if _, err := p.RetrievePackages(t.Context(), d, &doc); err == nil {
 		t.Fatal("expected error; path is not absolute")
 	}
 	p = NewPackageManager(filepath.Join(d, "non_existent"))
-	if _, err := p.RetrievePackages(context.Background(), d, &doc); err == nil {
+	if _, err := p.RetrievePackages(t.Context(), d, &doc); err == nil {
 		t.Fatal("expected error")
 	}
 	p = NewPackageManager(d)
-	if _, err := p.RetrievePackages(context.Background(), "foo", &doc); err == nil {
+	if _, err := p.RetrievePackages(t.Context(), "foo", &doc); err == nil {
 		t.Fatal("expected error; path is not absolute")
 	}
-	if _, err := p.RetrievePackages(context.Background(), filepath.Join(d, "non_existent"), &doc); err == nil {
+	if _, err := p.RetrievePackages(t.Context(), filepath.Join(d, "non_existent"), &doc); err == nil {
 		t.Fatal("expected error")
 	}
 }

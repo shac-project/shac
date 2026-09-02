@@ -15,7 +15,6 @@
 package reporting
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -41,7 +40,7 @@ import (
 )
 
 func TestResultDBReporter(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 
 	var got []*sinkpb.ReportTestResultsRequest
 	var mu sync.Mutex
@@ -172,7 +171,7 @@ func TestResultDBReporter(t *testing.T) {
 }
 
 func TestResultDBReporter_TagDeduplication(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	var got []*sinkpb.ReportTestResultsRequest
 	var mu sync.Mutex
 	handler := http.HandlerFunc(func(resp http.ResponseWriter, req *http.Request) {

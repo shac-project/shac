@@ -16,7 +16,6 @@ package reporting
 
 import (
 	"bytes"
-	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -33,7 +32,7 @@ import (
 )
 
 func TestGet(t *testing.T) {
-	r, err := Get(context.Background())
+	r, err := Get(t.Context())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -45,7 +44,7 @@ func TestGet(t *testing.T) {
 func TestBasic(t *testing.T) {
 	buf := bytes.Buffer{}
 	r := basic{out: &buf}
-	ctx := context.Background()
+	ctx := t.Context()
 	// No context.
 	if err := r.EmitFinding(ctx, "mycheck", engine.Notice, "message1", "", "", engine.Span{}, nil, nil); err != nil {
 		t.Fatal(err)
@@ -92,7 +91,7 @@ func TestBasic(t *testing.T) {
 func TestGitHub(t *testing.T) {
 	buf := bytes.Buffer{}
 	r := github{out: &buf}
-	ctx := context.Background()
+	ctx := t.Context()
 	// No context.
 	if err := r.EmitFinding(ctx, "mycheck", engine.Notice, "message1", "", "", engine.Span{}, nil, nil); err != nil {
 		t.Fatal(err)
@@ -356,7 +355,7 @@ func TestInteractive_Finding(t *testing.T) {
 			// Strip the ANSI codes for now, otherwise it makes the test fairly messy.
 			// Note that many of the ANSI code are hacked out in ansi_test.go.
 			r := interactive{out: colorable.NewNonColorable(&buf)}
-			ctx := context.Background()
+			ctx := t.Context()
 			if err := r.EmitFinding(ctx, "mycheck", l.l, "message1", "testdata", l.filepath, l.span, nil, nil); err != nil {
 				t.Fatal(err)
 			}
@@ -376,7 +375,7 @@ func TestInteractive(t *testing.T) {
 	// Strip the ANSI codes for now, otherwise it makes the test fairly messy.
 	// Note that many of the ANSI code are hacked out in ansi_test.go.
 	r := interactive{out: colorable.NewNonColorable(&buf)}
-	ctx := context.Background()
+	ctx := t.Context()
 	if err := r.EmitArtifact(ctx, "mycheck", "", "testdata/file.txt", []byte("content")); err == nil {
 		t.Fatal("expected failure")
 	}
@@ -403,7 +402,7 @@ func TestSARIF(t *testing.T) {
 
 	var buf bytes.Buffer
 	r := SarifReport{Out: &buf}
-	ctx := context.Background()
+	ctx := t.Context()
 	root := t.TempDir()
 
 	if err := r.EmitFinding(

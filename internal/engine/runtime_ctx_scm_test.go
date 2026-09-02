@@ -15,7 +15,6 @@
 package engine
 
 import (
-	"context"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -32,7 +31,7 @@ func TestInMemoryFile(t *testing.T) {
 		root:       "/tmp",
 	}
 
-	ctx := context.Background()
+	ctx := t.Context()
 
 	t.Run("affectedFiles", func(t *testing.T) {
 		files, err := s.affectedFiles(ctx, fileFilter{})

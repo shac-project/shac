@@ -15,7 +15,6 @@
 package engine
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"path/filepath"
@@ -76,7 +75,7 @@ func BenchmarkManyChecks(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		if err := Run(context.Background(), &o); err != nil {
+		if err := Run(b.Context(), &o); err != nil {
 			b.Fatal(err)
 		}
 	}
@@ -93,7 +92,7 @@ func BenchmarkCtxEmitFinding(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		if err := Run(context.Background(), &o); err != nil {
+		if err := Run(b.Context(), &o); err != nil {
 			b.Fatal(err)
 		}
 		r.findings = r.findings[:0]
@@ -110,7 +109,7 @@ func BenchmarkCtxEmitArtifact(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		if err := Run(context.Background(), &o); err != nil {
+		if err := Run(b.Context(), &o); err != nil {
 			b.Fatal(err)
 		}
 		r.findings = r.findings[:0]
@@ -178,7 +177,7 @@ func benchStarlarkPrint(b *testing.B, root, name string, all bool, want string) 
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		if err := Run(context.Background(), &o); err != nil {
+		if err := Run(b.Context(), &o); err != nil {
 			if btErr, ok := errors.AsType[BacktraceableError](err); ok {
 				b.Fatal(btErr.Backtrace())
 			}

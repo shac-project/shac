@@ -15,7 +15,6 @@
 package engine
 
 import (
-	"context"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -136,7 +135,7 @@ func TestFix(t *testing.T) {
 				EntryPoint: data[i].name,
 				config:     "../config/valid.textproto",
 			}
-			if err := Fix(context.Background(), &o, true, nil); err != nil {
+			if err := Fix(t.Context(), &o, true, nil); err != nil {
 				t.Fatal(err)
 			}
 			got := strings.Split(readFile(t, filepath.Join(root, "file.txt")), "\n")
@@ -168,7 +167,7 @@ func TestFixWithWriter(t *testing.T) {
 		config:     "../config/valid.textproto",
 	}
 	var b strings.Builder
-	if err := Fix(context.Background(), &o, true, &b); err != nil {
+	if err := Fix(t.Context(), &o, true, &b); err != nil {
 		t.Fatal(err)
 	}
 
