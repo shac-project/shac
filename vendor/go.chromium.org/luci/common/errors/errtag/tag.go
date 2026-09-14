@@ -43,18 +43,28 @@ func (k TagKey) String() string {
 	return *k.unique
 }
 
+// IsWrapper returns a valid [TagKey] and true if `err` is
+// the result of [Tag.Apply] or [Tag.ApplyValue].
+//
+// If `err` is not the direct result of applying a tag, this
+// returns an invalid TagKey (e.g. [TagKey.Valid] is false)
+// and `false`.
+func IsWrapper(err error) (TagKey, bool) {
+	wrapped, ok := err.(wrappedErrIface)
+	if !ok {
+		return TagKey{}, false
+	}
+	tk, _, _ := wrapped.tagValuePtr()
+	return tk, true
+}
+
 // Tag holds everything necessary to associate values of type T with errors.
 //
 // Construct this with [Make].
 //
-// As a compatibility feature, a Tag can currently be used with:
-//   - errors.Annotate(err, ...).Tag(<the tag>)
-//   - errors.New(err, <the tag>))
-//
-// However, these usages are NOT recommended, and exactly equivalent to just
-// doing `tag.Apply(err)`. At some point in the medium-term future, the
-// errors.Annotate construct will be removed entirely and replaced with
-// `fmt.Errorf("... %w ...", ...)`.
+// A Tag can be used with:
+//   - errors.New(err, <the tag>)
+//   - tag.Apply(err)
 //
 // # Tag keys
 //
@@ -232,23 +242,9 @@ func (t Tag[T]) Apply(err error) (wrapped error) {
 }
 
 var _ interface {
-	// These are both for compatibility with the errors.Annotate(...).Tag(X) functionality.
-	GenerateErrorTagValue() (key, value any)
 	Apply(err error) (wrapped error)
 } = Tag[bool]{} // pick bool as arbitrary T for assertion
 
-// GenerateErrorTagValue allows this tag to be compatible with
-// errors.Annotate.Tag.
-//
-// This is a no-op and just allows this to wrapper to be used in the
-// errors.Annotate(...).Tag the function type signature. This should be removed
-// when the Annotate pattern is removed from the errors package.
-//
-// Deprecated: Do not use.
-func (t Tag[T]) GenerateErrorTagValue() (key, value any) {
-	t.check()
-	return nil, nil
-}
 
 // In returns true iff the Tag is present in the error AND currently has the
 // defaultValue for the tag.
