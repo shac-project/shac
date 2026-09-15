@@ -93,7 +93,7 @@ func ctxEmitFinding(ctx context.Context, s *shacState, name string, args starlar
 			// `shac fmt`, let users omit `message` as long as `file` is
 			// specified, since `message` will always look something like the
 			// following for formatters.
-			message = "File not formatted. Run `shac fmt` to fix."
+			message = fmt.Sprintf("File not formatted. Run `%s` to fix.", s.fmtCommand())
 		} else {
 			return fmt.Errorf("for parameter \"message\": must not be empty")
 		}
@@ -123,6 +123,21 @@ func ctxEmitFinding(ctx context.Context, s *shacState, name string, args starlar
 		return fmt.Errorf("failed to emit: %w", err)
 	}
 	return nil
+}
+
+// fmtCommand returns the `shac fmt` command line that a user should run to
+// apply the fixes emitted by formatter checks.
+//
+// `shac fmt` only fixes the files it considers affected, so the suggested
+// command must select the same set of files that the current run did.
+//
+// TODO(olivernewman): Also account for positional file arguments, which
+// likewise narrow the set of files that shac considers affected.
+func (s *shacState) fmtCommand() string {
+	if s.allFiles {
+		return "shac fmt --all"
+	}
+	return "shac fmt"
 }
 
 func ctxEmitArtifact(ctx context.Context, s *shacState, name string, args starlark.Tuple, kwargs []starlark.Tuple) error {

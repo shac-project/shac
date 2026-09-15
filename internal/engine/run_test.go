@@ -2790,6 +2790,65 @@ func TestTestDataEmit(t *testing.T) {
 	}
 }
 
+// TestRun_FormatterDefaultMessage checks that the default message emitted by
+// formatters recommends a `shac fmt` command that will actually fix the
+// findings.
+func TestRun_FormatterDefaultMessage(t *testing.T) {
+	t.Parallel()
+	data := []struct {
+		name     string
+		allFiles bool
+		want     string
+	}{
+		{
+			name: "affected files",
+			want: "File not formatted. Run `shac fmt` to fix.",
+		},
+		{
+			name:     "all files",
+			allFiles: true,
+			want:     "File not formatted. Run `shac fmt --all` to fix.",
+		},
+	}
+	for i := range data {
+		t.Run(data[i].name, func(t *testing.T) {
+			t.Parallel()
+			root := resolvedTempDir(t)
+			writeFile(t, root, "file.txt", "unformatted\n")
+			writeFile(t, root, "shac.star",
+				"def cb(ctx):",
+				"    ctx.emit.finding(",
+				"        level = \"error\",",
+				"        filepath = \"file.txt\",",
+				"        replacements = [\"formatted\\n\"],",
+				"    )",
+				"",
+				"shac.register_check(shac.check(cb, formatter = True))",
+			)
+			r := reportEmitNoPrint{reportNoPrint: reportNoPrint{t: t}}
+			o := Options{Report: &r, Dir: root, AllFiles: data[i].allFiles, EntryPoint: "shac.star"}
+			if err := Run(t.Context(), &o); err == nil {
+				t.Fatal("expected the check to fail")
+			} else if err.Error() != "a check failed" {
+				t.Fatal(err)
+			}
+			want := []finding{
+				{
+					Check:        "cb",
+					Level:        Error,
+					Message:      data[i].want,
+					Root:         root,
+					File:         "file.txt",
+					Replacements: []string{"formatted\n"},
+				},
+			}
+			if diff := cmp.Diff(want, r.findings); diff != "" {
+				t.Errorf("mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
 // TestTestDataPrint runs all the files under testdata/print/.
 //
 // These test cases call print().
