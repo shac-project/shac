@@ -45,7 +45,7 @@ func (c *checkCmd) SetFlags(f *flag.FlagSet) {
 func (c *checkCmd) Execute(ctx context.Context, files []string) error {
 	var buf bytes.Buffer
 
-	r, err := reporting.Get(ctx)
+	r, err := reporting.Get(ctx, c.quiet)
 	if err != nil {
 		return err
 	}

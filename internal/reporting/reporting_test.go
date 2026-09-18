@@ -32,12 +32,14 @@ import (
 )
 
 func TestGet(t *testing.T) {
-	r, err := Get(t.Context())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := r.Close(); err != nil {
-		t.Fatal(err)
+	for _, quiet := range []bool{false, true} {
+		r, err := Get(t.Context(), quiet)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := r.Close(); err != nil {
+			t.Fatal(err)
+		}
 	}
 }
 
@@ -82,6 +84,40 @@ func TestBasic(t *testing.T) {
 		"- mycheck (success in 1ms)\n" +
 		"- badcheck (error in 1ms): bad\n" +
 		"[src.star:12] debugmsg\n" +
+		"- mycheck [src.star:12] debugmsg\n"
+	if diff := cmp.Diff(want, buf.String()); diff != "" {
+		t.Fatalf("mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestBasic_Quiet(t *testing.T) {
+	buf := bytes.Buffer{}
+	r := basic{out: &buf, quiet: true}
+	ctx := t.Context()
+	// Findings are always reported, whatever their level.
+	if err := r.EmitFinding(ctx, "mycheck", engine.Notice, "message1", "", "testdata/file.txt", engine.Span{}, nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.EmitFinding(ctx, "badcheck", engine.Error, "message2", "", "testdata/file.txt", engine.Span{Start: engine.Cursor{Line: 10}}, nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	start := time.Now()
+	// Checks that passed, with or without notices, are not reported.
+	r.CheckCompleted(ctx, "mycheck", start, time.Millisecond, engine.Notice, nil)
+	r.CheckCompleted(ctx, "othercheck", start, time.Millisecond, engine.Nothing, nil)
+	// Checks that emitted warnings or errors, or that failed to run, are.
+	r.CheckCompleted(ctx, "warncheck", start, time.Millisecond, engine.Warning, nil)
+	r.CheckCompleted(ctx, "badcheck", start, time.Millisecond, engine.Error, nil)
+	r.CheckCompleted(ctx, "brokencheck", start, time.Millisecond, engine.Notice, errors.New("bad"))
+	r.Print(ctx, "mycheck", "src.star", 12, "debugmsg")
+	if err := r.Close(); err != nil {
+		t.Fatal(err)
+	}
+	want := "[mycheck/notice] testdata/file.txt: message1\n" +
+		"[badcheck/error] testdata/file.txt(10): message2\n" +
+		"- warncheck (warning in 1ms)\n" +
+		"- badcheck (error in 1ms)\n" +
+		"- brokencheck (error in 1ms): bad\n" +
 		"- mycheck [src.star:12] debugmsg\n"
 	if diff := cmp.Diff(want, buf.String()); diff != "" {
 		t.Fatalf("mismatch (-want +got):\n%s", diff)
@@ -392,6 +428,37 @@ func TestInteractive(t *testing.T) {
 		"<R>[src.star:12<R>] <B>debugmsg<R>\n" +
 		"<R>- <Y>mycheck <R>[src.star:12<R>] <B>debugmsg<R>\n"
 
+	if diff := cmp.Diff(want, buf.String()); diff != "" {
+		t.Fatalf("mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestInteractive_Quiet(t *testing.T) {
+	t.Parallel()
+	buf := bytes.Buffer{}
+	r := interactive{out: colorable.NewNonColorable(&buf), quiet: true}
+	ctx := t.Context()
+	// Findings are always reported, whatever their level.
+	if err := r.EmitFinding(ctx, "mycheck", engine.Notice, "message1", "", "", engine.Span{}, nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	start := time.Now()
+	// Checks that passed, with or without notices, are not reported.
+	r.CheckCompleted(ctx, "mycheck", start, time.Millisecond, engine.Notice, nil)
+	r.CheckCompleted(ctx, "othercheck", start, time.Millisecond, engine.Nothing, nil)
+	// Checks that emitted warnings or errors, or that failed to run, are.
+	r.CheckCompleted(ctx, "warncheck", start, time.Millisecond, engine.Warning, nil)
+	r.CheckCompleted(ctx, "badcheck", start, time.Millisecond, engine.Error, nil)
+	r.CheckCompleted(ctx, "brokencheck", start, time.Millisecond, engine.Notice, errors.New("bad"))
+	r.Print(ctx, "mycheck", "src.star", 12, "debugmsg")
+	if err := r.Close(); err != nil {
+		t.Fatal(err)
+	}
+	want := "<R>[<Hc>mycheck<R>/<G>notice<R>] message1\n" +
+		"<R>- <Y>warncheck<R> (warning in 1ms)\n" +
+		"<R>- <Re>badcheck<R> (error in 1ms)\n" +
+		"<R>- <Re>brokencheck<R> (error in 1ms): bad\n" +
+		"<R>- <Y>mycheck <R>[src.star:12<R>] <B>debugmsg<R>\n"
 	if diff := cmp.Diff(want, buf.String()); diff != "" {
 		t.Fatalf("mismatch (-want +got):\n%s", diff)
 	}

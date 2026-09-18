@@ -29,6 +29,7 @@ type commandBase struct {
 	allowList  []string
 	denyList   []string
 	vars       stringMapFlag
+	quiet      bool
 }
 
 func (c *commandBase) SetFlags(f *flag.FlagSet) {
@@ -40,6 +41,7 @@ func (c *commandBase) SetFlags(f *flag.FlagSet) {
 	f.StringSliceVar(&c.denyList, "skip", nil, "comma-separated denylist of checks to skip; by default all checks are run")
 	c.vars = stringMapFlag{}
 	f.Var(&c.vars, "var", "runtime variables to set, of the form key=value")
+	f.BoolVar(&c.quiet, "quiet", false, "suppress non-actionable output, such as the completion line of checks that passed")
 }
 
 func (c *commandBase) options(files []string) (engine.Options, error) {

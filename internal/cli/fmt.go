@@ -26,8 +26,7 @@ import (
 
 type fmtCmd struct {
 	commandBase
-	quiet bool
-	emit  bool
+	emit bool
 }
 
 func (*fmtCmd) Name() string {
@@ -40,9 +39,6 @@ func (*fmtCmd) Description() string {
 
 func (c *fmtCmd) SetFlags(f *flag.FlagSet) {
 	c.commandBase.SetFlags(f)
-	// TODO(olivernewman): Move the --quiet flag into cmdBase and make it apply
-	// to the `check` command as well.
-	f.BoolVar(&c.quiet, "quiet", false, "Disable non-error output")
 	f.BoolVar(&c.emit, "emit", false, "Print fixed contents to stdout instead of overwriting files")
 }
 

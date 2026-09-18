@@ -45,7 +45,12 @@ type Report interface {
 
 // Get returns the right reporting implementation based on the current
 // environment.
-func Get(ctx context.Context) (*MultiReport, error) {
+//
+// If quiet is true, the reporters that write to stdout omit non-actionable
+// output, namely the completion line for each check that passed. Findings and
+// the completion lines of checks that failed or emitted warnings are always
+// reported.
+func Get(ctx context.Context, quiet bool) (*MultiReport, error) {
 	r := &MultiReport{}
 
 	// On LUCI/Swarming. ResultDB!
@@ -68,15 +73,16 @@ func Get(ctx context.Context) (*MultiReport, error) {
 	case os.Getenv("TERM") != "dumb" && isatty.IsTerminal(os.Stderr.Fd()):
 		// Active terminal. Colors! This includes VSCode's integrated terminal.
 		r.Reporters = append(r.Reporters, &synchronized{r: &interactive{
-			out: colorable.NewColorableStdout(),
+			out:   colorable.NewColorableStdout(),
+			quiet: quiet,
 		}})
 	case os.Getenv("VSCODE_GIT_IPC_HANDLE") != "":
 		// VSCode extension.
 		// TODO(maruel): Return SARIF.
-		r.Reporters = append(r.Reporters, &synchronized{r: &basic{out: os.Stdout}})
+		r.Reporters = append(r.Reporters, &synchronized{r: &basic{out: os.Stdout, quiet: quiet}})
 	default:
 		// Anything else, e.g. redirected output.
-		r.Reporters = append(r.Reporters, &synchronized{r: &basic{out: os.Stdout}})
+		r.Reporters = append(r.Reporters, &synchronized{r: &basic{out: os.Stdout, quiet: quiet}})
 	}
 
 	return r, nil
@@ -128,8 +134,17 @@ func (s *synchronized) Print(ctx context.Context, check, file string, line int, 
 	s.r.Print(ctx, check, file, line, message)
 }
 
+// isSuccess returns true if a check completed without an error and without
+// emitting any warning or error findings, i.e. there is nothing for the user
+// to act on. level is the highest level emitted by the check.
+func isSuccess(level engine.Level, err error) bool {
+	return err == nil && (level == "" || level == engine.Notice)
+}
+
 type basic struct {
 	out io.Writer
+	// quiet suppresses the completion line for checks that passed.
+	quiet bool
 }
 
 func (b *basic) Close() error {
@@ -153,11 +168,15 @@ func (b *basic) EmitArtifact(ctx context.Context, check, root, file string, cont
 }
 
 func (b *basic) CheckCompleted(ctx context.Context, check string, start time.Time, d time.Duration, level engine.Level, err error) {
+	success := isSuccess(level, err)
+	if b.quiet && success {
+		return
+	}
 	if err != nil {
 		level = engine.Error
 	}
 	l := string(level)
-	if level == "" || level == engine.Notice {
+	if success {
 		l = "success"
 	}
 	if err != nil {
@@ -254,6 +273,8 @@ func (g *github) Print(ctx context.Context, check, file string, line int, messag
 
 type interactive struct {
 	out io.Writer
+	// quiet suppresses the completion line for checks that passed.
+	quiet bool
 }
 
 func (i *interactive) Close() error {
@@ -380,12 +401,16 @@ func (i *interactive) EmitArtifact(ctx context.Context, root, check, file string
 }
 
 func (i *interactive) CheckCompleted(ctx context.Context, check string, start time.Time, d time.Duration, level engine.Level, err error) {
+	success := isSuccess(level, err)
+	if i.quiet && success {
+		return
+	}
 	if err != nil {
 		level = engine.Error
 	}
 	c := levelColor[level]
 	l := string(level)
-	if level == "" || level == engine.Notice {
+	if success {
 		l = "success"
 	}
 	if err != nil {
