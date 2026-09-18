@@ -13,6 +13,11 @@
 # limitations under the License.
 
 def cb(ctx):
+    if "<REPL1>" in str(ctx.io.read_file("file.txt")):
+        # Already fixed by the first pass, so that Fix() converges instead of
+        # hitting the pass bound. The IGNORED findings below overlap with the
+        # applied ones in the first pass and are never re-emitted.
+        return
     ctx.emit.finding(
         level = "error",
         filepath = "file.txt",

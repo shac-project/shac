@@ -13,14 +13,21 @@
 # limitations under the License.
 
 def cb(ctx):
+    replacement = "this text is a replacement\nfor the entire file\n"
+    if str(ctx.io.read_file("file.txt")) == replacement:
+        # Already fixed by the first pass, so that Fix() converges instead of
+        # hitting the pass bound.
+        return
     ctx.emit.finding(
         level = "error",
         filepath = "file.txt",
         message = "Replace the whole file",
-        replacements = ["this text is a replacement\nfor the entire file\n"],
+        replacements = [replacement],
     )
 
     # Other findings should be ignored because they overlap with the first one.
+    # They are not re-emitted in the second pass since the file is already
+    # fixed, so they never get applied.
     ctx.emit.finding(
         level = "error",
         filepath = "file.txt",

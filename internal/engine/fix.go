@@ -17,9 +17,11 @@ package engine
 import (
 	"cmp"
 	"context"
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -29,20 +31,158 @@ import (
 	"time"
 )
 
+// maxFixPasses bounds the number of times Fix re-runs checks in order to apply
+// findings that were skipped in a previous pass because they overlapped with a
+// finding that was applied. Well-behaved checks converge in two passes (e.g. a
+// whole-file formatter followed by a line-range fixer), and checks whose fixes
+// don't make progress are detected by comparing file contents between passes,
+// so this limit only exists as a safety net.
+const maxFixPasses = 5
+
 // Fix loads a main shac.star file from a root directory and runs checks defined
 // in it, then applies suggested fixes to files on disk.
+//
+// Findings whose spans overlap are not applied together, since the later
+// finding's replacement was computed against file contents that the earlier
+// finding's replacement changes. Instead, only non-overlapping findings are
+// applied in each pass, and the checks are re-run until nothing is skipped. An
+// error is returned if the fixes don't converge: either because a pass leaves
+// the fixed files in a state already seen after an earlier pass (a no-op or
+// oscillating fix), or because maxFixPasses is reached.
 func Fix(ctx context.Context, o *Options, quiet bool, w io.Writer) error {
-	fc := findingCollector{
-		countsByCheck:  map[string]int{},
-		quiet:          quiet,
-		findingsByFile: make(map[findingFile][]findingToFix),
-	}
 	if o.Report != nil {
 		return fmt.Errorf("cannot overwrite reporter")
 	}
+	// Re-run passes narrow the allowlist and (possibly) the files; restore
+	// them so that the caller's Options are unchanged on return.
+	origAllowList, origFiles := o.Filter.AllowList, o.Files
+	defer func() {
+		o.Report = nil
+		o.Filter.AllowList = origAllowList
+		o.Files = origFiles
+	}()
+
+	// state holds the digest of every file fixed so far, keyed by absolute
+	// path; files that were never fixed are unchanged since the first pass.
+	// seen holds the fingerprint of the input of every re-run pass so far:
+	// the on-disk state plus the checks and files the pass is narrowed to.
+	state := map[string][sha256.Size]byte{}
+	seen := map[[sha256.Size]byte]struct{}{}
+	for pass := 1; ; pass++ {
+		res, err := fixOnce(ctx, o, quiet, pass > 1, w)
+		if err != nil {
+			return err
+		}
+		if res.numSkipped == 0 {
+			return nil
+		}
+		noun := "finding"
+		if res.numSkipped != 1 {
+			noun += "s"
+		}
+		if w != nil {
+			// When writing to w instead of modifying files in place, re-running
+			// the checks would see the unmodified files and produce the same
+			// findings, so there's no point in doing another pass. This is a
+			// limitation of the mode rather than a misbehaving check, so warn
+			// (even in quiet mode, since silently leaving findings unfixed is
+			// worse than a bit of noise) instead of failing.
+			fmt.Fprintf(os.Stderr, "%d %s not applied due to overlap with other fixes; apply the emitted fixes and run again\n", res.numSkipped, noun)
+			return nil
+		}
+		// Only the checks that had findings skipped need to run again; the
+		// checks whose findings were all applied have nothing left to do.
+		// Every skipped check ran in this pass, so it is allowed by the
+		// original filter and the narrowed allowlist is a subset of it.
+		nextChecks := res.skippedChecks
+		// Similarly only the files with skipped findings need to be analyzed
+		// again, but only narrow o.Files when the caller already specified
+		// files, so that every pass runs in the same mode. Switching from git
+		// mode to files mode would change what the checks see:
+		// affected_files() reports action == "" for specified files, and the
+		// ignore list from shac.textproto is not applied to them.
+		nextFiles := origFiles
+		if len(origFiles) > 0 {
+			nextFiles = res.skippedFiles
+		}
+		// The next pass is fully determined by the on-disk state and what it
+		// is narrowed to, so if that input was already seen, the pass will
+		// produce the same output as before and the fixes will never
+		// converge: a no-op replacement repeats the previous input and
+		// oscillating replacements repeat an older one. Stop right away
+		// rather than running out the pass bound.
+		maps.Copy(state, res.written)
+		fp := rerunFingerprint(state, nextChecks, nextFiles)
+		if _, ok := seen[fp]; ok {
+			return fmt.Errorf("%d %s not fixed: fixes did not converge after %d passes", res.numSkipped, noun, pass)
+		}
+		seen[fp] = struct{}{}
+		if pass >= maxFixPasses {
+			return fmt.Errorf("%d %s still not fixed after %d passes due to overlap with other fixes", res.numSkipped, noun, pass)
+		}
+		if !quiet {
+			fmt.Fprintf(os.Stderr, "%d %s not yet fixed due to overlap with applied fixes; re-running checks (pass %d)\n", res.numSkipped, noun, pass+1)
+		}
+		o.Filter.AllowList = nextChecks
+		o.Files = nextFiles
+	}
+}
+
+// rerunFingerprint hashes the input of a re-run pass: the digests of the files
+// fixed so far, keyed by absolute path, and the checks and files the pass is
+// narrowed to. Each element is NUL-terminated and the sections are separated
+// by an empty element so that different inputs can't hash the same.
+func rerunFingerprint(state map[string][sha256.Size]byte, checks, files []string) [sha256.Size]byte {
+	h := sha256.New()
+	for _, path := range slices.Sorted(maps.Keys(state)) {
+		digest := state[path]
+		h.Write([]byte(path + "\x00"))
+		h.Write(digest[:])
+	}
+	h.Write([]byte{0})
+	for _, check := range checks {
+		h.Write([]byte(check + "\x00"))
+	}
+	h.Write([]byte{0})
+	for _, file := range files {
+		h.Write([]byte(file + "\x00"))
+	}
+	var fp [sha256.Size]byte
+	h.Sum(fp[:0])
+	return fp
+}
+
+// passResult summarizes one pass of fixOnce.
+type passResult struct {
+	// numSkipped is the number of findings that were not applied because they
+	// overlapped with an applied finding.
+	numSkipped int
+	// skippedChecks are the names of the checks with skipped findings, sorted.
+	skippedChecks []string
+	// skippedFiles are the absolute paths of the files with skipped findings,
+	// sorted.
+	skippedFiles []string
+	// written holds the digest of the contents of each file written in this
+	// pass, keyed by absolute path. It is unused when writing to w instead of
+	// the files, since the checks are not re-run then.
+	written map[string][sha256.Size]byte
+}
+
+// fixOnce runs the checks once and applies all non-overlapping findings. rerun
+// indicates that this is not the first pass, in which case checks that have
+// nothing left to fix are not logged, to avoid repeating the same output for
+// every pass.
+func fixOnce(ctx context.Context, o *Options, quiet, rerun bool, w io.Writer) (passResult, error) {
+	var res passResult
+	fc := findingCollector{
+		countsByCheck:  map[string]int{},
+		quiet:          quiet,
+		rerun:          rerun,
+		findingsByFile: make(map[findingFile][]findingToFix),
+	}
 	o.Report = &fc
 	if err := Run(ctx, o); err != nil && !errors.Is(err, ErrCheckFailed) {
-		return err
+		return res, err
 	}
 
 	orderedFiles := make([]findingFile, 0, len(fc.findingsByFile))
@@ -60,49 +200,81 @@ func Fix(ctx context.Context, o *Options, quiet bool, w io.Writer) error {
 		// write the files contents out. Just emit the file right back out.
 		b, err := os.ReadFile(o.Files[0])
 		if err != nil {
-			return err
+			return res, err
 		}
 		_, err = w.Write(b)
-		return err
+		return res, err
 	}
 
+	skippedChecks := map[string]struct{}{}
+	res.written = make(map[string][sha256.Size]byte, len(orderedFiles))
 	for _, f := range orderedFiles {
-		findings := fc.findingsByFile[f]
-		numFixed, err := fixFindings(filepath.Join(f.root, f.path), findings, w)
+		path := filepath.Join(f.root, f.path)
+		fr, err := fixFindings(path, fc.findingsByFile[f], w)
 		if err != nil {
-			return err
+			return res, err
+		}
+		res.written[path] = fr.digest
+		if fr.numSkipped > 0 {
+			res.numSkipped += fr.numSkipped
+			res.skippedFiles = append(res.skippedFiles, path)
+			for _, check := range fr.skippedChecks {
+				skippedChecks[check] = struct{}{}
+			}
 		}
 		noun := "issue"
-		if numFixed != 1 {
+		if fr.numFixed != 1 {
 			noun += "s"
 		}
 		if !quiet {
-			fmt.Fprintf(os.Stderr, "Fixed %d %s in %s\n", numFixed, noun, f.path)
+			fmt.Fprintf(os.Stderr, "Fixed %d %s in %s\n", fr.numFixed, noun, f.path)
 		}
 	}
-	return nil
+	res.skippedChecks = slices.Sorted(maps.Keys(skippedChecks))
+	slices.Sort(res.skippedFiles)
+	return res, nil
 }
 
-func fixFindings(path string, findings []findingToFix, w io.Writer) (int, error) {
+// fileFixResult summarizes the application of findings to one file by
+// fixFindings.
+type fileFixResult struct {
+	// numFixed is the number of findings that were applied.
+	numFixed int
+	// numSkipped is the number of findings that were not applied because they
+	// overlapped with an applied finding.
+	numSkipped int
+	// skippedChecks are the names of the checks that emitted the skipped
+	// findings, possibly with duplicates.
+	skippedChecks []string
+	// digest is a hash of the file contents after applying the findings.
+	digest [sha256.Size]byte
+}
+
+// fixFindings applies the given findings to the file at path, writing the
+// result to w if non-nil or back to the file otherwise.
+func fixFindings(path string, findings []findingToFix, w io.Writer) (fileFixResult, error) {
+	var res fileFixResult
 	fi, err := os.Stat(path)
 	if err != nil {
-		return 0, err
+		return res, err
 	}
 	b, err := os.ReadFile(path)
 	if err != nil {
-		return 0, err
+		return res, err
 	}
 
 	lines := strings.SplitAfter(string(b), "\n")
 
 	// Sort findings by start position in order to skip findings that overlap
 	// with previous ones.
+	// TODO(erahm): Break ties deterministically (e.g. by check name or
+	// registration order) so that overlapping findings from different checks
+	// are applied in a stable order rather than goroutine completion order.
 	sort.Slice(findings, func(i, j int) bool {
 		return findings[i].span.Start.Line < findings[j].span.Start.Line
 	})
 
 	var normalized []findingToFix
-	numFixed := 0
 	maxLine := 0
 	for _, finding := range findings {
 		finding.normalize(lines)
@@ -112,11 +284,11 @@ func fixFindings(path string, findings []findingToFix, w io.Writer) (int, error)
 		// Skip fixing any findings that overlap with previous findings. We
 		// could theoretically fix multiple findings on the same line as long as
 		// their column ranges don't overlap, but such changes are much more
-		// likely to conflict.
-		// TODO(olivernewman): Emit a warning that there are more findings to
-		// apply. Alternatively, keep re-running checks and applying
-		// non-overlapping findings until there are no findings left to apply.
+		// likely to conflict. Skipped findings are counted so that the caller
+		// can re-run the checks and apply them in a subsequent pass.
 		if finding.span.Start.Line <= maxLine {
+			res.numSkipped++
+			res.skippedChecks = append(res.skippedChecks, finding.check)
 			continue
 		}
 
@@ -124,7 +296,7 @@ func fixFindings(path string, findings []findingToFix, w io.Writer) (int, error)
 			maxLine = finding.span.End.Line
 		}
 		normalized = append(normalized, finding)
-		numFixed++
+		res.numFixed++
 	}
 
 	// Reverse findings so earlier findings' line numbers won't be affected by
@@ -145,16 +317,18 @@ func fixFindings(path string, findings []findingToFix, w io.Writer) (int, error)
 			replLines...)
 	}
 
+	content := strings.Join(lines, "")
+	res.digest = sha256.Sum256([]byte(content))
 	if w != nil {
-		if _, err := io.WriteString(w, strings.Join(lines, "")); err != nil {
-			return 0, err
+		if _, err := io.WriteString(w, content); err != nil {
+			return res, err
 		}
 	} else {
-		if err := os.WriteFile(path, []byte(strings.Join(lines, "")), fi.Mode()); err != nil {
-			return 0, err
+		if err := os.WriteFile(path, []byte(content), fi.Mode()); err != nil {
+			return res, err
 		}
 	}
-	return numFixed, nil
+	return res, nil
 }
 
 type findingFile struct {
@@ -163,6 +337,8 @@ type findingFile struct {
 }
 
 type findingToFix struct {
+	// check is the name of the check that emitted the finding.
+	check       string
 	span        Span
 	replacement string
 }
@@ -196,6 +372,10 @@ type findingCollector struct {
 	findingsByFile map[findingFile][]findingToFix
 	countsByCheck  map[string]int
 	quiet          bool
+	// rerun is true when the checks are being re-run to apply findings that
+	// were skipped in a previous pass. Checks that have nothing to fix are
+	// not logged in that case, since they were already reported.
+	rerun bool
 }
 
 var _ Report = (*findingCollector)(nil)
@@ -212,6 +392,7 @@ func (c *findingCollector) EmitFinding(ctx context.Context, check string, level 
 		defer c.mu.Unlock()
 		key := findingFile{root: root, path: filepath.FromSlash(file)}
 		c.findingsByFile[key] = append(c.findingsByFile[key], findingToFix{
+			check:       check,
 			span:        s,
 			replacement: replacements[0],
 		})
@@ -238,7 +419,9 @@ func (c *findingCollector) CheckCompleted(ctx context.Context, check string, sta
 	if err != nil {
 		c.logf("- %s: %s", check, err)
 	} else if count == 0 {
-		c.logf("- %s (all good!)", check)
+		if !c.rerun {
+			c.logf("- %s (all good!)", check)
+		}
 	} else {
 		noun := "finding"
 		if count > 1 {

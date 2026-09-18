@@ -308,7 +308,7 @@ Planned features/changes, in descending order by priority:
 - [x] Automatic fix application with handling for conflicting suggestions
 - [x] Add `glob` arguments to `ctx.scm.{all,affected}_files()` functions for
       easier filtering
-- [ ] Rerun formatting checks after a conflict is encountered
+- [x] Rerun formatting checks after a conflict is encountered
 - [ ] Provide a `.shac` cache directory that checks can write to
 - [ ] Mount checkout directory read-only
   - [x] By default
