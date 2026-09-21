@@ -37,7 +37,7 @@ func TestDocStdlib(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if diff := cmp.Diff(string(b), got); diff != "" {
+	if diff := cmp.Diff(string(b), StdlibDocHeader+got); diff != "" {
 		t.Fatalf("mismatch (-want +got):\n%s", diff)
 	}
 }
@@ -140,6 +140,26 @@ func TestDocTemplate(t *testing.T) {
 				t.Fatalf("mismatch (-want +got):\n%s", diff)
 			}
 		})
+	}
+}
+
+func TestDocTemplate_MalformedArgs(t *testing.T) {
+	t.Parallel()
+	in := `def foo(bar):
+  """Does something.
+
+  Args:
+    bar (optional): Badly formatted argument line.
+  """
+  pass
+`
+	d, err := genDoc(t.TempDir(), "main.star", in, false)
+	if err == nil {
+		t.Fatalf("expected error, got:\n%s", d)
+	}
+	want := "in main.star: foo has malformed Args section in docstring"
+	if diff := cmp.Diff(want, err.Error()); diff != "" {
+		t.Fatalf("mismatch (-want +got):\n%s", diff)
 	}
 }
 

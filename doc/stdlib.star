@@ -254,7 +254,7 @@ def _ctx_emit_finding(level, message, filepath = None, line = None, col = None, 
         replacements apply to the entire file if no span is specified for the
         finding. Replacements that apply to entire lines should include trailing
         newlines, unless the line should be removed.
-      properties (optional): A dictionary with str keys, additional key-value
+      properties: (optional) A dictionary with str keys, additional key-value
         metadata that may be interpreted by downstream tooling.
     """
     pass

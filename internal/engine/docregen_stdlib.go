@@ -21,6 +21,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+
+	"go.fuchsia.dev/shac-project/shac/internal/engine"
 )
 
 func main() {
@@ -36,7 +38,8 @@ func main() {
 	if err != nil {
 		log.Fatalf("failed to run \"go run . doc\": %s\n%s", err, o)
 	}
-	if err := os.WriteFile(filepath.Join(base, "doc", "stdlib.md"), o, 0o644); err != nil {
+	content := append([]byte(engine.StdlibDocHeader), o...)
+	if err := os.WriteFile(filepath.Join(base, "doc", "stdlib.md"), content, 0o644); err != nil {
 		log.Fatal(err)
 	}
 }
