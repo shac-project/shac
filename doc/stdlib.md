@@ -1066,10 +1066,25 @@ them.
 
 Fields:
 
+- any
 - commit
+- exec_mock
+- exec_result
 - file
 - finding
+- root
 - run
+- write_file
+
+## testing.any
+
+testing.any is a wildcard sentinel for matching any single argument in
+testing.exec_mock(cmd = [...]).
+
+## testing.root
+
+testing.root is a placeholder string that expands to the test checkout
+root path inside testing.exec_mock() and testing.write_file().
 
 ## testing.commit
 
@@ -1083,6 +1098,36 @@ Constructs a commit spec for testing.run(commits = [...]).
 ### Returns
 
 A commit struct with hash and message attributes.
+
+## testing.exec_mock
+
+Constructs a mock specification for ctx.os.exec() calls in testing.run().
+
+### Arguments
+
+* **cmd**: Sequence of strings (or testing.any wildcards) matching the command arguments passed to ctx.os.exec().
+* **retcode**: (optional) Exit code returned by the mocked process. Defaults to 0. Cannot be combined with handler.
+* **stdout**: (optional) Standard output returned by the mocked process. Any occurrences of testing.root are replaced with the test checkout root.
+* **stderr**: (optional) Standard error returned by the mocked process. Any occurrences of testing.root are replaced with the test checkout root.
+* **handler**: (optional) A callable taking (cmd) that dynamically handles the command and optionally returns testing.exec_result().
+
+### Returns
+
+An exec_mock struct for passing to testing.run(exec_mocks = [...]).
+
+## testing.exec_result
+
+Constructs a subprocess result to return from an exec_mock handler.
+
+### Arguments
+
+* **retcode**: (optional) Exit code of the subprocess. Defaults to 0.
+* **stdout**: (optional) Standard output string. Defaults to "".
+* **stderr**: (optional) Standard error string. Defaults to "".
+
+### Returns
+
+A completed_subprocess struct.
 
 ## testing.file
 
@@ -1132,6 +1177,7 @@ Can only be called during `shac test`.
 * **files**: (optional) Dict mapping relative file paths to either string contents or testing.file() specs.
 * **commits**: (optional) Sequence of testing.commit() specs returned by ctx.scm.commits().
 * **vars**: (optional) Dict of runtime variable overrides for ctx.vars.get().
+* **exec_mocks**: (optional) Sequence of testing.exec_mock() specs intercepting ctx.os.exec() calls. Unmatched commands execute in the real sandbox.
 * **args**: (optional) Dict of keyword arguments to bind to the check via with_args().
 
 ### Returns
@@ -1141,3 +1187,14 @@ A result struct with fields:
   artifacts: Dict mapping artifact filepaths to string contents.
   files: Dict mapping non-deleted virtual file paths to their contents
     after applying any non-overlapping single-replacement findings.
+
+## testing.write_file
+
+Writes a file inside the test temporary directory during a test or mock handler.
+
+Can only be called during `shac test`.
+
+### Arguments
+
+* **filepath**: Relative path (resolved against the test checkout root) or absolute path within the test temporary directory.
+* **content**: String or bytes to write to the file.

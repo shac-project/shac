@@ -1059,6 +1059,39 @@ def _testing_commit(hash = "0000000000000000000000000000000000000000", message =
     """
     pass
 
+def _testing_exec_mock(cmd, retcode = 0, stdout = "", stderr = "", handler = None):
+    """Constructs a mock specification for ctx.os.exec() calls in testing.run().
+
+    Args:
+      cmd: Sequence of strings (or testing.any wildcards) matching the command
+        arguments passed to ctx.os.exec().
+      retcode: (optional) Exit code returned by the mocked process. Defaults to
+        0. Cannot be combined with handler.
+      stdout: (optional) Standard output returned by the mocked process. Any
+        occurrences of testing.root are replaced with the test checkout root.
+      stderr: (optional) Standard error returned by the mocked process. Any
+        occurrences of testing.root are replaced with the test checkout root.
+      handler: (optional) A callable taking (cmd) that dynamically handles the
+        command and optionally returns testing.exec_result().
+
+    Returns:
+      An exec_mock struct for passing to testing.run(exec_mocks = [...]).
+    """
+    pass
+
+def _testing_exec_result(retcode = 0, stdout = "", stderr = ""):
+    """Constructs a subprocess result to return from an exec_mock handler.
+
+    Args:
+      retcode: (optional) Exit code of the subprocess. Defaults to 0.
+      stdout: (optional) Standard output string. Defaults to "".
+      stderr: (optional) Standard error string. Defaults to "".
+
+    Returns:
+      A completed_subprocess struct.
+    """
+    pass
+
 def _testing_file(content = "", action = "M", new_lines = None, affected = True):
     """Constructs a virtual file specification for testing.run(files = {...}).
 
@@ -1107,7 +1140,7 @@ def _testing_finding(
     """
     pass
 
-def _testing_run(check, *, files = None, commits = None, vars = None, args = None):
+def _testing_run(check, *, files = None, commits = None, vars = None, exec_mocks = None, args = None):
     """Executes a check (or 0-argument check registration function) hermetically.
 
     Can only be called during `shac test`.
@@ -1120,6 +1153,8 @@ def _testing_run(check, *, files = None, commits = None, vars = None, args = Non
       commits: (optional) Sequence of testing.commit() specs returned by
         ctx.scm.commits().
       vars: (optional) Dict of runtime variable overrides for ctx.vars.get().
+      exec_mocks: (optional) Sequence of testing.exec_mock() specs intercepting
+        ctx.os.exec() calls. Unmatched commands execute in the real sandbox.
       args: (optional) Dict of keyword arguments to bind to the check via
         with_args().
 
@@ -1132,6 +1167,18 @@ def _testing_run(check, *, files = None, commits = None, vars = None, args = Non
     """
     pass
 
+def _testing_write_file(filepath, content):
+    """Writes a file inside the test temporary directory during a test or mock handler.
+
+    Can only be called during `shac test`.
+
+    Args:
+      filepath: Relative path (resolved against the test checkout root) or
+        absolute path within the test temporary directory.
+      content: String or bytes to write to the file.
+    """
+    pass
+
 # testing is a global module exposing test harness primitives for `shac test`.
 # It is only available in `*_test.star` files run by `shac test`.
 #
@@ -1140,8 +1187,17 @@ def _testing_run(check, *, files = None, commits = None, vars = None, args = Non
 # exercise a check's internal helpers without the check file having to export
 # them.
 testing = struct(
+    # testing.any is a wildcard sentinel for matching any single argument in
+    # testing.exec_mock(cmd = [...]).
+    any = struct(),
     commit = _testing_commit,
+    exec_mock = _testing_exec_mock,
+    exec_result = _testing_exec_result,
     file = _testing_file,
     finding = _testing_finding,
+    # testing.root is a placeholder string that expands to the test checkout
+    # root path inside testing.exec_mock() and testing.write_file().
+    root = "",
     run = _testing_run,
+    write_file = _testing_write_file,
 )

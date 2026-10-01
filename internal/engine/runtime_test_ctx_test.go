@@ -176,7 +176,42 @@ func TestRunTests_Success(t *testing.T) {
 		"        files = {'a.txt': 'BAD\\n'},\n"+
 		"    )\n"+
 		"    asserts.eq(len(res.findings), 1)\n"+
-		"    asserts.eq(res.files['a.txt'], 'GOOD\\n')\n")
+		"    asserts.eq(res.files['a.txt'], 'GOOD\\n')\n"+
+		"\n"+
+		"def test_exec_mock_and_write_file():\n"+
+		"    def _exec_check(ctx):\n"+
+		"        print('from check')\n"+
+		"        tmp = ctx.io.tempfile('initial', name = 'input.txt')\n"+
+		"        res1 = ctx.os.exec(['my_tool', '--fix', tmp]).wait()\n"+
+		"        asserts.eq(res1.stdout, 'root=' + ctx.scm.root)\n"+
+		"        updated = str(ctx.io.read_file(tmp))\n"+
+		"        ctx.emit.finding(\n"+
+		"            level = 'error',\n"+
+		"            message = 'fixed',\n"+
+		"            filepath = 'f.txt',\n"+
+		"            line = 1,\n"+
+		"            col = 1,\n"+
+		"            end_line = 1,\n"+
+		"            end_col = 8,\n"+
+		"            replacements = [updated],\n"+
+		"        )\n"+
+		"\n"+
+		"    def _handler(cmd):\n"+
+		"        print('from handler')\n"+
+		"        testing.write_file(cmd[2], 'updated_by_tool')\n"+
+		"        return testing.exec_result(stdout = 'root=' + testing.root)\n"+
+		"\n"+
+		"    res = testing.run(\n"+
+		"        _exec_check,\n"+
+		"        files = {'f.txt': 'initial'},\n"+
+		"        exec_mocks = [\n"+
+		"            testing.exec_mock(\n"+
+		"                cmd = ['my_tool', '--fix', testing.any],\n"+
+		"                handler = _handler,\n"+
+		"            ),\n"+
+		"        ],\n"+
+		"    )\n"+
+		"    asserts.eq(res.files['f.txt'], 'updated_by_tool')\n")
 
 	rep := &capturingTestReporter{}
 	err := RunTests(t.Context(), &Options{
@@ -189,6 +224,10 @@ func TestRunTests_Success(t *testing.T) {
 	want := []testResultRecord{
 		{name: "test_assertions"},
 		{name: "test_check_and_fixes"},
+		{name: "test_exec_mock_and_write_file", prints: []string{
+			"[//checks_test.star:68] from check",
+			"[//checks_test.star:85] from handler",
+		}},
 		{name: "test_private_helper"},
 		{name: "test_register_function"},
 	}
@@ -309,6 +348,15 @@ func TestRunTests_Failures(t *testing.T) {
 				"def test_fail():\n" +
 				"    asserts.fails(lambda: fail('actual error'), 'expected.*')\n",
 			wantErr: "asserts.fails: expected error matching \"expected.*\", got \"fail: actual error\"",
+		},
+		{
+			name: "unused exec_mock",
+			content: "" +
+				"def _cb(ctx):\n" +
+				"    pass\n" +
+				"def test_fail():\n" +
+				"    testing.run(_cb, exec_mocks = [testing.exec_mock(cmd = ['unused'])])\n",
+			wantErr: "unused exec_mock: (\"unused\",)",
 		},
 		{
 			name: "out of bounds replacement span",
