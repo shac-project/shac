@@ -386,6 +386,13 @@ func ctxOsExec(ctx context.Context, s *shacState, name string, args starlark.Tup
 			// this executable.
 			{Path: filepath.Dir(tempDir), Writable: true},
 		}
+		if s.realRoot != "" && s.realRoot != s.root {
+			config.Mounts = append(config.Mounts, sandbox.Mount{
+				Path:     s.realRoot,
+				Writable: s.writableRoot,
+			})
+		}
+		config.Mounts = append(config.Mounts, s.extraMounts...)
 		config.Mounts = append(config.Mounts, passthroughMounts...)
 
 		// Explicitly mount standard binary directories. On systems with a

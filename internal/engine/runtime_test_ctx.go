@@ -911,6 +911,7 @@ func testingRun(th *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, 
 	var argvars = starlark.NewDict(0)
 	var argexecMocks starlark.Sequence
 	var argcheckArgs = starlark.NewDict(0)
+	var argsubdir starlark.String
 	if err := starlark.UnpackArgs(fn.Name(), args, kwargs,
 		"check", &argcheck,
 		"files?", &argfiles,
@@ -918,11 +919,22 @@ func testingRun(th *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, 
 		"vars?", &argvars,
 		"exec_mocks?", &argexecMocks,
 		"args?", &argcheckArgs,
+		"subdir?", &argsubdir,
 	); err != nil {
 		return nil, err
 	}
 
-	virtualFiles, err := parseVirtualFiles(argfiles)
+	subdir := string(argsubdir)
+	if subdir == "." {
+		subdir = ""
+	}
+	if subdir != "" {
+		if strings.Contains(subdir, "\\") || path.IsAbs(subdir) || path.Clean(subdir) != subdir || strings.HasPrefix(subdir, "../") || subdir == ".." {
+			return nil, fmt.Errorf("for parameter \"subdir\": invalid relative path %q", subdir)
+		}
+	}
+
+	virtualFiles, shadowedPaths, err := parseVirtualFiles(argfiles, subdir)
 	if err != nil {
 		return nil, err
 	}
@@ -957,10 +969,12 @@ func testingRun(th *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, 
 	if err != nil {
 		return nil, err
 	}
-	if err = materializeTestRoot(testRootDir, virtualFiles); err != nil {
+	extraMounts, err := materializeTestRoot(s.realRoot, testRootDir, subdir, s.writableRoot, virtualFiles, shadowedPaths)
+	if err != nil {
 		return nil, err
 	}
-	scmRootSlash := filepath.ToSlash(testRootDir)
+	testRootSlash := filepath.ToSlash(testRootDir)
+	scmRootSlash := path.Join(testRootSlash, subdir)
 
 	// Prints from the check under test (and from exec_mock handlers) belong
 	// in the calling test's output, so reuse the test thread's print impl.
@@ -1049,6 +1063,8 @@ func testingRun(th *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, 
 	cConfig := s.shacConfig
 	cConfig.r = rep
 	cConfig.root = testRootDir
+	cConfig.subdir = subdir
+	cConfig.extraMounts = extraMounts
 	cConfig.tmpdir = testRootDir + "-tmp"
 	cConfig.vars = vars
 	cConfig.scm = vscm
@@ -1178,16 +1194,23 @@ func resolveChecksToRun(ctx context.Context, th *starlark.Thread, cState *shacSt
 	return []*registeredCheck{{check: c}}, nil
 }
 
-func parseVirtualFiles(filesDict *starlark.Dict) ([]*virtualFile, error) {
+func parseVirtualFiles(filesDict *starlark.Dict, subdir string) ([]*virtualFile, map[string]bool, error) {
 	var virtualFiles []*virtualFile
+	shadowedPaths := make(map[string]bool)
+	for dir := subdir; dir != "." && dir != ""; dir = path.Dir(dir) {
+		shadowedPaths[dir] = true
+	}
 	for _, kv := range filesDict.Items() {
 		pathVal, ok := kv[0].(starlark.String)
 		if !ok {
-			return nil, fmt.Errorf("for parameter \"files\": key must be str, got %s", kv[0].Type())
+			return nil, nil, fmt.Errorf("for parameter \"files\": key must be str, got %s", kv[0].Type())
 		}
 		rel := string(pathVal)
 		if strings.Contains(rel, "\\") || path.IsAbs(rel) || path.Clean(rel) != rel || strings.HasPrefix(rel, "../") || rel == ".." || rel == "." {
-			return nil, fmt.Errorf("for parameter \"files\": invalid relative path %q", rel)
+			return nil, nil, fmt.Errorf("for parameter \"files\": invalid relative path %q", rel)
+		}
+		for dir := path.Join(subdir, rel); dir != "." && dir != ""; dir = path.Dir(dir) {
+			shadowedPaths[dir] = true
 		}
 
 		vf := &virtualFile{
@@ -1200,7 +1223,7 @@ func parseVirtualFiles(filesDict *starlark.Dict) ([]*virtualFile, error) {
 			vf.content = string(v)
 		case *starlarkstruct.Struct:
 			if v.Constructor() != starlark.String("file_spec") {
-				return nil, fmt.Errorf("for parameter \"files\": value for %q must be str or testing.file(), got %s", rel, v.String())
+				return nil, nil, fmt.Errorf("for parameter \"files\": value for %q must be str or testing.file(), got %s", rel, v.String())
 			}
 			actionVal, _ := v.Attr("action")
 			affectedVal, _ := v.Attr("affected")
@@ -1211,14 +1234,14 @@ func parseVirtualFiles(filesDict *starlark.Dict) ([]*virtualFile, error) {
 			vf.content = string(contentVal.(starlark.String))
 			vf.customLines = newLinesVal
 		default:
-			return nil, fmt.Errorf("for parameter \"files\": value for %q must be str or testing.file(), got %s", rel, kv[1].Type())
+			return nil, nil, fmt.Errorf("for parameter \"files\": value for %q must be str or testing.file(), got %s", rel, kv[1].Type())
 		}
 		virtualFiles = append(virtualFiles, vf)
 	}
 	slices.SortFunc(virtualFiles, func(a, b *virtualFile) int {
 		return cmp.Compare(a.path, b.path)
 	})
-	return virtualFiles, nil
+	return virtualFiles, shadowedPaths, nil
 }
 
 func parseVirtualCommits(seq starlark.Sequence) ([]scmCommit, error) {
@@ -1285,17 +1308,82 @@ func parseExecMocks(seq starlark.Sequence) ([]*execMockEntry, error) {
 	return res, nil
 }
 
-func materializeTestRoot(testRootDir string, virtualFiles []*virtualFile) error {
+func materializeTestRoot(realRoot, testRootDir, subdir string, writableRoot bool, virtualFiles []*virtualFile, shadowedPaths map[string]bool) ([]sandbox.Mount, error) {
+	var extraMounts []sandbox.Mount
+	if realRoot != "" {
+		_, statErr := os.Lstat(filepath.Join(realRoot, ".git"))
+		isGitRepo := statErr == nil
+		seenMounts := make(map[string]bool)
+		if err := populateRealRootSymlinks(realRoot, realRoot, testRootDir, "", isGitRepo, writableRoot, shadowedPaths, seenMounts, &extraMounts); err != nil {
+			return nil, err
+		}
+	}
+	if subdir != "" {
+		if err := os.MkdirAll(filepath.Join(testRootDir, filepath.FromSlash(subdir)), 0o700); err != nil {
+			return nil, err
+		}
+	}
 	for _, vf := range virtualFiles {
 		if vf.a == "D" {
 			continue
 		}
-		dst := filepath.Join(testRootDir, filepath.FromSlash(vf.path))
+		dst := filepath.Join(testRootDir, filepath.FromSlash(subdir), filepath.FromSlash(vf.path))
 		if err := os.MkdirAll(filepath.Dir(dst), 0o700); err != nil {
-			return err
+			return nil, err
 		}
 		if err := os.WriteFile(dst, []byte(vf.content), 0o600); err != nil {
-			return err
+			return nil, err
+		}
+	}
+	return extraMounts, nil
+}
+
+func populateRealRootSymlinks(realRoot, realDir, testDir, relPrefix string, isGitRepo, writableRoot bool, shadowedPaths, seenMounts map[string]bool, extraMounts *[]sandbox.Mount) error {
+	entries, err := os.ReadDir(realDir)
+	if err != nil {
+		return err
+	}
+	for _, e := range entries {
+		name := e.Name()
+		if relPrefix == "" && name == ".git" {
+			continue
+		}
+		rel := name
+		if relPrefix != "" {
+			rel = relPrefix + "/" + name
+		}
+		srcPath := filepath.Join(realDir, name)
+		dstPath := filepath.Join(testDir, name)
+		// In a non-git staged root (such as a Bazel .runfiles/_main tree),
+		// subdirectories are real directories whose leaf files are relative
+		// symlinks pointing outside realRoot. Recurse into subdirectories so
+		// leaf symlinks are resolved and mounted into the sandbox.
+		if e.IsDir() && (shadowedPaths[rel] || !isGitRepo) {
+			if err := os.MkdirAll(dstPath, 0o700); err != nil {
+				return err
+			}
+			if err := populateRealRootSymlinks(realRoot, srcPath, dstPath, rel, isGitRepo, writableRoot, shadowedPaths, seenMounts, extraMounts); err != nil {
+				return err
+			}
+			continue
+		}
+		if !shadowedPaths[rel] {
+			linkTarget := srcPath
+			if e.Type()&os.ModeSymlink != 0 {
+				if resolved, evalErr := filepath.EvalSymlinks(srcPath); evalErr == nil {
+					linkTarget = resolved
+					if !isWithinDir(resolved, realRoot) && !seenMounts[resolved] {
+						seenMounts[resolved] = true
+						*extraMounts = append(*extraMounts, sandbox.Mount{
+							Path:     resolved,
+							Writable: writableRoot,
+						})
+					}
+				}
+			}
+			if err := os.Symlink(linkTarget, dstPath); err != nil {
+				return err
+			}
 		}
 	}
 	return nil

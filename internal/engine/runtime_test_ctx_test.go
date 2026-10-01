@@ -17,7 +17,9 @@ package engine
 import (
 	"context"
 	"errors"
+	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -573,6 +575,150 @@ func TestRunTests_ExplicitFileArgs(t *testing.T) {
 	}
 	if diff := cmp.Diff(want, rep.results, cmp.AllowUnexported(testResultRecord{})); diff != "" {
 		t.Fatalf("Unexpected test results (-want +got):\n%s", diff)
+	}
+}
+
+func TestRunTests_Subdir(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	toolPath := filepath.Join(root, "prebuilt", "tool.sh")
+	if err := os.MkdirAll(filepath.Dir(toolPath), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(toolPath, []byte("#!/bin/sh\necho \"from-prebuilt:$1\"\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	writeFile(t, root, "build/sub_test.star", ""+
+		"def _cb(ctx):\n"+
+		"    for f in ctx.scm.affected_files():\n"+
+		"        content = str(ctx.io.read_file(f))\n"+
+		"        out = ctx.os.exec([ctx.scm.root + '/../prebuilt/tool.sh', f]).wait().stdout.strip()\n"+
+		"        ctx.emit.finding(\n"+
+		"            level = 'warning',\n"+
+		"            message = out,\n"+
+		"            filepath = f,\n"+
+		"            line = 1,\n"+
+		"            col = 1,\n"+
+		"            end_line = 1,\n"+
+		"            end_col = len(content) + 1,\n"+
+		"            replacements = [content + '_fixed'],\n"+
+		"        )\n"+
+		"\n"+
+		"def test_subdir_real_exec():\n"+
+		"    res = testing.run(\n"+
+		"        _cb,\n"+
+		"        subdir = 'build',\n"+
+		"        files = {\n"+
+		"            'BUILD.gn': 'gn_content',\n"+
+		"            'sub/defs.gni': 'gni_content',\n"+
+		"        },\n"+
+		"    )\n"+
+		"    asserts.eq(len(res.findings), 2)\n"+
+		"    asserts.eq(res.findings[0].filepath, 'BUILD.gn')\n"+
+		"    asserts.eq(res.findings[0].message, 'from-prebuilt:BUILD.gn')\n"+
+		"    asserts.eq(res.findings[1].filepath, 'sub/defs.gni')\n"+
+		"    asserts.eq(res.findings[1].message, 'from-prebuilt:sub/defs.gni')\n"+
+		"    asserts.eq(res.files['BUILD.gn'], 'gn_content_fixed')\n"+
+		"    asserts.eq(res.files['sub/defs.gni'], 'gni_content_fixed')\n"+
+		"\n"+
+		"def test_subdir_mock_exec():\n"+
+		"    res = testing.run(\n"+
+		"        _cb,\n"+
+		"        subdir = 'build',\n"+
+		"        files = {'BUILD.gn': 'gn_content'},\n"+
+		"        exec_mocks = [\n"+
+		"            testing.exec_mock(\n"+
+		"                cmd = [testing.root + '/../prebuilt/tool.sh', 'BUILD.gn'],\n"+
+		"                stdout = 'from-mock:BUILD.gn\\n',\n"+
+		"            ),\n"+
+		"        ],\n"+
+		"    )\n"+
+		"    asserts.eq(len(res.findings), 1)\n"+
+		"    asserts.eq(res.findings[0].message, 'from-mock:BUILD.gn')\n")
+
+	rep := &capturingTestReporter{}
+	if err := RunTests(t.Context(), &Options{
+		Dir:          root,
+		TestReporter: rep,
+	}); err != nil {
+		t.Fatalf("Unexpected error: %v (results: %+v)", err, rep.results)
+	}
+	want := []testResultRecord{
+		{name: "test_subdir_mock_exec"},
+		{name: "test_subdir_real_exec"},
+	}
+	if diff := cmp.Diff(want, rep.results, cmp.AllowUnexported(testResultRecord{})); diff != "" {
+		t.Fatalf("Unexpected test results (-want +got):\n%s", diff)
+	}
+}
+
+func TestRunTests_RunfilesSymlinkTree(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlinks require elevated privileges on Windows")
+	}
+	t.Parallel()
+	checkoutDir := t.TempDir()
+	runfilesDir := t.TempDir()
+
+	writeFile(t, checkoutDir, "shac.textproto", "min_shac_version: \"0.1.0\"\n")
+	toolSrc := filepath.Join(checkoutDir, "prebuilt", "tool.sh")
+	if err := os.MkdirAll(filepath.Dir(toolSrc), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(toolSrc, []byte("#!/bin/sh\necho \"runfiles-ok\"\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, checkoutDir, "scripts/shac/checks.star", ""+
+		"def _cb(ctx):\n"+
+		"    out = ctx.os.exec([ctx.scm.root + '/prebuilt/tool.sh']).wait().stdout.strip()\n"+
+		"    ctx.emit.finding(level = 'notice', message = out)\n"+
+		"cb = shac.check(_cb)\n")
+	writeFile(t, checkoutDir, "scripts/shac/checks_test.star", ""+
+		"load('//scripts/shac/checks.star', 'cb')\n"+
+		"def test_symlinked():\n"+
+		"    res = testing.run(cb, files = {'foo.txt': 'hi'})\n"+
+		"    asserts.eq(len(res.findings), 1)\n"+
+		"    asserts.eq(res.findings[0].message, 'runfiles-ok')\n")
+
+	for _, rel := range []string{
+		"shac.textproto",
+		"prebuilt/tool.sh",
+		"scripts/shac/checks.star",
+		"scripts/shac/checks_test.star",
+	} {
+		dst := filepath.Join(runfilesDir, filepath.FromSlash(rel))
+		if err := os.MkdirAll(filepath.Dir(dst), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		src := filepath.Join(checkoutDir, filepath.FromSlash(rel))
+		relTarget, err := filepath.Rel(filepath.Dir(dst), src)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Symlink(relTarget, dst); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	for _, files := range [][]string{
+		nil,
+		{filepath.Join(runfilesDir, "scripts/shac/checks_test.star")},
+	} {
+		rep := &capturingTestReporter{}
+		if err := RunTests(t.Context(), &Options{
+			Dir:          runfilesDir,
+			Files:        files,
+			TestReporter: rep,
+		}); err != nil {
+			t.Fatalf("Unexpected error (files=%v): %v (results: %+v)", files, err, rep.results)
+		}
+		want := []testResultRecord{
+			{name: "test_symlinked"},
+		}
+		if diff := cmp.Diff(want, rep.results, cmp.AllowUnexported(testResultRecord{})); diff != "" {
+			t.Fatalf("Unexpected test results (files=%v) (-want +got):\n%s", files, diff)
+		}
 	}
 }
 

@@ -321,7 +321,7 @@ Planned features/changes, in descending order by priority:
      shac.textproto
 - [ ] Filesystem sandboxing on MacOS
 - [ ] Windows sandboxing
-- [ ] Testing framework for checks
+- [x] Testing framework for checks
 
 ## Contributing
 
