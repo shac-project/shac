@@ -273,6 +273,11 @@ type Report interface {
 	Print(ctx context.Context, check, file string, line int, message string)
 }
 
+// TestReporter exposes callbacks for test execution.
+type TestReporter interface {
+	TestResult(ctx context.Context, name, file string, d time.Duration, err error, prints []string)
+}
+
 // Options is the options for Run().
 type Options struct {
 	// Report gets all the emitted findings and artifacts from the checks.
@@ -281,6 +286,8 @@ type Options struct {
 	// reporting.Get() which returns the right implementation based on the
 	// environment (CI, interactive, etc).
 	Report Report
+	// TestReporter gets the results of test execution.
+	TestReporter TestReporter
 	// Dir overrides the current working directory, making shac behave as if it
 	// was run in the specified directory. It defaults to the current working
 	// directory.
@@ -318,6 +325,44 @@ func Run(ctx context.Context, o *Options) error {
 	return err
 }
 
+func loadDocument(root, config string, doc *Document) (bool, error) {
+	if config == "" {
+		config = "shac.textproto"
+	}
+	absConfig := config
+	if !filepath.IsAbs(absConfig) {
+		absConfig = filepath.Join(root, absConfig)
+	}
+	var b []byte
+	var err error
+	configExists := false
+	if b, err = os.ReadFile(absConfig); err == nil {
+		configExists = true
+		// First parse the config file ignoring unknown fields and check only
+		// min_shac_version, so users get an "unsupported version" error if they
+		// set fields that are only available in a later version of shac (as
+		// long as min_shac_version is set appropriately).
+		opts := prototext.UnmarshalOptions{DiscardUnknown: true}
+		if err = opts.Unmarshal(b, doc); err != nil {
+			return false, err
+		}
+		if err = doc.CheckVersion(); err != nil {
+			return false, err
+		}
+		// Parse the config file again, failing on any unknown fields.
+		opts.DiscardUnknown = false
+		if err = opts.Unmarshal(b, doc); err != nil {
+			return false, err
+		}
+	} else if !errors.Is(err, fs.ErrNotExist) {
+		return false, err
+	}
+	if err = doc.Validate(); err != nil {
+		return false, err
+	}
+	return configExists, nil
+}
+
 func runInner(ctx context.Context, o *Options, tmpdir string) error {
 	root, err := resolveRoot(ctx, o.Dir)
 	if err != nil {
@@ -334,35 +379,9 @@ func runInner(ctx context.Context, o *Options, tmpdir string) error {
 	if config == "" {
 		config = "shac.textproto"
 	}
-	absConfig := config
-	if !filepath.IsAbs(absConfig) {
-		absConfig = filepath.Join(root, absConfig)
-	}
-	var b []byte
 	doc := Document{}
-	configExists := false
-	if b, err = os.ReadFile(absConfig); err == nil {
-		configExists = true
-		// First parse the config file ignoring unknown fields and check only
-		// min_shac_version, so users get an "unsupported version" error if they
-		// set fields that are only available in a later version of shac (as
-		// long as min_shac_version is set appropriately).
-		opts := prototext.UnmarshalOptions{DiscardUnknown: true}
-		if err = opts.Unmarshal(b, &doc); err != nil {
-			return err
-		}
-		if err = doc.CheckVersion(); err != nil {
-			return err
-		}
-		// Parse the config file again, failing on any unknown fields.
-		opts.DiscardUnknown = false
-		if err = opts.Unmarshal(b, &doc); err != nil {
-			return err
-		}
-	} else if !errors.Is(err, fs.ErrNotExist) {
-		return err
-	}
-	if err = doc.Validate(); err != nil {
+	configExists, err := loadDocument(root, config, &doc)
+	if err != nil {
 		return err
 	}
 
@@ -471,22 +490,24 @@ func runInner(ctx context.Context, o *Options, tmpdir string) error {
 			}
 		}
 		return &shacState{
-			allFiles:                  o.AllFiles,
-			allowNetwork:              doc.AllowNetwork,
-			env:                       &env,
-			filter:                    o.Filter,
-			entryPoint:                entryPoint,
-			r:                         o.Report,
-			root:                      root,
-			sandbox:                   sb,
-			scm:                       scm,
-			subdir:                    subdir,
-			subprocessSem:             subprocessSem,
-			tmpdir:                    filepath.Join(tmpdir, strconv.Itoa(idx)),
-			writableRoot:              doc.WritableRoot,
-			vars:                      vars,
-			passthroughEnv:            doc.PassthroughEnv,
-			allowedFindingsProperties: allowedFindingsProps,
+			shacConfig: shacConfig{
+				allFiles:                  o.AllFiles,
+				allowNetwork:              doc.AllowNetwork,
+				env:                       &env,
+				filter:                    o.Filter,
+				entryPoint:                entryPoint,
+				r:                         o.Report,
+				root:                      root,
+				sandbox:                   sb,
+				scm:                       scm,
+				subdir:                    subdir,
+				subprocessSem:             subprocessSem,
+				tmpdir:                    filepath.Join(tmpdir, strconv.Itoa(idx)),
+				writableRoot:              doc.WritableRoot,
+				vars:                      vars,
+				passthroughEnv:            doc.PassthroughEnv,
+				allowedFindingsProperties: allowedFindingsProps,
+			},
 		}, nil
 	}
 	var shacStates []*shacState
@@ -740,8 +761,8 @@ func normalizeFiles(files []string, root string) ([]file, error) {
 	return res, nil
 }
 
-// shacState represents a parsing state of one shac.star.
-type shacState struct {
+// shacConfig holds immutable configuration for a shacState.
+type shacConfig struct {
 	env          *starlarkEnv
 	r            Report
 	allowNetwork bool
@@ -763,14 +784,6 @@ type shacState struct {
 	scm scmCheckout
 	// sandbox is the object that can be used for sandboxing subprocesses.
 	sandbox sandbox.Sandbox
-	// checks is the list of registered checks callbacks via
-	// shac.register_check().
-	//
-	// Checks are added serially, so no lock is needed.
-	//
-	// Checks are executed sequentially after all Starlark code is loaded and not
-	// mutated. They run checks and emit results (results and comments).
-	checks []*registeredCheck
 	// filter controls which checks run. If nil, all checks will run.
 	filter         CheckFilter
 	passthroughEnv []*PassthroughEnv
@@ -780,6 +793,26 @@ type shacState struct {
 
 	// Limits the number of concurrent subprocesses launched by ctx.os.exec().
 	subprocessSem *semaphore.Weighted
+
+	// forbidRegisterCheck is set on the state used to load and run a
+	// `*_test.star` file, where checks registered by the test file itself
+	// would otherwise be silently dropped because `shac test` never executes
+	// them.
+	forbidRegisterCheck bool
+}
+
+// shacState represents a parsing state of one shac.star.
+type shacState struct {
+	shacConfig
+
+	// checks is the list of registered checks callbacks via
+	// shac.register_check().
+	//
+	// Checks are added serially, so no lock is needed.
+	//
+	// Checks are executed sequentially after all Starlark code is loaded and not
+	// mutated. They run checks and emit results (results and comments).
+	checks []*registeredCheck
 
 	// Set when fail() is called. This happens only during the first phase, thus
 	// no mutex is needed.

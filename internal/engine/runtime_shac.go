@@ -19,6 +19,7 @@ import (
 	"errors"
 	"fmt"
 	"runtime/debug"
+	"strings"
 
 	"go.starlark.net/starlark"
 )
@@ -30,11 +31,25 @@ func getShac() starlark.StringDict {
 	return starlark.StringDict{
 		"check":          newBuiltin("shac.check", shacCheck),
 		"commit_hash":    starlark.String(getCommitHash()),
-		"register_check": newBuiltinNone("shac.register_check", shacRegisterCheck),
+		"register_check": starlark.NewBuiltin("shac.register_check", shacRegisterCheckBuiltin),
 		"version": starlark.Tuple{
 			starlark.MakeInt(Version[0]), starlark.MakeInt(Version[1]), starlark.MakeInt(Version[2]),
 		},
 	}
+}
+
+// shacRegisterCheckBuiltin wraps shacRegisterCheck to reject calls made
+// directly from a test file.
+//
+// Only direct calls are rejected because modules loaded by a test file (such
+// as a shac.star file) may legitimately register checks at the top level.
+func shacRegisterCheckBuiltin(th *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+	return builtinWrapper(th, fn.Name(), func(ctx context.Context, s *shacState) (starlark.Value, error) {
+		if s.forbidRegisterCheck && strings.HasSuffix(th.CallFrame(1).Pos.Filename(), "_test.star") {
+			return nil, errors.New("can't register checks directly in a test file")
+		}
+		return starlark.None, shacRegisterCheck(ctx, s, fn.Name(), args, kwargs)
+	})
 }
 
 // shacRegisterCheck implements native function shac.register_check().
