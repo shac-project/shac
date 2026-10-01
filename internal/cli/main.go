@@ -71,6 +71,7 @@ func Main(ctx context.Context, args []string) error {
 		&checkCmd{},
 		&fmtCmd{},
 		&fixCmd{},
+		&testCmd{},
 		&docCmd{},
 		&versionCmd{},
 		&helpCmd{},

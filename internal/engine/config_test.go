@@ -30,6 +30,13 @@ func TestDocument_Validate(t *testing.T) {
 		in  string
 		err string
 	}{
+		{
+			"allowed_findings_properties {\n" +
+				"  properties { name: \"alice\" }\n" +
+				"  properties { name: \"alice\" }\n" +
+				"}\n",
+			"cannot contain duplicate property name in allowed_findings_properties: alice",
+		},
 		// Dependency.Validate().
 		{
 			"requirements {\n" +

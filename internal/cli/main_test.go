@@ -16,6 +16,8 @@ package cli
 
 import (
 	"bytes"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -24,6 +26,8 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
+	"go.fuchsia.dev/shac-project/shac/internal/engine"
 )
 
 func TestMainHelp(t *testing.T) {
@@ -38,6 +42,7 @@ func TestMainHelp(t *testing.T) {
 		{[]string{"shac", "fix", "--help"}, "Usage of shac fix:\n"},
 		{[]string{"shac", "fmt", "--help"}, "Usage of shac fmt:\n"},
 		{[]string{"shac", "doc", "--help"}, "Usage of shac doc:\n"},
+		{[]string{"shac", "test", "--help"}, "Usage of shac test:\n"},
 		{[]string{"shac", "version", "--help"}, "Usage of shac version:\n"},
 	}
 	for i, line := range data {
@@ -125,6 +130,11 @@ func TestMainErr(t *testing.T) {
 			return []string{"fix", "-C", root, "--only", "formatter"},
 				"no checks to run"
 		},
+		"test with no test files": func(t *testing.T) ([]string, string) {
+			root := t.TempDir()
+			return []string{"test", "-C", root},
+				"no test files found"
+		},
 	}
 	for name, f := range data {
 		t.Run(name, func(t *testing.T) {
@@ -139,6 +149,64 @@ func TestMainErr(t *testing.T) {
 				t.Fatalf("Wrong error (-want +got):\n%s", diff)
 			}
 		})
+	}
+}
+
+func TestMainTest_LUCIContextWithoutResultSink(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, root, "foo_test.star", "def test_ok():\n    pass\n")
+	luciCtxFile := filepath.Join(root, "luci_context.json")
+	if err := os.WriteFile(luciCtxFile, []byte(`{"resultdb": {"current_invocation": {"name": "invocations/build-123"}}}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("LUCI_CONTEXT", luciCtxFile)
+
+	if err := Main(t.Context(), []string{"shac", "test", "--quiet", "-C", root}); err != nil {
+		t.Fatalf("Unexpected error from shac test with LUCI_CONTEXT: %v", err)
+	}
+}
+
+func TestMainTest_JSONOutput(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	writeFile(t, root, "foo_test.star", ""+
+		"def test_pass():\n"+
+		"    print('hello')\n"+
+		"\n"+
+		"def test_fail():\n"+
+		"    fail('boom')\n")
+
+	jsonPath := filepath.Join(root, "results.json")
+	err := Main(t.Context(), []string{"shac", "test", "--quiet", "--json-output", jsonPath, "-C", root})
+	if !errors.Is(err, engine.ErrCheckFailed) {
+		t.Fatalf("Expected ErrCheckFailed, got %v", err)
+	}
+
+	b, err := os.ReadFile(jsonPath)
+	if err != nil {
+		t.Fatalf("Failed to read json output: %v", err)
+	}
+	var got []testCaseResult
+	if err := json.Unmarshal(b, &got); err != nil {
+		t.Fatalf("Failed to unmarshal json output: %v\n%s", err, b)
+	}
+	want := []testCaseResult{
+		{
+			Name:      "test_fail",
+			File:      "foo_test.star",
+			Status:    "FAIL",
+			Error:     "fail: boom",
+			Backtrace: "Traceback (most recent call last):\n  //foo_test.star:5:9: in test_fail\n",
+		},
+		{
+			Name:   "test_pass",
+			File:   "foo_test.star",
+			Status: "PASS",
+			Prints: []string{"[//foo_test.star:2] hello"},
+		},
+	}
+	if diff := cmp.Diff(want, got, cmpopts.IgnoreFields(testCaseResult{}, "Duration")); diff != "" {
+		t.Fatalf("Unexpected json results (-want +got):\n%s", diff)
 	}
 }
 

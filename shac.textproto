@@ -21,6 +21,7 @@ ignore: "/vendor/"
 # Vendored code for test data only.
 ignore: "/internal/engine/testdata/ut/"
 ignore: "/internal/engine/testdata/vendored/"
+ignore_tests: "/internal/engine/testdata/"
 # TODO(olivernewman): Make root non-writable once we can use caches and
 # pass-throughs to avoid having checks install tools and do Go builds within the
 # checkout directory.

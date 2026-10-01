@@ -85,6 +85,15 @@ func (doc *Document) Validate() error {
 			}
 		}
 	}
+	if doc.AllowedFindingsProperties != nil {
+		names := make(map[string]bool, len(doc.AllowedFindingsProperties.Properties))
+		for _, p := range doc.AllowedFindingsProperties.Properties {
+			if names[p.Name] {
+				return fmt.Errorf("cannot contain duplicate property name in allowed_findings_properties: %s", p.Name)
+			}
+			names[p.Name] = true
+		}
+	}
 	seen := map[string][]*VersionDigest{}
 	if doc.Sum != nil {
 		if len(deps) == 0 && len(doc.Sum.Known) > 0 {

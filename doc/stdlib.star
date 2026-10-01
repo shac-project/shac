@@ -69,6 +69,9 @@ def _shac_register_check(check):
     file. Each callback will be run in parallel. Each check must have a different
     name.
 
+    It may not be called directly from `*_test.star` files, since `shac test`
+    never runs checks registered there.
+
     Example:
       ```python
       def cb(ctx):
