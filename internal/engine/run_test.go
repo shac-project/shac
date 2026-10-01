@@ -3589,6 +3589,39 @@ shac.register_check(cb)
 	}
 }
 
+func TestResolveRoot_StopsAtShacTextprotoInsideGitRepo(t *testing.T) {
+	t.Parallel()
+	outerRepo := resolvedTempDir(t)
+	initGit(t, outerRepo)
+	writeFile(t, outerRepo, "shac.textproto", "")
+
+	stagedDir := filepath.Join(outerRepo, "out", "runfiles")
+	writeFile(t, stagedDir, "shac.textproto", "")
+
+	got, err := resolveRoot(t.Context(), stagedDir)
+	if err != nil {
+		t.Fatalf("resolveRoot failed: %v", err)
+	}
+	want := strings.ReplaceAll(filepath.Clean(stagedDir), string(os.PathSeparator), "/")
+	if got != want {
+		t.Fatalf("resolveRoot(%q) = %q, want %q", stagedDir, got, want)
+	}
+
+	// A subdirectory without shac.textproto should still walk up to outerRepo.
+	subDir := filepath.Join(outerRepo, "subdir")
+	if err := os.MkdirAll(subDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	gotSub, err := resolveRoot(t.Context(), subDir)
+	if err != nil {
+		t.Fatalf("resolveRoot failed: %v", err)
+	}
+	wantOuter := strings.ReplaceAll(filepath.Clean(outerRepo), string(os.PathSeparator), "/")
+	if gotSub != wantOuter {
+		t.Fatalf("resolveRoot(%q) = %q, want %q", subDir, gotSub, wantOuter)
+	}
+}
+
 func init() {
 	// Silence logging.
 	log.SetOutput(io.Discard)

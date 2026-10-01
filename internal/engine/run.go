@@ -675,6 +675,9 @@ func resolveRoot(ctx context.Context, dir string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	if cfgFi, statErr := os.Stat(filepath.Join(dir, "shac.textproto")); statErr == nil && !cfgFi.IsDir() {
+		return strings.ReplaceAll(filepath.Clean(dir), string(os.PathSeparator), "/"), nil
+	}
 	root, err := runGitCmd(ctx, dir, "rev-parse", "--show-toplevel")
 	if err != nil {
 		if errors.Is(err, exec.ErrNotFound) {
