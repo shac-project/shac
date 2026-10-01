@@ -50,6 +50,17 @@ func getPredeclared() starlark.StringDict {
 	}
 }
 
+// getTestPredeclared returns the predeclared symbols for `*_test.star` files
+// under `shac test`.
+//
+// The test-only modules are withheld from all other files so that check code
+// can never come to depend on them.
+func getTestPredeclared() starlark.StringDict {
+	d := getPredeclared()
+	d["asserts"] = toValue("asserts", getAsserts())
+	return d
+}
+
 // fail aborts execution. When run within a check, associates the check with an "abnormal failure".
 //
 // Unlike builtins.Fail(), it doesn't allow user specified stack traces.

@@ -31,6 +31,7 @@ options](https://pkg.go.dev/go.starlark.net/syntax#FileOptions) are enabled:
 - [load](#load)
 - [print](#print)
 - [struct](#struct)
+- [asserts](#asserts)
 
 ## shac
 
@@ -977,3 +978,125 @@ obj.do()
 ### Arguments
 
 * **\*\*kwargs**: structure's fields. The argument name becomes the property name, and the argument value becomes the property value.
+
+## asserts
+
+asserts is a global module exposing test assertion helpers. It is only
+available in `*_test.star` files run by `shac test`.
+
+Fields:
+
+- contains
+- eq
+- fails
+- false
+- ne
+- true
+
+## asserts.contains
+
+Asserts that container contains item.
+
+### Example
+
+```python
+def test_contains():
+    asserts.contains("hello world", "world")
+    asserts.contains(["alice", "bob"], "bob")
+    asserts.contains({"alice": 1, "bob": 2}, "alice")
+```
+
+### Arguments
+
+* **container**: An iterable, mapping, or string.
+* **item**: The element, key, or substring expected to be in container.
+* **msg**: (optional) Message to prefix the failure details with.
+
+## asserts.eq
+
+Asserts that actual and expected are equal.
+
+When comparing multi-line strings or nested structs/sequences, a unified
+diff is included in the failure message.
+
+### Example
+
+```python
+def test_split():
+    asserts.eq("alice,bob".split(","), ["alice", "bob"])
+```
+
+### Arguments
+
+* **actual**: The value produced by the code under test.
+* **expected**: The expected value.
+* **msg**: (optional) Message to prefix the failure details with.
+
+## asserts.fails
+
+Asserts that calling fn() raises an error or calls fail().
+
+### Example
+
+```python
+def _validate_name(name):
+    if not name:
+        fail("name must not be empty")
+
+def test_validate_name_empty():
+    asserts.fails(lambda: _validate_name(""), "must not be empty")
+```
+
+### Arguments
+
+* **fn**: A 0-argument callable expected to fail.
+* **msg**: (optional) Substring or regular expression that the failure message must match.
+
+## asserts.false
+
+Asserts that cond is falsy.
+
+### Example
+
+```python
+def test_startswith():
+    asserts.false("bob".startswith("a"), "bob should not start with 'a'")
+```
+
+### Arguments
+
+* **cond**: Value to check for falsiness.
+* **msg**: (optional) Custom failure message.
+
+## asserts.ne
+
+Asserts that actual and expected are not equal.
+
+### Example
+
+```python
+def test_upper():
+    asserts.ne("alice".upper(), "alice")
+```
+
+### Arguments
+
+* **actual**: The value produced by the code under test.
+* **expected**: A value that actual must not equal.
+* **msg**: (optional) Message to prefix the failure details with.
+
+## asserts.true
+
+Asserts that cond is truthy.
+
+### Example
+
+```python
+def test_startswith():
+    asserts.true("alice".startswith("a"), "alice should start with 'a'")
+```
+
+### Arguments
+
+* **cond**: Value to check for truthiness.
+* **msg**: (optional) Custom failure message.

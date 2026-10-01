@@ -970,3 +970,119 @@ def struct_(**kwargs):
         and the argument value becomes the property value.
     """
     pass
+
+## Methods inside the asserts object.
+
+def _assert_contains(container, item, msg = ""):
+    """Asserts that container contains item.
+
+    Example:
+      ```python
+      def test_contains():
+          asserts.contains("hello world", "world")
+          asserts.contains(["alice", "bob"], "bob")
+          asserts.contains({"alice": 1, "bob": 2}, "alice")
+      ```
+
+    Args:
+      container: An iterable, mapping, or string.
+      item: The element, key, or substring expected to be in container.
+      msg: (optional) Message to prefix the failure details with.
+    """
+    pass
+
+def _assert_eq(actual, expected, msg = ""):
+    """Asserts that actual and expected are equal.
+
+    When comparing multi-line strings or nested structs/sequences, a unified
+    diff is included in the failure message.
+
+    Example:
+      ```python
+      def test_split():
+          asserts.eq("alice,bob".split(","), ["alice", "bob"])
+      ```
+
+    Args:
+      actual: The value produced by the code under test.
+      expected: The expected value.
+      msg: (optional) Message to prefix the failure details with.
+    """
+    pass
+
+def _assert_fails(fn, msg = ""):
+    """Asserts that calling fn() raises an error or calls fail().
+
+    Example:
+      ```python
+      def _validate_name(name):
+          if not name:
+              fail("name must not be empty")
+
+      def test_validate_name_empty():
+          asserts.fails(lambda: _validate_name(""), "must not be empty")
+      ```
+
+    Args:
+      fn: A 0-argument callable expected to fail.
+      msg: (optional) Substring or regular expression that the failure message
+        must match.
+    """
+    pass
+
+def _assert_false(cond, msg = ""):
+    """Asserts that cond is falsy.
+
+    Example:
+      ```python
+      def test_startswith():
+          asserts.false("bob".startswith("a"), "bob should not start with 'a'")
+      ```
+
+    Args:
+      cond: Value to check for falsiness.
+      msg: (optional) Custom failure message.
+    """
+    pass
+
+def _assert_ne(actual, expected, msg = ""):
+    """Asserts that actual and expected are not equal.
+
+    Example:
+      ```python
+      def test_upper():
+          asserts.ne("alice".upper(), "alice")
+      ```
+
+    Args:
+      actual: The value produced by the code under test.
+      expected: A value that actual must not equal.
+      msg: (optional) Message to prefix the failure details with.
+    """
+    pass
+
+def _assert_true(cond, msg = ""):
+    """Asserts that cond is truthy.
+
+    Example:
+      ```python
+      def test_startswith():
+          asserts.true("alice".startswith("a"), "alice should start with 'a'")
+      ```
+
+    Args:
+      cond: Value to check for truthiness.
+      msg: (optional) Custom failure message.
+    """
+    pass
+
+# asserts is a global module exposing test assertion helpers. It is only
+# available in `*_test.star` files run by `shac test`.
+asserts = struct(
+    contains = _assert_contains,
+    eq = _assert_eq,
+    fails = _assert_fails,
+    false = _assert_false,
+    ne = _assert_ne,
+    true = _assert_true,
+)

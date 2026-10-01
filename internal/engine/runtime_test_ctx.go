@@ -22,16 +22,272 @@ import (
 	"maps"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"time"
 
 	"github.com/go-git/go-git/v5/plumbing/format/gitignore"
+	"github.com/pmezard/go-difflib/difflib"
 	"go.fuchsia.dev/shac-project/shac/internal/sandbox"
 	"go.starlark.net/starlark"
+	"go.starlark.net/starlarkstruct"
+	"go.starlark.net/syntax"
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/sync/semaphore"
 )
+
+// getAsserts returns the predeclared asserts module.
+//
+// Make sure to update //doc/stdlib.star whenever this function is modified.
+func getAsserts() starlark.StringDict {
+	return starlark.StringDict{
+		"contains": newBuiltinNone("asserts.contains", assertContains),
+		"eq":       newBuiltinNone("asserts.eq", assertEq),
+		"fails":    starlark.NewBuiltin("asserts.fails", assertFails),
+		"false":    newBuiltinNone("asserts.false", assertFalse),
+		"ne":       newBuiltinNone("asserts.ne", assertNe),
+		"true":     newBuiltinNone("asserts.true", assertTrue),
+	}
+}
+
+// assertionFailure formats an assertion error, prefixing detail with the
+// user-provided msg (if any) so the failure explains what was being checked
+// without losing the values that caused it.
+func assertionFailure(msg starlark.String, format string, args ...any) error {
+	detail := fmt.Sprintf(format, args...)
+	if msg != "" {
+		return fmt.Errorf("assertion failed: %s: %s", string(msg), detail)
+	}
+	return fmt.Errorf("assertion failed: %s", detail)
+}
+
+func assertEq(ctx context.Context, s *shacState, name string, args starlark.Tuple, kwargs []starlark.Tuple) error {
+	var actual, expected starlark.Value
+	var msg starlark.String
+	if err := starlark.UnpackArgs(name, args, kwargs,
+		"actual", &actual,
+		"expected", &expected,
+		"msg?", &msg,
+	); err != nil {
+		return err
+	}
+	eq, err := starlark.Equal(actual, expected)
+	if err != nil {
+		return err
+	}
+	if eq {
+		return nil
+	}
+	actualPretty := prettyStarlarkValue(actual, 0)
+	expectedPretty := prettyStarlarkValue(expected, 0)
+	if strings.Contains(actualPretty, "\n") || strings.Contains(expectedPretty, "\n") {
+		diff, diffErr := difflib.GetUnifiedDiffString(difflib.UnifiedDiff{
+			A:        difflib.SplitLines(expectedPretty + "\n"),
+			B:        difflib.SplitLines(actualPretty + "\n"),
+			FromFile: "expected",
+			ToFile:   "actual",
+			Context:  3,
+		})
+		if diffErr == nil && diff != "" {
+			return assertionFailure(msg, "values are not equal:\n%s", strings.TrimSuffix(diff, "\n"))
+		}
+	}
+	return assertionFailure(msg, "got %s, want %s", actual.String(), expected.String())
+}
+
+func assertNe(ctx context.Context, s *shacState, name string, args starlark.Tuple, kwargs []starlark.Tuple) error {
+	var actual, expected starlark.Value
+	var msg starlark.String
+	if err := starlark.UnpackArgs(name, args, kwargs,
+		"actual", &actual,
+		"expected", &expected,
+		"msg?", &msg,
+	); err != nil {
+		return err
+	}
+	eq, err := starlark.Equal(actual, expected)
+	if err != nil {
+		return err
+	}
+	if eq {
+		return assertionFailure(msg, "expected values to differ, but both were %s", actual.String())
+	}
+	return nil
+}
+
+func assertTrue(ctx context.Context, s *shacState, name string, args starlark.Tuple, kwargs []starlark.Tuple) error {
+	var cond starlark.Value
+	var msg starlark.String
+	if err := starlark.UnpackArgs(name, args, kwargs,
+		"cond", &cond,
+		"msg?", &msg,
+	); err != nil {
+		return err
+	}
+	if !cond.Truth() {
+		if msg != "" {
+			return fmt.Errorf("assertion failed: %s", string(msg))
+		}
+		return fmt.Errorf("assertion failed: expected truthy value, got %s", cond.String())
+	}
+	return nil
+}
+
+func assertFalse(ctx context.Context, s *shacState, name string, args starlark.Tuple, kwargs []starlark.Tuple) error {
+	var cond starlark.Value
+	var msg starlark.String
+	if err := starlark.UnpackArgs(name, args, kwargs,
+		"cond", &cond,
+		"msg?", &msg,
+	); err != nil {
+		return err
+	}
+	if cond.Truth() {
+		if msg != "" {
+			return fmt.Errorf("assertion failed: %s", string(msg))
+		}
+		return fmt.Errorf("assertion failed: expected falsy value, got %s", cond.String())
+	}
+	return nil
+}
+
+func assertContains(ctx context.Context, s *shacState, name string, args starlark.Tuple, kwargs []starlark.Tuple) error {
+	var container, item starlark.Value
+	var msg starlark.String
+	if err := starlark.UnpackArgs(name, args, kwargs,
+		"container", &container,
+		"item", &item,
+		"msg?", &msg,
+	); err != nil {
+		return err
+	}
+	// Delegating to the "in" operator keeps asserts.contains(c, x) exactly
+	// equivalent to asserts.true(x in c), just with a more useful message.
+	found, err := starlark.Binary(syntax.IN, item, container)
+	if err != nil {
+		return err
+	}
+	if !found.Truth() {
+		return assertionFailure(msg, "%s does not contain %s", container.String(), item.String())
+	}
+	return nil
+}
+
+func assertFails(th *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+	var target starlark.Callable
+	var msg starlark.String
+	if err := starlark.UnpackArgs(fn.Name(), args, kwargs,
+		"fn", &target,
+		"msg?", &msg,
+	); err != nil {
+		return nil, err
+	}
+	ctx := getContext(th)
+	s := ctxShacState(ctx)
+	c := ctxCheck(ctx)
+	prevStateFail := s.failErr
+	var prevCheckFail *failure
+	if c != nil {
+		prevCheckFail = c.failErr
+	}
+	_, callErr := starlark.Call(th, target, nil, nil)
+	// Restore failErr on the enclosing state/check so an expected fail() call
+	// inside target does not mark the enclosing test as having failed.
+	s.failErr = prevStateFail
+	if c != nil {
+		c.failErr = prevCheckFail
+	}
+	if callErr == nil {
+		return nil, fmt.Errorf("%s: expected function %s to fail, but it succeeded", fn.Name(), target.String())
+	}
+	if msg != "" {
+		pattern := string(msg)
+		errText := callErr.Error()
+		if !strings.Contains(errText, pattern) {
+			matched, reErr := regexp.MatchString(pattern, errText)
+			if reErr != nil {
+				return nil, fmt.Errorf("%s: for parameter \"msg\": %w", fn.Name(), reErr)
+			}
+			if !matched {
+				return nil, fmt.Errorf("%s: expected error matching %q, got %q", fn.Name(), pattern, errText)
+			}
+		}
+	}
+	return starlark.None, nil
+}
+
+// maxPrettyDepth bounds prettyStarlarkValue's recursion so self-referential
+// containers (e.g. a list that contains itself) can't overflow the stack.
+// Beyond this depth, values fall back to String(), which handles cycles.
+const maxPrettyDepth = 32
+
+func prettyStarlarkValue(v starlark.Value, indent int) string {
+	if indent >= maxPrettyDepth {
+		return v.String()
+	}
+	pad := strings.Repeat("  ", indent)
+	innerPad := strings.Repeat("  ", indent+1)
+	switch val := v.(type) {
+	case starlark.String:
+		if indent == 0 && strings.Contains(string(val), "\n") {
+			return string(val)
+		}
+		return val.String()
+	case *starlarkstruct.Struct:
+		names := val.AttrNames()
+		if len(names) == 0 {
+			return fmt.Sprintf("%s()", val.Constructor())
+		}
+		var b strings.Builder
+		fmt.Fprintf(&b, "%s(\n", val.Constructor())
+		for _, k := range names {
+			attr, err := val.Attr(k)
+			if err != nil {
+				continue
+			}
+			fmt.Fprintf(&b, "%s%s = %s,\n", innerPad, k, prettyStarlarkValue(attr, indent+1))
+		}
+		fmt.Fprintf(&b, "%s)", pad)
+		return b.String()
+	case starlark.Tuple:
+		if len(val) == 0 {
+			return "()"
+		}
+		var b strings.Builder
+		b.WriteString("(\n")
+		for _, item := range val {
+			fmt.Fprintf(&b, "%s%s,\n", innerPad, prettyStarlarkValue(item, indent+1))
+		}
+		fmt.Fprintf(&b, "%s)", pad)
+		return b.String()
+	case *starlark.List:
+		if val.Len() == 0 {
+			return "[]"
+		}
+		var b strings.Builder
+		b.WriteString("[\n")
+		for i := range val.Len() {
+			fmt.Fprintf(&b, "%s%s,\n", innerPad, prettyStarlarkValue(val.Index(i), indent+1))
+		}
+		fmt.Fprintf(&b, "%s]", pad)
+		return b.String()
+	case *starlark.Dict:
+		items := val.Items()
+		if len(items) == 0 {
+			return "{}"
+		}
+		var b strings.Builder
+		b.WriteString("{\n")
+		for _, kv := range items {
+			fmt.Fprintf(&b, "%s%s: %s,\n", innerPad, kv[0].String(), prettyStarlarkValue(kv[1], indent+1))
+		}
+		fmt.Fprintf(&b, "%s}", pad)
+		return b.String()
+	default:
+		return v.String()
+	}
+}
 
 // RunTests discovers and executes Starlark *_test.star files.
 func RunTests(ctx context.Context, o *Options) error {
@@ -120,10 +376,11 @@ func runTestsInner(ctx context.Context, tmpdir string, o *Options) error {
 
 	for idx, relPath := range testFiles {
 		env := &starlarkEnv{
-			globals:  getPredeclared(),
-			sources:  map[string]*loadedSource{},
-			packages: packages,
-			opts:     starlarkOptions(),
+			globals:     getPredeclared(),
+			testGlobals: getTestPredeclared(),
+			sources:     map[string]*loadedSource{},
+			packages:    packages,
+			opts:        starlarkOptions(),
 		}
 		fileTmpDir := filepath.Join(tmpdir, fmt.Sprintf("testfile-%d", idx))
 		if err := os.MkdirAll(fileTmpDir, 0o700); err != nil {
