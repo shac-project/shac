@@ -17,6 +17,7 @@ package engine
 import (
 	"cmp"
 	"context"
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"io"
@@ -965,134 +966,145 @@ func testingRun(th *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, 
 		return nil, err
 	}
 
-	testRootDir, err := s.newTempDir()
-	if err != nil {
-		return nil, err
-	}
-	extraMounts, err := materializeTestRoot(s.realRoot, testRootDir, subdir, s.writableRoot, virtualFiles, shadowedPaths)
-	if err != nil {
-		return nil, err
-	}
-	testRootSlash := filepath.ToSlash(testRootDir)
-	scmRootSlash := path.Join(testRootSlash, subdir)
-
-	// Prints from the check under test (and from exec_mock handlers) belong
-	// in the calling test's output, so reuse the test thread's print impl.
-	pi := th.Print
-
 	var mocksMu sync.Mutex
-	rep := newTestReport()
-	vscm := &virtualSCM{
-		files:      virtualFiles,
-		scmCommits: scmCommits,
-	}
-
-	var cState *shacState
-	execHandler := func(execCtx context.Context, cmd []string, cwd string, env map[string]string, stdin io.Reader, raiseOnFailure bool, okRetcodes []int, tempDir string) (*subprocess, bool, error) {
-		mocksMu.Lock()
-		var matched *execMockEntry
-		for _, m := range mocks {
-			if !m.used && m.matches(cmd, scmRootSlash) {
-				m.used = true
-				matched = m
-				break
-			}
+	// runPass runs the checks once against files and returns their report.
+	// If only is non-nil, just the checks whose names are in it run.
+	runPass := func(files []*virtualFile, only map[string]bool, pi func(*starlark.Thread, string)) (*testReport, error) {
+		testRootDir, passErr := s.newTempDir()
+		if passErr != nil {
+			return nil, passErr
 		}
-		if matched == nil {
+		extraMounts, passErr := materializeTestRoot(s.realRoot, testRootDir, subdir, s.writableRoot, files, shadowedPaths)
+		if passErr != nil {
+			return nil, passErr
+		}
+		testRootSlash := filepath.ToSlash(testRootDir)
+		scmRootSlash := path.Join(testRootSlash, subdir)
+
+		rep := newTestReport()
+		vscm := &virtualSCM{
+			files:      files,
+			scmCommits: scmCommits,
+		}
+
+		var cState *shacState
+		execHandler := func(execCtx context.Context, cmd []string, cwd string, env map[string]string, stdin io.Reader, raiseOnFailure bool, okRetcodes []int, tempDir string) (*subprocess, bool, error) {
+			mocksMu.Lock()
+			var matched *execMockEntry
 			for _, m := range mocks {
-				if m.matches(cmd, scmRootSlash) {
+				if !m.used && m.matches(cmd, scmRootSlash) {
+					m.used = true
 					matched = m
 					break
 				}
 			}
-		}
-		mocksMu.Unlock()
-		if matched == nil {
-			return nil, false, nil
-		}
-
-		retcode := matched.retcode
-		stdoutStr := strings.ReplaceAll(matched.stdout, testingRootPlaceholder, scmRootSlash)
-		stderrStr := strings.ReplaceAll(matched.stderr, testingRootPlaceholder, scmRootSlash)
-
-		if matched.handler != nil {
-			cmdVals := make(starlark.Tuple, len(cmd))
-			for i, arg := range cmd {
-				cmdVals[i] = starlark.String(arg)
-			}
-			handlerTh := cState.env.thread(execCtx, "exec_mock_handler", pi)
-			resVal, callErr := starlark.Call(handlerTh, matched.handler, starlark.Tuple{cmdVals}, nil)
-			if callErr != nil {
-				return nil, true, callErr
-			}
-			if resVal != starlark.None {
-				st, ok := resVal.(*starlarkstruct.Struct)
-				if !ok || st.Constructor() != starlark.String("completed_subprocess") {
-					return nil, true, fmt.Errorf("exec_mock handler must return None or testing.exec_result(), got %s", resVal.Type())
+			if matched == nil {
+				for _, m := range mocks {
+					if m.matches(cmd, scmRootSlash) {
+						matched = m
+						break
+					}
 				}
-				rcVal, _ := st.Attr("retcode")
-				outVal, _ := st.Attr("stdout")
-				errVal, _ := st.Attr("stderr")
-				retcode = intToInt(rcVal.(starlark.Int))
-				stdoutStr = strings.ReplaceAll(string(outVal.(starlark.String)), testingRootPlaceholder, scmRootSlash)
-				stderrStr = strings.ReplaceAll(string(errVal.(starlark.String)), testingRootPlaceholder, scmRootSlash)
+			}
+			mocksMu.Unlock()
+			if matched == nil {
+				return nil, false, nil
+			}
+
+			retcode := matched.retcode
+			stdoutStr := strings.ReplaceAll(matched.stdout, testingRootPlaceholder, scmRootSlash)
+			stderrStr := strings.ReplaceAll(matched.stderr, testingRootPlaceholder, scmRootSlash)
+
+			if matched.handler != nil {
+				cmdVals := make(starlark.Tuple, len(cmd))
+				for i, arg := range cmd {
+					cmdVals[i] = starlark.String(arg)
+				}
+				handlerTh := cState.env.thread(execCtx, "exec_mock_handler", pi)
+				resVal, callErr := starlark.Call(handlerTh, matched.handler, starlark.Tuple{cmdVals}, nil)
+				if callErr != nil {
+					return nil, true, callErr
+				}
+				if resVal != starlark.None {
+					st, ok := resVal.(*starlarkstruct.Struct)
+					if !ok || st.Constructor() != starlark.String("completed_subprocess") {
+						return nil, true, fmt.Errorf("exec_mock handler must return None or testing.exec_result(), got %s", resVal.Type())
+					}
+					rcVal, _ := st.Attr("retcode")
+					outVal, _ := st.Attr("stdout")
+					errVal, _ := st.Attr("stderr")
+					retcode = intToInt(rcVal.(starlark.Int))
+					stdoutStr = strings.ReplaceAll(string(outVal.(starlark.String)), testingRootPlaceholder, scmRootSlash)
+					stderrStr = strings.ReplaceAll(string(errVal.(starlark.String)), testingRootPlaceholder, scmRootSlash)
+				}
+			}
+
+			stdoutBuf, stderrBuf := buffers.get(), buffers.get()
+			stdoutBuf.WriteString(stdoutStr)
+			stderrBuf.WriteString(stderrStr)
+
+			errs := make(chan error, 1)
+			if retcode != 0 {
+				errs <- &mockExitError{code: retcode}
+			}
+			close(errs)
+
+			return &subprocess{
+				args:           cmd,
+				stdout:         stdoutBuf,
+				stderr:         stderrBuf,
+				raiseOnFailure: raiseOnFailure,
+				okRetcodes:     okRetcodes,
+				tempDir:        tempDir,
+				errs:           errs,
+			}, true, nil
+		}
+
+		cConfig := s.shacConfig
+		cConfig.r = rep
+		cConfig.root = testRootDir
+		cConfig.subdir = subdir
+		cConfig.extraMounts = extraMounts
+		cConfig.tmpdir = testRootDir + "-tmp"
+		cConfig.vars = vars
+		cConfig.scm = vscm
+		cConfig.execHandler = execHandler
+		// Unlike the test file itself, testing.run() executes whatever checks
+		// get registered.
+		cConfig.forbidRegisterCheck = false
+		cState = &shacState{
+			shacConfig: cConfig,
+		}
+		cCtx := context.WithValue(ctx, &shacStateCtxKey, cState)
+
+		checksToRun, passErr := resolveChecksToRun(cCtx, th, cState, argcheck, argcheckArgs)
+		if passErr != nil {
+			return nil, passErr
+		}
+		cState.doneLoading = true
+
+		ctxVal, passErr := getCtx(scmRootSlash, cState.vars)
+		if passErr != nil {
+			return nil, passErr
+		}
+		callArgs := starlark.Tuple{ctxVal}
+		callArgs.Freeze()
+		for _, rc := range checksToRun {
+			if only != nil && !only[rc.check.name] {
+				continue
+			}
+			if passErr = rc.call(cCtx, cState.env, callArgs, pi); passErr != nil {
+				return nil, passErr
 			}
 		}
-
-		stdoutBuf, stderrBuf := buffers.get(), buffers.get()
-		stdoutBuf.WriteString(stdoutStr)
-		stderrBuf.WriteString(stderrStr)
-
-		errs := make(chan error, 1)
-		if retcode != 0 {
-			errs <- &mockExitError{code: retcode}
-		}
-		close(errs)
-
-		return &subprocess{
-			args:           cmd,
-			stdout:         stdoutBuf,
-			stderr:         stderrBuf,
-			raiseOnFailure: raiseOnFailure,
-			okRetcodes:     okRetcodes,
-			tempDir:        tempDir,
-			errs:           errs,
-		}, true, nil
+		return rep, nil
 	}
 
-	cConfig := s.shacConfig
-	cConfig.r = rep
-	cConfig.root = testRootDir
-	cConfig.subdir = subdir
-	cConfig.extraMounts = extraMounts
-	cConfig.tmpdir = testRootDir + "-tmp"
-	cConfig.vars = vars
-	cConfig.scm = vscm
-	cConfig.execHandler = execHandler
-	// Unlike the test file itself, testing.run() executes whatever checks get
-	// registered.
-	cConfig.forbidRegisterCheck = false
-	cState = &shacState{
-		shacConfig: cConfig,
-	}
-	cCtx := context.WithValue(ctx, &shacStateCtxKey, cState)
-
-	checksToRun, err := resolveChecksToRun(cCtx, th, cState, argcheck, argcheckArgs)
+	// Prints from the check under test (and from exec_mock handlers) belong
+	// in the calling test's output, so reuse the test thread's print impl.
+	rep, err := runPass(virtualFiles, nil, th.Print)
 	if err != nil {
 		return nil, err
-	}
-	cState.doneLoading = true
-
-	ctxVal, err := getCtx(scmRootSlash, cState.vars)
-	if err != nil {
-		return nil, err
-	}
-	callArgs := starlark.Tuple{ctxVal}
-	callArgs.Freeze()
-	for _, rc := range checksToRun {
-		if err = rc.call(cCtx, cState.env, callArgs, pi); err != nil {
-			return nil, err
-		}
 	}
 
 	for _, m := range mocks {
@@ -1101,20 +1113,19 @@ func testingRun(th *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, 
 		}
 	}
 
-	resultFiles := starlark.NewDict(len(virtualFiles))
+	contents, err := applyTestFixes(virtualFiles, rep, func(files []*virtualFile, only map[string]bool) (*testReport, error) {
+		// Re-runs only exist to compute res.files, so their output would
+		// just be confusing duplicates of the first pass's output.
+		return runPass(files, only, func(*starlark.Thread, string) {})
+	})
+	if err != nil {
+		return nil, err
+	}
+	resultFiles := starlark.NewDict(len(contents))
 	for _, vf := range virtualFiles {
-		if vf.a == "D" {
-			continue
+		if content, ok := contents[vf.path]; ok {
+			_ = resultFiles.SetKey(starlark.String(vf.path), starlark.String(content))
 		}
-		content := vf.content
-		if fileFindings := rep.findingsByFile[vf.path]; len(fileFindings) > 0 {
-			var fixErr error
-			content, _, fixErr = applyReplacements(content, fileFindings)
-			if fixErr != nil {
-				return nil, fixErr
-			}
-		}
-		_ = resultFiles.SetKey(starlark.String(vf.path), starlark.String(content))
 	}
 	resultFiles.Freeze()
 
@@ -1136,6 +1147,77 @@ func testingRun(th *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, 
 	})
 	res.Freeze()
 	return res, nil
+}
+
+// applyTestFixes returns the contents of the non-deleted virtual files after
+// applying the fixes in rep, keyed by path.
+//
+// Like `shac fix`, overlapping findings (including multiple findings on the
+// same line) aren't applied together, since each replacement was computed
+// against the original contents. Instead, the checks whose findings were
+// skipped are re-run via rerun against the partially-fixed files until
+// nothing is skipped, so that res.files matches what `shac fix` would write.
+func applyTestFixes(files []*virtualFile, rep *testReport, rerun func([]*virtualFile, map[string]bool) (*testReport, error)) (map[string]string, error) {
+	contents := make(map[string]string, len(files))
+	for _, vf := range files {
+		if vf.a != "D" {
+			contents[vf.path] = vf.content
+		}
+	}
+	seen := map[[sha256.Size]byte]bool{}
+	for pass := 1; ; pass++ {
+		skippedChecks := map[string]bool{}
+		numSkipped := 0
+		for _, vf := range files {
+			fileFindings := rep.findingsByFile[vf.path]
+			if vf.a == "D" || len(fileFindings) == 0 {
+				continue
+			}
+			content, fr, err := applyReplacements(contents[vf.path], fileFindings)
+			if err != nil {
+				return nil, err
+			}
+			contents[vf.path] = content
+			numSkipped += fr.numSkipped
+			for _, c := range fr.skippedChecks {
+				skippedChecks[c] = true
+			}
+		}
+		if numSkipped == 0 {
+			return contents, nil
+		}
+
+		state := make(map[string][sha256.Size]byte, len(contents))
+		for p, c := range contents {
+			state[p] = sha256.Sum256([]byte(c))
+		}
+		checkNames := slices.Sorted(maps.Keys(skippedChecks))
+		fp := rerunFingerprint(state, checkNames, nil)
+		if seen[fp] {
+			return nil, fmt.Errorf("%d findings not fixed: fixes did not converge after %d passes", numSkipped, pass)
+		}
+		seen[fp] = true
+		if pass >= maxFixPasses {
+			return nil, fmt.Errorf("%d findings still not fixed after %d passes due to overlap with other fixes", numSkipped, pass)
+		}
+
+		nextFiles := make([]*virtualFile, 0, len(files))
+		for _, vf := range files {
+			// Custom new_lines describe the original contents, so let
+			// re-runs compute them from the fixed contents instead.
+			nextFiles = append(nextFiles, &virtualFile{
+				path:     vf.path,
+				a:        vf.a,
+				content:  contents[vf.path],
+				affected: vf.affected,
+			})
+		}
+		var err error
+		rep, err = rerun(nextFiles, skippedChecks)
+		if err != nil {
+			return nil, err
+		}
+	}
 }
 
 func resolveChecksToRun(ctx context.Context, th *starlark.Thread, cState *shacState, target starlark.Value, checkArgs *starlark.Dict) ([]*registeredCheck, error) {

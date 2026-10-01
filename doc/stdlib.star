@@ -1173,7 +1173,12 @@ def _testing_run(check, *, files = None, commits = None, vars = None, exec_mocks
         findings: Tuple of finding structs emitted during the run.
         artifacts: Dict mapping artifact filepaths to string contents.
         files: Dict mapping non-deleted virtual file paths to their contents
-          after applying any non-overlapping single-replacement findings.
+          after applying single-replacement findings the way `shac fix`
+          does: overlapping findings (including multiple findings on the
+          same line) are applied by re-running the checks that emitted them
+          against the partially-fixed files until all are applied. Re-runs
+          don't affect findings or artifacts, and their print() output is
+          discarded. testing.run() fails if the fixes don't converge.
     """
     pass
 

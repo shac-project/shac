@@ -555,6 +555,64 @@ func TestRunTests_RegisterCheckInTestFile(t *testing.T) {
 	})
 }
 
+func TestRunTests_MultiPassFixes(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	writeFile(t, root, "fix_test.star", ""+
+		"def _quotes(ctx):\n"+
+		"    print('pass')\n"+
+		"    for path, meta in ctx.scm.affected_files().items():\n"+
+		"        for num, line in meta.new_lines():\n"+
+		"            for i, c in enumerate(line.elems()):\n"+
+		"                if c == '\"':\n"+
+		"                    ctx.emit.finding(\n"+
+		"                        level = 'error',\n"+
+		"                        message = 'double quote',\n"+
+		"                        filepath = path,\n"+
+		"                        line = num,\n"+
+		"                        col = i + 1,\n"+
+		"                        end_col = i + 2,\n"+
+		"                        replacements = [\"'\"],\n"+
+		"                    )\n"+
+		"\n"+
+		"def _noop_twice(ctx):\n"+
+		"    for path, meta in ctx.scm.affected_files().items():\n"+
+		"        for num, line in meta.new_lines():\n"+
+		"            for _ in range(2):\n"+
+		"                ctx.emit.finding(\n"+
+		"                    level = 'error',\n"+
+		"                    message = 'noop',\n"+
+		"                    filepath = path,\n"+
+		"                    line = num,\n"+
+		"                    replacements = [line],\n"+
+		"                )\n"+
+		"\n"+
+		"def test_same_line_fixes():\n"+
+		"    res = testing.run(_quotes, files = {'a.txt': 'x = \"y\" + \"z\"\\n'})\n"+
+		"    asserts.eq(len(res.findings), 4)\n"+
+		"    asserts.eq(res.files['a.txt'], \"x = 'y' + 'z'\\n\")\n"+
+		"\n"+
+		"def test_no_convergence():\n"+
+		"    testing.run(_noop_twice, files = {'a.txt': 'a\\n'})\n")
+
+	rep := &capturingTestReporter{}
+	err := RunTests(t.Context(), &Options{
+		Dir:          root,
+		TestReporter: rep,
+	})
+	if !errors.Is(err, ErrCheckFailed) {
+		t.Fatalf("Expected ErrCheckFailed, got %v", err)
+	}
+	want := []testResultRecord{
+		{name: "test_no_convergence", err: "1 findings not fixed: fixes did not converge after 2 passes"},
+		// Re-runs don't print, so the check's output appears only once.
+		{name: "test_same_line_fixes", prints: []string{"[//fix_test.star:2] pass"}},
+	}
+	if diff := cmp.Diff(want, rep.results, cmp.AllowUnexported(testResultRecord{})); diff != "" {
+		t.Fatalf("Unexpected test results (-want +got):\n%s", diff)
+	}
+}
+
 func TestRunTests_ExplicitFileArgs(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
