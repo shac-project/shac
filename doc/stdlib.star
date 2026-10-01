@@ -970,3 +970,77 @@ def struct_(**kwargs):
         and the argument value becomes the property value.
     """
     pass
+
+## Methods inside the asserts object.
+
+def _assert_contains(container, item, msg = ""):
+    """Asserts that container contains item.
+
+    Args:
+      container: An iterable, mapping, or string.
+      item: The element, key, or substring expected to be in container.
+      msg: (optional) Message to prefix the failure details with.
+    """
+    pass
+
+def _assert_eq(actual, expected, msg = ""):
+    """Asserts that actual and expected are equal.
+
+    When comparing multi-line strings or nested structs/sequences, a unified
+    diff is included in the failure message.
+
+    Args:
+      actual: The value produced by the code under test.
+      expected: The expected value.
+      msg: (optional) Message to prefix the failure details with.
+    """
+    pass
+
+def _assert_fails(fn, msg = ""):
+    """Asserts that calling fn() raises an error or calls fail().
+
+    Args:
+      fn: A 0-argument callable expected to fail.
+      msg: (optional) Substring or regular expression that the failure message
+        must match.
+    """
+    pass
+
+def _assert_false(cond, msg = ""):
+    """Asserts that cond is falsy.
+
+    Args:
+      cond: Value to check for falsiness.
+      msg: (optional) Custom failure message.
+    """
+    pass
+
+def _assert_ne(actual, expected, msg = ""):
+    """Asserts that actual and expected are not equal.
+
+    Args:
+      actual: The value produced by the code under test.
+      expected: A value that actual must not equal.
+      msg: (optional) Message to prefix the failure details with.
+    """
+    pass
+
+def _assert_true(cond, msg = ""):
+    """Asserts that cond is truthy.
+
+    Args:
+      cond: Value to check for truthiness.
+      msg: (optional) Custom failure message.
+    """
+    pass
+
+# asserts is a global module exposing test assertion helpers. It is only
+# available in `*_test.star` files run by `shac test`.
+asserts = struct(
+    contains = _assert_contains,
+    eq = _assert_eq,
+    fails = _assert_fails,
+    false = _assert_false,
+    ne = _assert_ne,
+    true = _assert_true,
+)

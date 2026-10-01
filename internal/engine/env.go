@@ -111,6 +111,9 @@ type starlarkEnv struct {
 	// globals is available to all load() statements. They must be frozen via
 	// Freeze().
 	globals starlark.StringDict
+	// testGlobals, if set, replaces globals for files named `*_test.star`. It
+	// is only set under `shac test`. It must be frozen via Freeze().
+	testGlobals starlark.StringDict
 	// packages are all the available packages. It must include __main__.
 	packages map[string]fs.FS
 	// Options for parsing Starlark.
@@ -202,7 +205,11 @@ func (e *starlarkEnv) loadInner(th *starlark.Thread, sk sourceKey) (starlark.Str
 				oldsk := th.Local("shac.pkg").(sourceKey)
 				th.SetLocal("shac.pkg", sk)
 				fp := syntax.FilePortion{Content: d, FirstLine: 1, FirstCol: 1}
-				source.globals, source.err = starlark.ExecFileOptions(e.opts, th, sk.String(), fp, e.globals)
+				globals := e.globals
+				if e.testGlobals != nil && strings.HasSuffix(sk.relpath, "_test.star") {
+					globals = e.testGlobals
+				}
+				source.globals, source.err = starlark.ExecFileOptions(e.opts, th, sk.String(), fp, globals)
 				th.SetLocal("shac.pkg", oldsk)
 				if errl, ok := errors.AsType[resolve.ErrorList](source.err); ok {
 					// Unwrap the error, only keep the first one.

@@ -154,7 +154,7 @@ func TestMainErr(t *testing.T) {
 
 func TestMainTest_LUCIContextWithoutResultSink(t *testing.T) {
 	root := t.TempDir()
-	writeFile(t, root, "foo_test.star", "def test_ok():\n    pass\n")
+	writeFile(t, root, "foo_test.star", "def test_ok():\n    asserts.eq(1, 1)\n")
 	luciCtxFile := filepath.Join(root, "luci_context.json")
 	if err := os.WriteFile(luciCtxFile, []byte(`{"resultdb": {"current_invocation": {"name": "invocations/build-123"}}}`), 0o600); err != nil {
 		t.Fatal(err)
@@ -172,9 +172,10 @@ func TestMainTest_JSONOutput(t *testing.T) {
 	writeFile(t, root, "foo_test.star", ""+
 		"def test_pass():\n"+
 		"    print('hello')\n"+
+		"    asserts.eq(1, 1)\n"+
 		"\n"+
 		"def test_fail():\n"+
-		"    fail('boom')\n")
+		"    asserts.eq(1, 2)\n")
 
 	jsonPath := filepath.Join(root, "results.json")
 	err := Main(t.Context(), []string{"shac", "test", "--quiet", "--json-output", jsonPath, "-C", root})
@@ -195,8 +196,8 @@ func TestMainTest_JSONOutput(t *testing.T) {
 			Name:      "test_fail",
 			File:      "foo_test.star",
 			Status:    "FAIL",
-			Error:     "fail: boom",
-			Backtrace: "Traceback (most recent call last):\n  //foo_test.star:5:9: in test_fail\n",
+			Error:     "asserts.eq: assertion failed: got 1, want 2",
+			Backtrace: "Traceback (most recent call last):\n  //foo_test.star:6:15: in test_fail\n",
 		},
 		{
 			Name:   "test_pass",

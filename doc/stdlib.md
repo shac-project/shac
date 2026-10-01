@@ -31,6 +31,7 @@ options](https://pkg.go.dev/go.starlark.net/syntax#FileOptions) are enabled:
 - [load](#load)
 - [print](#print)
 - [struct](#struct)
+- [asserts](#asserts)
 
 ## shac
 
@@ -977,3 +978,77 @@ obj.do()
 ### Arguments
 
 * **\*\*kwargs**: structure's fields. The argument name becomes the property name, and the argument value becomes the property value.
+
+## asserts
+
+asserts is a global module exposing test assertion helpers. It is only
+available in `*_test.star` files run by `shac test`.
+
+Fields:
+
+- contains
+- eq
+- fails
+- false
+- ne
+- true
+
+## asserts.contains
+
+Asserts that container contains item.
+
+### Arguments
+
+* **container**: An iterable, mapping, or string.
+* **item**: The element, key, or substring expected to be in container.
+* **msg**: (optional) Message to prefix the failure details with.
+
+## asserts.eq
+
+Asserts that actual and expected are equal.
+
+When comparing multi-line strings or nested structs/sequences, a unified
+diff is included in the failure message.
+
+### Arguments
+
+* **actual**: The value produced by the code under test.
+* **expected**: The expected value.
+* **msg**: (optional) Message to prefix the failure details with.
+
+## asserts.fails
+
+Asserts that calling fn() raises an error or calls fail().
+
+### Arguments
+
+* **fn**: A 0-argument callable expected to fail.
+* **msg**: (optional) Substring or regular expression that the failure message must match.
+
+## asserts.false
+
+Asserts that cond is falsy.
+
+### Arguments
+
+* **cond**: Value to check for falsiness.
+* **msg**: (optional) Custom failure message.
+
+## asserts.ne
+
+Asserts that actual and expected are not equal.
+
+### Arguments
+
+* **actual**: The value produced by the code under test.
+* **expected**: A value that actual must not equal.
+* **msg**: (optional) Message to prefix the failure details with.
+
+## asserts.true
+
+Asserts that cond is truthy.
+
+### Arguments
+
+* **cond**: Value to check for truthiness.
+* **msg**: (optional) Custom failure message.
