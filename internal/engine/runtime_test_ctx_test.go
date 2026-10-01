@@ -70,7 +70,45 @@ func TestRunTests_Success(t *testing.T) {
 
 	writeFile(t, root, "ignored/bad_test.star", "fail('should be ignored')\n")
 
+	writeFile(t, root, "checks.star", ""+
+		"def _private_helper(x):\n"+
+		"    return x + 1\n"+
+		"\n"+
+		"def _my_check(ctx, prefix = 'ERR'):\n"+
+		"    v = ctx.vars.get('custom_var')\n"+
+		"    for path, meta in ctx.scm.affected_files().items():\n"+
+		"        content = str(ctx.io.read_file(path))\n"+
+		"        for num, line in meta.new_lines():\n"+
+		"            if 'BAD' in line:\n"+
+		"                ctx.emit.finding(\n"+
+		"                    level = 'error',\n"+
+		"                    message = prefix + ':' + v + ':' + meta.action,\n"+
+		"                    filepath = path,\n"+
+		"                    line = num,\n"+
+		"                    col = 1,\n"+
+		"                    end_line = num,\n"+
+		"                    end_col = len(line) + 1,\n"+
+		"                    replacements = [line.replace('BAD', 'GOOD')],\n"+
+		"                    properties = {'category': 'lint'},\n"+
+		"                )\n"+
+		"    for c in ctx.scm.commits():\n"+
+		"        if 'WIP' in c.message:\n"+
+		"            ctx.emit.commit_message_finding(\n"+
+		"                level = 'warning',\n"+
+		"                message = 'No WIP commits',\n"+
+		"                commit = c,\n"+
+		"                line = 1,\n"+
+		"            )\n"+
+		"    ctx.emit.artifact(filepath = 'report.txt', content = 'summary')\n"+
+		"\n"+
+		"my_check = shac.check(_my_check)\n"+
+		"\n"+
+		"def register_all():\n"+
+		"    shac.register_check(my_check)\n")
+
 	writeFile(t, root, "checks_test.star", ""+
+		"load('//checks.star', 'my_check', 'register_all')\n"+
+		"\n"+
 		"def test_assertions():\n"+
 		"    asserts.eq(1, 1)\n"+
 		"    asserts.ne(1, 2)\n"+
@@ -80,7 +118,54 @@ func TestRunTests_Success(t *testing.T) {
 		"    asserts.contains(('a', 'b'), 'b')\n"+
 		"    asserts.contains({'k': 'v'}, 'k')\n"+
 		"    asserts.contains('hello world', 'world')\n"+
-		"    asserts.fails(lambda: fail('boom error'), 'boom.*')\n")
+		"    asserts.fails(lambda: fail('boom error'), 'boom.*')\n"+
+		"\n"+
+		"def test_check_and_fixes():\n"+
+		"    res = testing.run(\n"+
+		"        my_check,\n"+
+		"        args = {'prefix': 'CUSTOM'},\n"+
+		"        vars = {'custom_var': 'overridden'},\n"+
+		"        files = {\n"+
+		"            'a.txt': 'ok\\nBAD line\\n',\n"+
+		"            'unmodified.txt': testing.file(content = 'BAD ignored', affected = False),\n"+
+		"            'deleted.txt': testing.file(action = 'D', content = 'BAD deleted'),\n"+
+		"        },\n"+
+		"        commits = [\n"+
+		"            testing.commit(hash = '123456', message = 'WIP: change'),\n"+
+		"        ],\n"+
+		"    )\n"+
+		"    asserts.eq(\n"+
+		"        res.findings,\n"+
+		"        (\n"+
+		"            testing.finding(\n"+
+		"                filepath = 'a.txt',\n"+
+		"                level = 'error',\n"+
+		"                message = 'CUSTOM:overridden:M',\n"+
+		"                line = 2,\n"+
+		"                col = 1,\n"+
+		"                end_line = 2,\n"+
+		"                end_col = 9,\n"+
+		"                replacements = ['GOOD line'],\n"+
+		"                properties = {'category': 'lint'},\n"+
+		"            ),\n"+
+		"            testing.finding(\n"+
+		"                commit_hash = '123456',\n"+
+		"                level = 'warning',\n"+
+		"                message = 'No WIP commits',\n"+
+		"                line = 1,\n"+
+		"            ),\n"+
+		"        ),\n"+
+		"    )\n"+
+		"    asserts.eq(res.files['a.txt'], 'ok\\nGOOD line\\n')\n"+
+		"    asserts.eq(res.artifacts['report.txt'], 'summary')\n"+
+		"\n"+
+		"def test_register_function():\n"+
+		"    res = testing.run(\n"+
+		"        register_all,\n"+
+		"        files = {'a.txt': 'BAD\\n'},\n"+
+		"    )\n"+
+		"    asserts.eq(len(res.findings), 1)\n"+
+		"    asserts.eq(res.files['a.txt'], 'GOOD\\n')\n")
 
 	rep := &capturingTestReporter{}
 	err := RunTests(t.Context(), &Options{
@@ -92,6 +177,8 @@ func TestRunTests_Success(t *testing.T) {
 	}
 	want := []testResultRecord{
 		{name: "test_assertions"},
+		{name: "test_check_and_fixes"},
+		{name: "test_register_function"},
 	}
 	if diff := cmp.Diff(want, rep.results, cmp.AllowUnexported(testResultRecord{})); diff != "" {
 		t.Fatalf("Unexpected test results (-want +got):\n%s", diff)
@@ -211,6 +298,22 @@ func TestRunTests_Failures(t *testing.T) {
 				"    asserts.fails(lambda: fail('actual error'), 'expected.*')\n",
 			wantErr: "asserts.fails: expected error matching \"expected.*\", got \"fail: actual error\"",
 		},
+		{
+			name: "out of bounds replacement span",
+			content: "" +
+				"def _cb(ctx):\n" +
+				"    ctx.emit.finding(\n" +
+				"        level = 'error',\n" +
+				"        message = 'bad span',\n" +
+				"        filepath = 'a.txt',\n" +
+				"        line = 5,\n" +
+				"        end_line = 6,\n" +
+				"        replacements = ['fixed'],\n" +
+				"    )\n" +
+				"def test_fail():\n" +
+				"    testing.run(_cb, files = {'a.txt': 'single line\\n'})\n",
+			wantErr: "check \"cb\" emitted finding with span (lines 5-6) beyond end of file (1 line)",
+		},
 	}
 
 	for _, tc := range cases {
@@ -238,7 +341,7 @@ func TestRunTests_Failures(t *testing.T) {
 
 func TestTestOnlyModulesUnavailableOutsideTestFiles(t *testing.T) {
 	t.Parallel()
-	for _, module := range []string{"asserts"} {
+	for _, module := range []string{"asserts", "testing"} {
 		t.Run(module+" in shac check", func(t *testing.T) {
 			t.Parallel()
 			root := t.TempDir()

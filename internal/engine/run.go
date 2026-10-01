@@ -796,8 +796,8 @@ type shacConfig struct {
 
 	// forbidRegisterCheck is set on the state used to load and run a
 	// `*_test.star` file, where checks registered by the test file itself
-	// would otherwise be silently dropped because `shac test` never executes
-	// them.
+	// would otherwise be silently dropped because only testing.run() ever
+	// executes checks.
 	forbidRegisterCheck bool
 }
 

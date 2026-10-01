@@ -69,8 +69,8 @@ def _shac_register_check(check):
     file. Each callback will be run in parallel. Each check must have a different
     name.
 
-    It may not be called directly from `*_test.star` files, since `shac test`
-    never runs checks registered there.
+    In `*_test.star` files it may only be called from within a function passed
+    to `testing.run()`, since checks registered anywhere else would never run.
 
     Example:
       ```python
@@ -1043,4 +1043,100 @@ asserts = struct(
     false = _assert_false,
     ne = _assert_ne,
     true = _assert_true,
+)
+
+## Methods inside the testing object.
+
+def _testing_commit(hash = "0000000000000000000000000000000000000000", message = ""):
+    """Constructs a commit spec for testing.run(commits = [...]).
+
+    Args:
+      hash: (optional) Commit hash string.
+      message: (optional) Commit message string.
+
+    Returns:
+      A commit struct with hash and message attributes.
+    """
+    pass
+
+def _testing_file(content = "", action = "M", new_lines = None, affected = True):
+    """Constructs a virtual file specification for testing.run(files = {...}).
+
+    Args:
+      content: (optional) File contents as a string. Defaults to "".
+      action: (optional) SCM action code (e.g. "A", "M", "D"). Defaults to "M".
+      new_lines: (optional) Sequence of (line_num, text) pairs or dict of
+        {line_num: text} overriding meta.new_lines(). If None, new_lines() is
+        computed from content.
+      affected: (optional) Whether the file is included in
+        ctx.scm.affected_files(). Defaults to True.
+
+    Returns:
+      A file_spec struct for passing in the files dictionary of testing.run().
+    """
+    pass
+
+def _testing_finding(
+        message = "",
+        level = "error",
+        filepath = "",
+        line = 0,
+        col = 0,
+        end_line = 0,
+        end_col = 0,
+        replacements = (),
+        properties = None,
+        commit_hash = ""):
+    """Constructs a finding struct for comparing against testing.run().findings.
+
+    Args:
+      message: (optional) Finding message.
+      level: (optional) Finding level ("notice", "warning", or "error").
+        Defaults to "error".
+      filepath: (optional) Relative file path.
+      line: (optional) 1-based start line.
+      col: (optional) 1-based start column.
+      end_line: (optional) 1-based end line.
+      end_col: (optional) 1-based end column.
+      replacements: (optional) Sequence of replacement strings.
+      properties: (optional) Dict of finding properties.
+      commit_hash: (optional) Commit hash for commit message findings.
+
+    Returns:
+      A finding struct matching the elements of testing.run().findings.
+    """
+    pass
+
+def _testing_run(check, *, files = None, commits = None, vars = None, args = None):
+    """Executes a check (or 0-argument check registration function) hermetically.
+
+    Can only be called during `shac test`.
+
+    Args:
+      check: A shac.check object, a check implementation function taking ctx, or
+        a 0-argument function that registers checks via shac.register_check().
+      files: (optional) Dict mapping relative file paths to either string
+        contents or testing.file() specs.
+      commits: (optional) Sequence of testing.commit() specs returned by
+        ctx.scm.commits().
+      vars: (optional) Dict of runtime variable overrides for ctx.vars.get().
+      args: (optional) Dict of keyword arguments to bind to the check via
+        with_args().
+
+    Returns:
+      A result struct with fields:
+        findings: Tuple of finding structs emitted during the run.
+        artifacts: Dict mapping artifact filepaths to string contents.
+        files: Dict mapping non-deleted virtual file paths to their contents
+          after applying any non-overlapping single-replacement findings.
+    """
+    pass
+
+# testing is a global module exposing test harness primitives for `shac test`.
+# It is only available in `*_test.star` files run by `shac test`.
+testing = struct(
+    commit = _testing_commit,
+    file = _testing_file,
+    finding = _testing_finding,
+    run = _testing_run,
 )
