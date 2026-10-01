@@ -61,6 +61,10 @@ echo ""
 echo "- Running 'shac check'"
 go run . check
 
+echo ""
+echo "- Running 'shac test'"
+go run . test
+
 # Benchmarks are the slowest step, so run them last in case the user only cares
 # about previous steps and wants to ctrl-C.
 echo ""
