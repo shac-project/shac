@@ -473,3 +473,55 @@ func TestFixWithWriter_Overlap(t *testing.T) {
 		t.Errorf("Wrong stderr (-want +got):\n%s", diff)
 	}
 }
+
+func TestApplyReplacements_Bounds(t *testing.T) {
+	t.Parallel()
+	content := "one\ntwo\n"
+	tests := []struct {
+		name    string
+		span    Span
+		want    string
+		wantErr string
+	}{
+		{
+			name:    "line beyond end of file",
+			span:    Span{Start: Cursor{Line: 5}, End: Cursor{Line: 5}},
+			wantErr: `check "alice" emitted finding with span (lines 5-5) beyond end of file (2 lines)`,
+		},
+		{
+			name:    "line beyond end of file without end line",
+			span:    Span{Start: Cursor{Line: 5}},
+			wantErr: `check "alice" emitted finding with span (lines 5-5) beyond end of file (2 lines)`,
+		},
+		{
+			name:    "column beyond end of line",
+			span:    Span{Start: Cursor{Line: 1, Col: 10}, End: Cursor{Line: 1, Col: 11}},
+			wantErr: `check "alice" emitted finding with column out of bounds on lines 1-1`,
+		},
+		{
+			name: "insertion at end of file",
+			span: Span{Start: Cursor{Line: 3, Col: 1}},
+			want: "one\ntwo\nx",
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			got, _, err := applyReplacements(content, []findingToFix{
+				{check: "alice", span: test.span, replacement: "x"},
+			})
+			if test.wantErr != "" {
+				if err == nil || err.Error() != test.wantErr {
+					t.Errorf("applyReplacements(%q, %+v) error = %v, want %q", content, test.span, err, test.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("applyReplacements(%q, %+v) error = %v", content, test.span, err)
+			}
+			if got != test.want {
+				t.Errorf("applyReplacements(%q, %+v) = %q, want %q", content, test.span, got, test.want)
+			}
+		})
+	}
+}

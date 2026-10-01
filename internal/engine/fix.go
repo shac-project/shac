@@ -235,8 +235,7 @@ func fixOnce(ctx context.Context, o *Options, quiet, rerun bool, w io.Writer) (p
 	return res, nil
 }
 
-// fileFixResult summarizes the application of findings to one file by
-// fixFindings.
+// fileFixResult summarizes the application of findings to one file.
 type fileFixResult struct {
 	// numFixed is the number of findings that were applied.
 	numFixed int
@@ -246,7 +245,8 @@ type fileFixResult struct {
 	// skippedChecks are the names of the checks that emitted the skipped
 	// findings, possibly with duplicates.
 	skippedChecks []string
-	// digest is a hash of the file contents after applying the findings.
+	// digest is a hash of the file contents after applying the findings. It's
+	// only set by fixFindings.
 	digest [sha256.Size]byte
 }
 
@@ -263,7 +263,34 @@ func fixFindings(path string, findings []findingToFix, w io.Writer) (fileFixResu
 		return res, err
 	}
 
-	lines := strings.SplitAfter(string(b), "\n")
+	content, res, err := applyReplacements(string(b), findings)
+	if err != nil {
+		return res, err
+	}
+	res.digest = sha256.Sum256([]byte(content))
+	if w != nil {
+		if _, err := io.WriteString(w, content); err != nil {
+			return res, err
+		}
+	} else {
+		if err := os.WriteFile(path, []byte(content), fi.Mode()); err != nil {
+			return res, err
+		}
+	}
+	return res, nil
+}
+
+// applyReplacements applies non-overlapping findings to content and returns the
+// updated content along with which findings were fixed and skipped.
+func applyReplacements(content string, findings []findingToFix) (string, fileFixResult, error) {
+	var res fileFixResult
+	lines := strings.SplitAfter(content, "\n")
+	// lines ends with an empty element if content ends with a newline, which
+	// doesn't count as a line of the file.
+	numLines := len(lines)
+	if lines[numLines-1] == "" {
+		numLines--
+	}
 
 	// Sort findings by start position in order to skip findings that overlap
 	// with previous ones.
@@ -277,9 +304,30 @@ func fixFindings(path string, findings []findingToFix, w io.Writer) (fileFixResu
 	var normalized []findingToFix
 	maxLine := 0
 	for _, finding := range findings {
+		// Validate before normalizing because normalize() indexes into lines.
+		endLine := finding.span.End.Line
+		if endLine == 0 {
+			endLine = finding.span.Start.Line
+		}
+		// The empty element after a trailing newline is a valid line to
+		// target because it allows inserting text at the end of the file.
+		if finding.span.Start.Line > len(lines) || endLine > len(lines) {
+			lineCount := fmt.Sprintf("%d lines", numLines)
+			if numLines == 1 {
+				lineCount = "1 line"
+			}
+			return "", fileFixResult{}, fmt.Errorf(
+				"check %q emitted finding with span (lines %d-%d) beyond end of file (%s)",
+				finding.check, finding.span.Start.Line, endLine, lineCount)
+		}
 		finding.normalize(lines)
-		// TODO(olivernewman): Return an error if span is beyond the end of the
-		// file or if start/end points go beyond end of line.
+		startLineLen := len(lines[finding.span.Start.Line-1])
+		endLineLen := len(lines[finding.span.End.Line-1])
+		if finding.span.Start.Col-1 > startLineLen || finding.span.End.Col-1 > endLineLen {
+			return "", fileFixResult{}, fmt.Errorf(
+				"check %q emitted finding with column out of bounds on lines %d-%d",
+				finding.check, finding.span.Start.Line, finding.span.End.Line)
+		}
 
 		// Skip fixing any findings that overlap with previous findings. We
 		// could theoretically fix multiple findings on the same line as long as
@@ -317,18 +365,7 @@ func fixFindings(path string, findings []findingToFix, w io.Writer) (fileFixResu
 			replLines...)
 	}
 
-	content := strings.Join(lines, "")
-	res.digest = sha256.Sum256([]byte(content))
-	if w != nil {
-		if _, err := io.WriteString(w, content); err != nil {
-			return res, err
-		}
-	} else {
-		if err := os.WriteFile(path, []byte(content), fi.Mode()); err != nil {
-			return res, err
-		}
-	}
-	return res, nil
+	return strings.Join(lines, ""), res, nil
 }
 
 type findingFile struct {
