@@ -19,6 +19,7 @@ package sandbox
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -161,5 +162,72 @@ func TestResolveFuseMounts(t *testing.T) {
 				t.Errorf("resolveFuseMounts mismatch (-want +got):\n%s", diff)
 			}
 		})
+	}
+}
+
+func TestCanUseNsjail(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	if canUseNsjail(filepath.Join(dir, "nonexistent")) {
+		t.Fatal("expected canUseNsjail to return false for nonexistent path")
+	}
+
+	writablePath := filepath.Join(dir, "writable")
+	if err := os.WriteFile(writablePath, []byte("ok"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if !canUseNsjail(writablePath) {
+		t.Fatal("expected canUseNsjail to return true for writable path")
+	}
+}
+
+func TestNewSandbox_InsideOuterNsjail(t *testing.T) {
+	if runtime.GOOS != "linux" || (runtime.GOARCH != "amd64" && runtime.GOARCH != "arm64") {
+		t.Skip("nsjail is only supported on linux/amd64 and linux/arm64")
+	}
+	t.Parallel()
+
+	if os.Getenv("SHAC_TEST_IN_OUTER_NSJAIL") == "1" {
+		sb, err := New(t.TempDir())
+		if err != nil {
+			t.Fatalf("New() failed inside outer nsjail: %v", err)
+		}
+		if _, ok := sb.(genericSandbox); !ok {
+			t.Fatalf("expected genericSandbox inside outer nsjail with read-only /proc, got %T", sb)
+		}
+		return
+	}
+
+	outerTmp := t.TempDir()
+	outerSb, err := New(outerTmp)
+	if err != nil {
+		t.Fatalf("New() failed: %v", err)
+	}
+	if _, ok := outerSb.(nsjailSandbox); !ok {
+		t.Skipf("host environment already uses %T, skipping nested nsjail test", outerSb)
+	}
+
+	exe, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	childTmp := t.TempDir()
+	cmd := outerSb.Command(t.Context(), &Config{
+		Cmd: []string{exe, "-test.run=^TestNewSandbox_InsideOuterNsjail$"},
+		Cwd: childTmp,
+		Env: map[string]string{
+			"SHAC_TEST_IN_OUTER_NSJAIL": "1",
+			"TMPDIR":                    childTmp,
+		},
+		Mounts: []Mount{
+			{Path: "/lib"},
+			{Path: "/lib64"},
+			{Path: "/usr/lib"},
+			{Path: childTmp, Writable: true},
+		},
+	})
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("inner test in outer nsjail failed: %v\noutput:\n%s", err, out)
 	}
 }

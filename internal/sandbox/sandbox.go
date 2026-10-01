@@ -17,7 +17,9 @@ package sandbox
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -63,7 +65,7 @@ type Sandbox interface {
 
 // New constructs a platform-appropriate sandbox.
 func New(tempDir string) (Sandbox, error) {
-	if runtime.GOOS == "linux" && (runtime.GOARCH == "amd64" || runtime.GOARCH == "arm64") {
+	if runtime.GOOS == "linux" && (runtime.GOARCH == "amd64" || runtime.GOARCH == "arm64") && canUseNsjail("/proc/self/setgroups") {
 		execsupport.Mu.Lock()
 		defer execsupport.Mu.Unlock()
 		nsjailPath := filepath.Join(tempDir, "nsjail")
@@ -91,6 +93,21 @@ func New(tempDir string) (Sandbox, error) {
 	}
 	// TODO(olivernewman): Provide stricter sandboxing for Windows.
 	return genericSandbox{}, nil
+}
+
+// canUseNsjail reports whether the current process environment supports
+// launching nsjail. When shac runs inside an outer sandbox or container that
+// mounts /proc read-only (such as Fuchsia's testrunner nsjail) or omits /proc,
+// nsjail cannot write to /proc/<pid>/setgroups to initialize a nested user
+// namespace, so shac falls back to genericSandbox.
+func canUseNsjail(procSetgroupsPath string) bool {
+	//#nosec G304
+	f, err := os.OpenFile(procSetgroupsPath, os.O_WRONLY, 0)
+	if err == nil {
+		_ = f.Close()
+		return true
+	}
+	return !errors.Is(err, syscall.EROFS) && !errors.Is(err, fs.ErrNotExist)
 }
 
 // nsjailSandbox provides sandboxing for Linux using nsjail.
