@@ -145,16 +145,87 @@ func getContext(t *starlark.Thread) context.Context {
 func (e *starlarkEnv) load(ctx context.Context, sk sourceKey, pi printImpl) (starlark.StringDict, error) {
 	// We are the root thread. Start a thread implicitly.
 	t := e.thread(ctx, sk.String(), pi)
-	t.Load = func(th *starlark.Thread, str string) (starlark.StringDict, error) {
-		skn, err := parseSourceKey(th.Local("shac.pkg").(sourceKey), str)
-		if err != nil {
-			return nil, err
-		}
-		return e.loadInner(th, skn)
-	}
+	t.Load = e.loadFrom
 	t.SetLocal("shac.top", sk)
 	t.SetLocal("shac.pkg", sk)
 	return e.loadInner(t, sk)
+}
+
+// privateLoadPrefix is prepended to the `_`-prefixed names in a test file's
+// load() statements, since the Starlark resolver unconditionally rejects
+// loading private names. The colon can't appear in an identifier, so the
+// mangled names can't collide with a module's real globals.
+const privateLoadPrefix = "private:"
+
+// isTestFile reports whether sk is a test file that gets the test-only
+// predeclared symbols and may load() private names.
+func (e *starlarkEnv) isTestFile(sk sourceKey) bool {
+	return e.testGlobals != nil && strings.HasSuffix(sk.relpath, "_test.star")
+}
+
+// loadFrom implements starlark.Thread.Load, resolving str relative to the
+// file executing the load() statement.
+func (e *starlarkEnv) loadFrom(th *starlark.Thread, str string) (starlark.StringDict, error) {
+	parent := th.Local("shac.pkg").(sourceKey)
+	skn, err := parseSourceKey(parent, str)
+	if err != nil {
+		return nil, err
+	}
+	globals, err := e.loadInner(th, skn)
+	if err != nil || !e.isTestFile(parent) {
+		return globals, err
+	}
+	// Return a copy rather than adding the aliases to the cached globals so
+	// that non-test files can't load private names by spelling out the
+	// mangled name.
+	withPrivate := make(starlark.StringDict, len(globals)*2)
+	for k, v := range globals {
+		withPrivate[k] = v
+		if strings.HasPrefix(k, "_") {
+			withPrivate[privateLoadPrefix+k] = v
+		}
+	}
+	return withPrivate, nil
+}
+
+// execFile parses and executes a Starlark file. If sk is a test file, its
+// load() statements may load private names.
+func (e *starlarkEnv) execFile(th *starlark.Thread, sk sourceKey, src syntax.FilePortion, predeclared starlark.StringDict) (starlark.StringDict, error) {
+	if !e.isTestFile(sk) {
+		return starlark.ExecFileOptions(e.opts, th, sk.String(), src, predeclared)
+	}
+	f, err := e.opts.Parse(sk.String(), src, 0)
+	if err != nil {
+		return nil, err
+	}
+	// The resolver only allows load() statements at the top level.
+	for _, stmt := range f.Stmts {
+		load, ok := stmt.(*syntax.LoadStmt)
+		if !ok {
+			continue
+		}
+		for i, from := range load.From {
+			if strings.HasPrefix(from.Name, "_") {
+				// Replace rather than rename the identifier because the
+				// parser shares it between From and To for load("m", "name"),
+				// and the local binding must keep the unmangled name.
+				load.From[i] = &syntax.Ident{NamePos: from.NamePos, Name: privateLoadPrefix + from.Name}
+			}
+		}
+	}
+	prog, err := starlark.FileProgram(f, predeclared.Has)
+	if err != nil {
+		return nil, err
+	}
+	g, err := prog.Init(th, predeclared)
+	g.Freeze()
+	if evalErr, ok := errors.AsType[*starlark.EvalError](err); ok && strings.HasPrefix(evalErr.Msg, "load: name ") {
+		// Don't leak the mangled names into errors from this file's own
+		// load() statements. Errors from nested loads start with "cannot
+		// load" and are left alone, since mangled names are only valid here.
+		evalErr.Msg = strings.ReplaceAll(evalErr.Msg, privateLoadPrefix, "")
+	}
+	return g, err
 }
 
 func (e *starlarkEnv) loadInner(th *starlark.Thread, sk sourceKey) (starlark.StringDict, error) {
@@ -206,10 +277,10 @@ func (e *starlarkEnv) loadInner(th *starlark.Thread, sk sourceKey) (starlark.Str
 				th.SetLocal("shac.pkg", sk)
 				fp := syntax.FilePortion{Content: d, FirstLine: 1, FirstCol: 1}
 				globals := e.globals
-				if e.testGlobals != nil && strings.HasSuffix(sk.relpath, "_test.star") {
+				if e.isTestFile(sk) {
 					globals = e.testGlobals
 				}
-				source.globals, source.err = starlark.ExecFileOptions(e.opts, th, sk.String(), fp, globals)
+				source.globals, source.err = e.execFile(th, sk, fp, globals)
 				th.SetLocal("shac.pkg", oldsk)
 				if errl, ok := errors.AsType[resolve.ErrorList](source.err); ok {
 					// Unwrap the error, only keep the first one.

@@ -1059,6 +1059,11 @@ Asserts that cond is truthy.
 testing is a global module exposing test harness primitives for `shac test`.
 It is only available in `*_test.star` files run by `shac test`.
 
+Unlike other files, `*_test.star` files can load() private ("_"-prefixed)
+symbols, e.g. `load("//checks/foo.star", "_foo_check")`, so tests can
+exercise a check's internal helpers without the check file having to export
+them.
+
 Fields:
 
 - commit

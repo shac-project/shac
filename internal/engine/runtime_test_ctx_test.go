@@ -106,8 +106,15 @@ func TestRunTests_Success(t *testing.T) {
 		"def register_all():\n"+
 		"    shac.register_check(my_check)\n")
 
+	writeFile(t, root, "other.star", ""+
+		"load('//checks.star', 'my_check')\n"+
+		"\n"+
+		"def _nested_private(x):\n"+
+		"    return x * 2\n")
+
 	writeFile(t, root, "checks_test.star", ""+
-		"load('//checks.star', 'my_check', 'register_all')\n"+
+		"load('//checks.star', '_private_helper', 'my_check', 'register_all')\n"+
+		"load('//other.star', nested = '_nested_private')\n"+
 		"\n"+
 		"def test_assertions():\n"+
 		"    asserts.eq(1, 1)\n"+
@@ -119,6 +126,10 @@ func TestRunTests_Success(t *testing.T) {
 		"    asserts.contains({'k': 'v'}, 'k')\n"+
 		"    asserts.contains('hello world', 'world')\n"+
 		"    asserts.fails(lambda: fail('boom error'), 'boom.*')\n"+
+		"\n"+
+		"def test_private_helper():\n"+
+		"    asserts.eq(_private_helper(41), 42)\n"+
+		"    asserts.eq(nested(21), 42)\n"+
 		"\n"+
 		"def test_check_and_fixes():\n"+
 		"    res = testing.run(\n"+
@@ -178,6 +189,7 @@ func TestRunTests_Success(t *testing.T) {
 	want := []testResultRecord{
 		{name: "test_assertions"},
 		{name: "test_check_and_fixes"},
+		{name: "test_private_helper"},
 		{name: "test_register_function"},
 	}
 	if diff := cmp.Diff(want, rep.results, cmp.AllowUnexported(testResultRecord{})); diff != "" {
@@ -376,6 +388,61 @@ func TestTestOnlyModulesUnavailableOutsideTestFiles(t *testing.T) {
 	}
 }
 
+func TestRunTests_PrivateLoads(t *testing.T) {
+	t.Parallel()
+	data := []struct {
+		name    string
+		files   map[string]string
+		wantErr string
+	}{
+		{
+			name: "missing private name",
+			files: map[string]string{
+				"lib.star": "def _helper():\n    pass\n",
+				"a_test.star": "" +
+					"load('//lib.star', '_helpr')\n" +
+					"def test_a():\n" +
+					"    pass\n",
+			},
+			wantErr: "load: name _helpr not found in module //lib.star (did you mean _helper?)",
+		},
+		{
+			name: "non-test file loading private name",
+			files: map[string]string{
+				"lib.star":    "def _helper():\n    pass\n",
+				"other.star":  "load('//lib.star', '_helper')\nx = 1\n",
+				"a_test.star": "load('//other.star', 'x')\ndef test_a():\n    pass\n",
+			},
+			wantErr: "load: names with leading underscores are not exported: _helper",
+		},
+		{
+			name: "non-test file loading mangled name",
+			files: map[string]string{
+				"lib.star":    "def _helper():\n    pass\n",
+				"other.star":  "load('//lib.star', 'private:_helper')\nx = 1\n",
+				"a_test.star": "load('//other.star', 'x')\ndef test_a():\n    pass\n",
+			},
+			wantErr: "load: name private:_helper not found in module //lib.star",
+		},
+	}
+	for _, tc := range data {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			root := t.TempDir()
+			for name, content := range tc.files {
+				writeFile(t, root, name, content)
+			}
+			err := RunTests(t.Context(), &Options{
+				Dir:          root,
+				TestReporter: &capturingTestReporter{},
+			})
+			if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+				t.Fatalf("Expected error containing %q, got %v", tc.wantErr, err)
+			}
+		})
+	}
+}
+
 func TestRunTests_RegisterCheckInTestFile(t *testing.T) {
 	t.Parallel()
 	const wantErr = "shac.register_check: can't register checks directly in a test file"
@@ -415,6 +482,27 @@ func TestRunTests_RegisterCheckInTestFile(t *testing.T) {
 		}
 	})
 
+	t.Run("loading module that registers at top level", func(t *testing.T) {
+		t.Parallel()
+		root := t.TempDir()
+		writeFile(t, root, "checks.star", ""+
+			"def _helper():\n"+
+			"    return 42\n"+
+			"helper = _helper\n"+
+			"shac.register_check(shac.check(lambda ctx: None, name = 'bob'))\n")
+		writeFile(t, root, "a_test.star", ""+
+			"load('//checks.star', '_helper', 'helper')\n"+
+			"def test_a():\n"+
+			"    asserts.eq(_helper(), 42)\n"+
+			"    asserts.eq(helper(), 42)\n")
+		rep := &capturingTestReporter{}
+		if err := RunTests(t.Context(), &Options{
+			Dir:          root,
+			TestReporter: rep,
+		}); err != nil {
+			t.Fatalf("Unexpected error: %v (results: %+v)", err, rep.results)
+		}
+	})
 }
 
 func TestRunTests_ExplicitFileArgs(t *testing.T) {
