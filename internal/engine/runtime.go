@@ -58,6 +58,7 @@ func getPredeclared() starlark.StringDict {
 func getTestPredeclared() starlark.StringDict {
 	d := getPredeclared()
 	d["asserts"] = toValue("asserts", getAsserts())
+	d["testing"] = toValue("testing", getTesting())
 	return d
 }
 

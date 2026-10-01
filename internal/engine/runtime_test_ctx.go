@@ -15,16 +15,19 @@
 package engine
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
 	"io/fs"
 	"maps"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/go-git/go-git/v5/plumbing/format/gitignore"
@@ -48,6 +51,18 @@ func getAsserts() starlark.StringDict {
 		"false":    newBuiltinNone("asserts.false", assertFalse),
 		"ne":       newBuiltinNone("asserts.ne", assertNe),
 		"true":     newBuiltinNone("asserts.true", assertTrue),
+	}
+}
+
+// getTesting returns the predeclared testing module.
+//
+// Make sure to update //doc/stdlib.star whenever this function is modified.
+func getTesting() starlark.StringDict {
+	return starlark.StringDict{
+		"commit":  newBuiltin("testing.commit", testingCommit),
+		"file":    newBuiltin("testing.file", testingFile),
+		"finding": newBuiltin("testing.finding", testingFinding),
+		"run":     starlark.NewBuiltin("testing.run", withCheckBacktrace(testingRun)),
 	}
 }
 
@@ -287,6 +302,671 @@ func prettyStarlarkValue(v starlark.Value, indent int) string {
 	default:
 		return v.String()
 	}
+}
+
+func testingFile(ctx context.Context, s *shacState, name string, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+	var argcontent starlark.String
+	var argaction starlark.String = "M"
+	var argnewLines starlark.Value = starlark.None
+	var argaffected starlark.Bool = true
+	if err := starlark.UnpackArgs(name, args, kwargs,
+		"content?", &argcontent,
+		"action?", &argaction,
+		"new_lines??", &argnewLines,
+		"affected?", &argaffected,
+	); err != nil {
+		return nil, err
+	}
+	if argaction == "" {
+		return nil, errors.New("for parameter \"action\": must not be empty")
+	}
+	parsedLines, err := parseCustomNewLines(argnewLines)
+	if err != nil {
+		return nil, err
+	}
+	res := toValue("file_spec", starlark.StringDict{
+		"action":    argaction,
+		"affected":  argaffected,
+		"content":   argcontent,
+		"new_lines": parsedLines,
+	})
+	res.Freeze()
+	return res, nil
+}
+
+func parseCustomNewLines(v starlark.Value) (starlark.Value, error) {
+	if v == nil || v == starlark.None {
+		return starlark.None, nil
+	}
+	switch linesVal := v.(type) {
+	case starlark.Mapping:
+		it, ok := linesVal.(starlark.IterableMapping)
+		if !ok {
+			return nil, errors.New("for parameter \"new_lines\": mapping must be iterable")
+		}
+		type linePair struct {
+			num  int
+			text string
+		}
+		var pairs []linePair
+		for _, kv := range it.Items() {
+			lineNum, lineStr, err := parseLinePair(kv[0], kv[1])
+			if err != nil {
+				return nil, err
+			}
+			pairs = append(pairs, linePair{num: lineNum, text: string(lineStr)})
+		}
+		slices.SortFunc(pairs, func(a, b linePair) int { return cmp.Compare(a.num, b.num) })
+		out := make(starlark.Tuple, len(pairs))
+		for i, p := range pairs {
+			out[i] = starlark.Tuple{starlark.MakeInt(p.num), starlark.String(p.text)}
+		}
+		return out, nil
+	case starlark.Sequence:
+		out := make(starlark.Tuple, 0, linesVal.Len())
+		iter := linesVal.Iterate()
+		defer iter.Done()
+		var elem starlark.Value
+		for iter.Next(&elem) {
+			seq, ok := elem.(starlark.Sequence)
+			if !ok || seq.Len() != 2 {
+				return nil, errors.New("for parameter \"new_lines\": sequence elements must be (line_number, text) pairs")
+			}
+			subIter := seq.Iterate()
+			var first, second starlark.Value
+			subIter.Next(&first)
+			subIter.Next(&second)
+			subIter.Done()
+			lineNum, lineStr, err := parseLinePair(first, second)
+			if err != nil {
+				return nil, err
+			}
+			out = append(out, starlark.Tuple{starlark.MakeInt(lineNum), lineStr})
+		}
+		return out, nil
+	default:
+		return nil, fmt.Errorf("for parameter \"new_lines\": got %s, want sequence of (int, str) or dict of {int: str}", v.Type())
+	}
+}
+
+// parseLinePair validates a single (line_number, text) entry of the new_lines
+// parameter of testing.file().
+func parseLinePair(numVal, textVal starlark.Value) (int, starlark.String, error) {
+	numInt, ok := numVal.(starlark.Int)
+	if !ok {
+		return 0, "", fmt.Errorf("for parameter \"new_lines\": line number must be int, got %s", numVal.Type())
+	}
+	lineNum := intToInt(numInt)
+	if lineNum <= 0 {
+		return 0, "", fmt.Errorf("for parameter \"new_lines\": line numbers are 1-based, got %s", numVal.String())
+	}
+	lineStr, ok := textVal.(starlark.String)
+	if !ok {
+		return 0, "", fmt.Errorf("for parameter \"new_lines\": line content must be str, got %s", textVal.Type())
+	}
+	return lineNum, lineStr, nil
+}
+
+func testingCommit(ctx context.Context, s *shacState, name string, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+	var arghash starlark.String = "0000000000000000000000000000000000000000"
+	var argmessage starlark.String
+	if err := starlark.UnpackArgs(name, args, kwargs,
+		"hash?", &arghash,
+		"message?", &argmessage,
+	); err != nil {
+		return nil, err
+	}
+	if arghash == "" {
+		return nil, errors.New("for parameter \"hash\": must not be empty")
+	}
+	res := toValue("commit", starlark.StringDict{
+		"hash":    arghash,
+		"message": argmessage,
+	})
+	res.Freeze()
+	return res, nil
+}
+
+func testingFinding(ctx context.Context, s *shacState, name string, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+	var argmessage starlark.String
+	var arglevel starlark.String = "error"
+	var argfilepath starlark.String
+	var argline starlark.Int
+	var argcol starlark.Int
+	var argendLine starlark.Int
+	var argendCol starlark.Int
+	var argreplacements starlark.Sequence
+	var argproperties = findingsPropertyBag{
+		allowedProperties: s.allowedFindingsProperties,
+	}
+	var argcommitHash starlark.String
+	if err := starlark.UnpackArgs(name, args, kwargs,
+		"message?", &argmessage,
+		"level?", &arglevel,
+		"filepath?", &argfilepath,
+		"line??", &argline,
+		"col??", &argcol,
+		"end_line??", &argendLine,
+		"end_col??", &argendCol,
+		"replacements??", &argreplacements,
+		"properties??", &argproperties,
+		"commit_hash?", &argcommitHash,
+	); err != nil {
+		return nil, err
+	}
+	level := Level(string(arglevel))
+	if !level.isValid() {
+		return nil, fmt.Errorf("for parameter \"level\": got %s, want one of %q, %q or %q", arglevel, Notice, Warning, Error)
+	}
+	span, err := parseSpan(argline, argcol, argendLine, argendCol)
+	if err != nil {
+		return nil, err
+	}
+	var replacements []string
+	if argreplacements != nil {
+		replacements = sequenceToStrings(argreplacements)
+		if replacements == nil {
+			return nil, fmt.Errorf("for parameter \"replacements\": got %s, want sequence of str", argreplacements.Type())
+		}
+	}
+	return newFindingStruct(
+		string(argmessage),
+		string(arglevel),
+		string(argfilepath),
+		span.Start.Line,
+		span.Start.Col,
+		span.End.Line,
+		span.End.Col,
+		replacements,
+		argproperties.unpackedProperties,
+		string(argcommitHash),
+	), nil
+}
+
+func newFindingStruct(message, level, filepath string, line, col, endLine, endCol int, replacements []string, props map[string]string, commitHash string) starlark.Value {
+	replTuple := make(starlark.Tuple, len(replacements))
+	for i, r := range replacements {
+		replTuple[i] = starlark.String(r)
+	}
+	propsDict := starlark.NewDict(len(props))
+	if len(props) > 0 {
+		keys := make([]string, 0, len(props))
+		for k := range props {
+			keys = append(keys, k)
+		}
+		slices.Sort(keys)
+		for _, k := range keys {
+			_ = propsDict.SetKey(starlark.String(k), starlark.String(props[k]))
+		}
+	}
+	propsDict.Freeze()
+	res := toValue("finding", starlark.StringDict{
+		"col":          starlark.MakeInt(col),
+		"commit_hash":  starlark.String(commitHash),
+		"end_col":      starlark.MakeInt(endCol),
+		"end_line":     starlark.MakeInt(endLine),
+		"filepath":     starlark.String(filepath),
+		"level":        starlark.String(level),
+		"line":         starlark.MakeInt(line),
+		"message":      starlark.String(message),
+		"properties":   propsDict,
+		"replacements": replTuple,
+	})
+	res.Freeze()
+	return res
+}
+
+// virtualFile is a file passed to testing.run(). It embeds fileImpl so it
+// gets the same lazily-computed metadata as a real file.
+type virtualFile struct {
+	fileImpl
+	content     string
+	customLines starlark.Value
+	affected    bool
+}
+
+func newVirtualFile(path, action, content string, affected bool) *virtualFile {
+	return &virtualFile{
+		fileImpl: fileImpl{path: path, a: action},
+		content:  content,
+		affected: affected,
+	}
+}
+
+type virtualSCM struct {
+	files      []*virtualFile
+	scmCommits []scmCommit
+}
+
+func (v *virtualSCM) affectedFiles(ctx context.Context, filter fileFilter) ([]file, error) {
+	var res []file
+	for _, f := range v.files {
+		if !f.affected {
+			continue
+		}
+		if f.a == "D" && !filter.includeDeleted {
+			continue
+		}
+		res = append(res, f)
+	}
+	return res, nil
+}
+
+func (v *virtualSCM) allFiles(ctx context.Context, filter fileFilter) ([]file, error) {
+	var res []file
+	for _, f := range v.files {
+		if f.a == "D" && !filter.includeDeleted {
+			continue
+		}
+		res = append(res, f)
+	}
+	return res, nil
+}
+
+func (v *virtualSCM) newLines(ctx context.Context, fi file) (starlark.Value, error) {
+	// fileImpl.getMetadata passes the embedded *fileImpl rather than the
+	// *virtualFile, so look the file up by path.
+	idx := slices.IndexFunc(v.files, func(f *virtualFile) bool { return f.path == fi.rootedpath() })
+	if idx < 0 {
+		return make(starlark.Tuple, 0), nil
+	}
+	vf := v.files[idx]
+	if vf.customLines != nil && vf.customLines != starlark.None {
+		return vf.customLines, nil
+	}
+	if vf.a == "D" {
+		return make(starlark.Tuple, 0), nil
+	}
+	return newLinesWholeBytes([]byte(vf.content))
+}
+
+func (v *virtualSCM) commits(ctx context.Context) ([]scmCommit, error) {
+	return slices.Clone(v.scmCommits), nil
+}
+
+type testReport struct {
+	mu             sync.Mutex
+	findings       []starlark.Value
+	findingsByFile map[string][]findingToFix
+	artifacts      map[string]string
+}
+
+func newTestReport() *testReport {
+	return &testReport{
+		findingsByFile: make(map[string][]findingToFix),
+		artifacts:      make(map[string]string),
+	}
+}
+
+func (r *testReport) EmitFinding(ctx context.Context, check string, level Level, message, root, file string, s Span, replacements []string, props map[string]string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.findings = append(r.findings, newFindingStruct(
+		message,
+		string(level),
+		file,
+		s.Start.Line,
+		s.Start.Col,
+		s.End.Line,
+		s.End.Col,
+		replacements,
+		props,
+		"",
+	))
+	if file != "" && len(replacements) == 1 {
+		r.findingsByFile[file] = append(r.findingsByFile[file], findingToFix{
+			check:       check,
+			span:        s,
+			replacement: replacements[0],
+		})
+	}
+	return nil
+}
+
+func (r *testReport) EmitCommitMessageFinding(ctx context.Context, check string, level Level, message string, commitHash string, commitMessage string, s Span, props map[string]string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.findings = append(r.findings, newFindingStruct(
+		message,
+		string(level),
+		"",
+		s.Start.Line,
+		s.Start.Col,
+		s.End.Line,
+		s.End.Col,
+		nil,
+		props,
+		commitHash,
+	))
+	return nil
+}
+
+func (r *testReport) EmitArtifact(ctx context.Context, check, root, file string, content []byte) error {
+	if content == nil && root != "" {
+		var err error
+		content, err = os.ReadFile(filepath.Join(root, file))
+		if err != nil {
+			return err
+		}
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.artifacts[file] = string(content)
+	return nil
+}
+
+func (r *testReport) CheckCompleted(ctx context.Context, check string, start time.Time, d time.Duration, level Level, err error) {
+}
+
+// Print is never called because testingRun gives checks the test thread's
+// print impl directly, so their output is attributed to the test case.
+func (r *testReport) Print(ctx context.Context, check, file string, line int, message string) {
+}
+
+// withCheckBacktrace wraps testing.run() so that errors raised inside a check
+// keep the check's own stack frames. Checks run on a separate thread, so
+// otherwise Starlark would wrap the error in a new EvalError whose stack ends
+// at the testing.run() call site, hiding where the check actually failed.
+func withCheckBacktrace(impl func(*starlark.Thread, *starlark.Builtin, starlark.Tuple, []starlark.Tuple) (starlark.Value, error)) func(*starlark.Thread, *starlark.Builtin, starlark.Tuple, []starlark.Tuple) (starlark.Value, error) {
+	return func(th *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+		v, err := impl(th, fn, args, kwargs)
+		if err == nil {
+			return v, nil
+		}
+		var inner starlark.CallStack
+		if f, ok := errors.AsType[*failure](err); ok {
+			inner = f.Stack
+		} else if e, ok := errors.AsType[*evalError](err); ok {
+			inner = e.CallStack
+		} else {
+			return nil, err
+		}
+		// The outer stack ends with the testing.run builtin frame, which the
+		// inner stack's first frame (the check function) replaces.
+		outer := th.CallStack()
+		if n := len(outer); n > 0 && outer[n-1].Pos.Filename() == "<builtin>" {
+			outer = outer[:n-1]
+		}
+		return nil, &starlark.EvalError{
+			Msg:       err.Error(),
+			CallStack: append(outer, inner...),
+		}
+	}
+}
+
+func testingRun(th *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+	ctx := getContext(th)
+	s := ctxShacState(ctx)
+	var argcheck starlark.Value
+	var argfiles = starlark.NewDict(0)
+	var argcommits starlark.Sequence
+	var argvars = starlark.NewDict(0)
+	var argcheckArgs = starlark.NewDict(0)
+	if err := starlark.UnpackArgs(fn.Name(), args, kwargs,
+		"check", &argcheck,
+		"files?", &argfiles,
+		"commits?", &argcommits,
+		"vars?", &argvars,
+		"args?", &argcheckArgs,
+	); err != nil {
+		return nil, err
+	}
+
+	virtualFiles, err := parseVirtualFiles(argfiles)
+	if err != nil {
+		return nil, err
+	}
+
+	scmCommits, err := parseVirtualCommits(argcommits)
+	if err != nil {
+		return nil, err
+	}
+
+	vars := maps.Clone(s.vars)
+	if vars == nil {
+		vars = make(map[string]string, argvars.Len())
+	}
+	for _, kv := range argvars.Items() {
+		k, ok := kv[0].(starlark.String)
+		if !ok {
+			return nil, fmt.Errorf("for parameter \"vars\": key must be str, got %s", kv[0].Type())
+		}
+		v, ok := kv[1].(starlark.String)
+		if !ok {
+			return nil, fmt.Errorf("for parameter \"vars\": value must be str, got %s", kv[1].Type())
+		}
+		vars[string(k)] = string(v)
+	}
+
+	testRootDir, err := s.newTempDir()
+	if err != nil {
+		return nil, err
+	}
+	if err = materializeTestRoot(testRootDir, virtualFiles); err != nil {
+		return nil, err
+	}
+	scmRootSlash := filepath.ToSlash(testRootDir)
+
+	// Prints from the check under test belong in the calling test's output,
+	// so reuse the test thread's print impl.
+	pi := th.Print
+
+	rep := newTestReport()
+	vscm := &virtualSCM{
+		files:      virtualFiles,
+		scmCommits: scmCommits,
+	}
+
+	cConfig := s.shacConfig
+	cConfig.r = rep
+	cConfig.root = testRootDir
+	cConfig.tmpdir = testRootDir + "-tmp"
+	cConfig.vars = vars
+	cConfig.scm = vscm
+	// Unlike the test file itself, testing.run() executes whatever checks get
+	// registered.
+	cConfig.forbidRegisterCheck = false
+	cState := &shacState{
+		shacConfig: cConfig,
+	}
+	cCtx := context.WithValue(ctx, &shacStateCtxKey, cState)
+
+	checksToRun, err := resolveChecksToRun(cCtx, th, cState, argcheck, argcheckArgs)
+	if err != nil {
+		return nil, err
+	}
+	cState.doneLoading = true
+
+	ctxVal, err := getCtx(scmRootSlash, cState.vars)
+	if err != nil {
+		return nil, err
+	}
+	callArgs := starlark.Tuple{ctxVal}
+	callArgs.Freeze()
+	for _, rc := range checksToRun {
+		if err = rc.call(cCtx, cState.env, callArgs, pi); err != nil {
+			return nil, err
+		}
+	}
+
+	resultFiles := starlark.NewDict(len(virtualFiles))
+	for _, vf := range virtualFiles {
+		if vf.a == "D" {
+			continue
+		}
+		content := vf.content
+		if fileFindings := rep.findingsByFile[vf.path]; len(fileFindings) > 0 {
+			var fixErr error
+			content, _, fixErr = applyReplacements(content, fileFindings)
+			if fixErr != nil {
+				return nil, fixErr
+			}
+		}
+		_ = resultFiles.SetKey(starlark.String(vf.path), starlark.String(content))
+	}
+	resultFiles.Freeze()
+
+	artifactsDict := starlark.NewDict(len(rep.artifacts))
+	artifactKeys := make([]string, 0, len(rep.artifacts))
+	for k := range rep.artifacts {
+		artifactKeys = append(artifactKeys, k)
+	}
+	slices.Sort(artifactKeys)
+	for _, k := range artifactKeys {
+		_ = artifactsDict.SetKey(starlark.String(k), starlark.String(rep.artifacts[k]))
+	}
+	artifactsDict.Freeze()
+
+	res := toValue("result", starlark.StringDict{
+		"artifacts": artifactsDict,
+		"files":     resultFiles,
+		"findings":  starlark.Tuple(rep.findings),
+	})
+	res.Freeze()
+	return res, nil
+}
+
+func resolveChecksToRun(ctx context.Context, th *starlark.Thread, cState *shacState, target starlark.Value, checkArgs *starlark.Dict) ([]*registeredCheck, error) {
+	var extraKwargs []starlark.Tuple
+	for _, kv := range checkArgs.Items() {
+		k, ok := kv[0].(starlark.String)
+		if !ok {
+			return nil, fmt.Errorf("for parameter \"args\": key must be str, got %s", kv[0].Type())
+		}
+		extraKwargs = append(extraKwargs, starlark.Tuple{k, kv[1]})
+	}
+
+	var c *check
+	switch x := target.(type) {
+	case *check:
+		c = x
+	case *starlark.Function:
+		if x.NumParams() == 0 && !x.HasVarargs() && !x.HasKwargs() {
+			if len(extraKwargs) > 0 {
+				return nil, errors.New("cannot pass \"args\" when running a 0-argument registration function")
+			}
+			prevCtx := th.Local("shac.context")
+			th.SetLocal("shac.context", ctx)
+			_, err := starlark.Call(th, x, nil, nil)
+			th.SetLocal("shac.context", prevCtx)
+			if err != nil {
+				return nil, err
+			}
+			if len(cState.checks) == 0 {
+				return nil, fmt.Errorf("function %q did not register any checks via shac.register_check()", x.Name())
+			}
+			return cState.checks, nil
+		}
+		var err error
+		c, err = newCheck(x, "", false)
+		if err != nil {
+			return nil, err
+		}
+	case starlark.Callable:
+		var err error
+		c, err = newCheck(x, "", false)
+		if err != nil {
+			return nil, err
+		}
+	default:
+		return nil, fmt.Errorf("for parameter \"check\": got %s, want function or shac.check object", target.Type())
+	}
+
+	if len(extraKwargs) > 0 {
+		withArgsVal, err := c.withArgs(extraKwargs)
+		if err != nil {
+			return nil, err
+		}
+		c = withArgsVal.(*check)
+	}
+	return []*registeredCheck{{check: c}}, nil
+}
+
+func parseVirtualFiles(filesDict *starlark.Dict) ([]*virtualFile, error) {
+	var virtualFiles []*virtualFile
+	for _, kv := range filesDict.Items() {
+		pathVal, ok := kv[0].(starlark.String)
+		if !ok {
+			return nil, fmt.Errorf("for parameter \"files\": key must be str, got %s", kv[0].Type())
+		}
+		rel := string(pathVal)
+		if strings.Contains(rel, "\\") || path.IsAbs(rel) || path.Clean(rel) != rel || strings.HasPrefix(rel, "../") || rel == ".." || rel == "." {
+			return nil, fmt.Errorf("for parameter \"files\": invalid relative path %q", rel)
+		}
+
+		vf := newVirtualFile(rel, "M", "", true)
+		switch v := kv[1].(type) {
+		case starlark.String:
+			vf.content = string(v)
+		case *starlarkstruct.Struct:
+			if v.Constructor() != starlark.String("file_spec") {
+				return nil, fmt.Errorf("for parameter \"files\": value for %q must be str or testing.file(), got %s", rel, v.String())
+			}
+			actionVal, _ := v.Attr("action")
+			affectedVal, _ := v.Attr("affected")
+			contentVal, _ := v.Attr("content")
+			newLinesVal, _ := v.Attr("new_lines")
+			vf.a = string(actionVal.(starlark.String))
+			vf.affected = bool(affectedVal.(starlark.Bool))
+			vf.content = string(contentVal.(starlark.String))
+			vf.customLines = newLinesVal
+		default:
+			return nil, fmt.Errorf("for parameter \"files\": value for %q must be str or testing.file(), got %s", rel, kv[1].Type())
+		}
+		virtualFiles = append(virtualFiles, vf)
+	}
+	slices.SortFunc(virtualFiles, func(a, b *virtualFile) int {
+		return cmp.Compare(a.path, b.path)
+	})
+	return virtualFiles, nil
+}
+
+func parseVirtualCommits(seq starlark.Sequence) ([]scmCommit, error) {
+	if seq == nil {
+		return nil, nil
+	}
+	var res []scmCommit
+	iter := seq.Iterate()
+	defer iter.Done()
+	var elem starlark.Value
+	for iter.Next(&elem) {
+		switch v := elem.(type) {
+		case *starlarkstruct.Struct:
+			hashVal, err := v.Attr("hash")
+			if err != nil {
+				return nil, fmt.Errorf("for parameter \"commits\": commit struct missing \"hash\"")
+			}
+			msgVal, err := v.Attr("message")
+			if err != nil {
+				return nil, fmt.Errorf("for parameter \"commits\": commit struct missing \"message\"")
+			}
+			h, ok1 := hashVal.(starlark.String)
+			m, ok2 := msgVal.(starlark.String)
+			if !ok1 || !ok2 {
+				return nil, errors.New("for parameter \"commits\": commit \"hash\" and \"message\" must be str")
+			}
+			res = append(res, scmCommit{hash: string(h), message: string(m)})
+		default:
+			return nil, fmt.Errorf("for parameter \"commits\": element must be testing.commit(), got %s", elem.Type())
+		}
+	}
+	return res, nil
+}
+
+func materializeTestRoot(testRootDir string, virtualFiles []*virtualFile) error {
+	for _, vf := range virtualFiles {
+		if vf.a == "D" {
+			continue
+		}
+		dst := filepath.Join(testRootDir, filepath.FromSlash(vf.path))
+		if err := os.MkdirAll(filepath.Dir(dst), 0o700); err != nil {
+			return err
+		}
+		if err := os.WriteFile(dst, []byte(vf.content), 0o600); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // RunTests discovers and executes Starlark *_test.star files.

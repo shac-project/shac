@@ -39,14 +39,14 @@ func getShac() starlark.StringDict {
 }
 
 // shacRegisterCheckBuiltin wraps shacRegisterCheck to reject calls made
-// directly from a test file.
+// directly from a test file outside of testing.run().
 //
 // Only direct calls are rejected because modules loaded by a test file (such
 // as a shac.star file) may legitimately register checks at the top level.
 func shacRegisterCheckBuiltin(th *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	return builtinWrapper(th, fn.Name(), func(ctx context.Context, s *shacState) (starlark.Value, error) {
 		if s.forbidRegisterCheck && strings.HasSuffix(th.CallFrame(1).Pos.Filename(), "_test.star") {
-			return nil, errors.New("can't register checks directly in a test file")
+			return nil, errors.New("can't register checks directly in a test file, pass a function that registers checks to testing.run() instead")
 		}
 		return starlark.None, shacRegisterCheck(ctx, s, fn.Name(), args, kwargs)
 	})
