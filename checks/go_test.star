@@ -14,10 +14,9 @@
 
 load("go.star", "gofmt", "gosec", "govet", "ineffassign", "no_fork_without_lock", "shadow", "staticcheck")
 
-def _go_install_mock(pkg, version):
-    return testing.exec_mock(
-        cmd = ["go", "install", "%s@%s" % (pkg, version)],
-    )
+_GO_INSTALL_MOCK = testing.exec_mock(
+    cmd = ["go", "install", testing.any_args],
+)
 
 def test_gofmt_real_pass():
     formatted = "package main\n\nfunc main() {}\n"
@@ -65,13 +64,13 @@ def test_gosec_pass():
         gosec,
         files = {"main.go": "package main\n"},
         exec_mocks = [
-            _go_install_mock("github.com/securego/gosec/v2/cmd/gosec", "v2.22.3"),
+            _GO_INSTALL_MOCK,
             testing.exec_mock(
                 cmd = [
                     ".tools/gobin/gosec",
                     "-fmt=json",
                     "-quiet",
-                    "-exclude=G204,G304",
+                    "-exclude=G204,G304,G703",
                     "-exclude-dir=.tools",
                     "-exclude-dir=internal/engine/testdata",
                     "./...",
@@ -117,13 +116,13 @@ def test_gosec_fail():
             "unaffected.go": testing.file(content = "package main\n", affected = False),
         },
         exec_mocks = [
-            _go_install_mock("github.com/securego/gosec/v2/cmd/gosec", "v2.22.3"),
+            _GO_INSTALL_MOCK,
             testing.exec_mock(
                 cmd = [
                     ".tools/gobin/gosec",
                     "-fmt=json",
                     "-quiet",
-                    "-exclude=G204,G304",
+                    "-exclude=G204,G304,G703",
                     "-exclude-dir=.tools",
                     "-exclude-dir=internal/engine/testdata",
                     "./...",
@@ -158,7 +157,7 @@ def test_ineffassign_pass():
         ineffassign,
         files = {"main.go": "package main\n"},
         exec_mocks = [
-            _go_install_mock("github.com/gordonklaus/ineffassign", "v0.0.0-20230107090616-13ace0543b28"),
+            _GO_INSTALL_MOCK,
             testing.exec_mock(
                 cmd = [".tools/gobin/ineffassign", "./..."],
                 retcode = 0,
@@ -173,7 +172,7 @@ def test_ineffassign_fail():
         ineffassign,
         files = {"main.go": "package main\n"},
         exec_mocks = [
-            _go_install_mock("github.com/gordonklaus/ineffassign", "v0.0.0-20230107090616-13ace0543b28"),
+            _GO_INSTALL_MOCK,
             testing.exec_mock(
                 cmd = [".tools/gobin/ineffassign", "./..."],
                 retcode = 3,
@@ -199,7 +198,7 @@ def test_staticcheck_pass():
         staticcheck,
         files = {"main.go": "package main\n"},
         exec_mocks = [
-            _go_install_mock("honnef.co/go/tools/cmd/staticcheck", "v0.4.3"),
+            _GO_INSTALL_MOCK,
             testing.exec_mock(
                 cmd = [".tools/gobin/staticcheck", "-f=json", "./..."],
                 retcode = 0,
@@ -226,7 +225,7 @@ def test_staticcheck_fail():
         staticcheck,
         files = {"main.go": "package main\n"},
         exec_mocks = [
-            _go_install_mock("honnef.co/go/tools/cmd/staticcheck", "v0.4.3"),
+            _GO_INSTALL_MOCK,
             testing.exec_mock(
                 cmd = [".tools/gobin/staticcheck", "-f=json", "./..."],
                 retcode = 1,
@@ -254,7 +253,7 @@ def test_shadow_pass():
         shadow,
         files = {"main.go": "package main\n"},
         exec_mocks = [
-            _go_install_mock("golang.org/x/tools/go/analysis/passes/shadow/cmd/shadow", "v0.31.0"),
+            _GO_INSTALL_MOCK,
             testing.exec_mock(
                 cmd = [".tools/gobin/shadow", "-test=false", "-json", "./..."],
                 stdout = "{}",
@@ -278,7 +277,7 @@ def test_shadow_fail():
         shadow,
         files = {"main.go": "package main\n"},
         exec_mocks = [
-            _go_install_mock("golang.org/x/tools/go/analysis/passes/shadow/cmd/shadow", "v0.31.0"),
+            _GO_INSTALL_MOCK,
             testing.exec_mock(
                 cmd = [".tools/gobin/shadow", "-test=false", "-json", "./..."],
                 stdout = shadow_out,

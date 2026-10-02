@@ -41,13 +41,17 @@ def _gofmt(ctx, simplify = True):
 
 gofmt = shac.check(_gofmt, formatter = True)
 
-def _gosec(ctx, version = "v2.22.3", level = "error", exclude = [
+def _gosec(ctx, version = "v2.29.0", level = "error", exclude = [
     # shac checks are allowed to run arbitrary subprocesses, so it's common for
     # shac's source code to run non-constant subcommands.
     "G204",
     # shac checks are allowed to read arbitrary files, so it's common for shac's
     # source code to read non-constant files.
     "G304",
+    # G703 is the taint-analysis counterpart to G304 (path traversal via taint
+    # analysis) and similarly flags reading or writing user-specified file
+    # paths.
+    "G703",
 ]):
     """Runs gosec on a Go code base.
 
@@ -174,7 +178,7 @@ def _staticcheck(ctx, version = "v0.4.3"):
 
 staticcheck = shac.check(_staticcheck)
 
-def _shadow(ctx, version = "v0.31.0"):
+def _shadow(ctx, version = "v0.48.0"):
     """Runs go vet -vettool=shadow on a Go code base.
 
     Args:

@@ -31,7 +31,7 @@ jobs:
         os: [ubuntu-latest, macos-latest, windows-latest]
         # Do not forget to bump every 6 months!
         # LINT.IfChange(test_goversion)
-        gover: ["1.26"]
+        gover: ["1.27"]
         # LINT.ThenChange(/go.mod:goversion)
     env:
       PYTHONDONTWRITEBYTECODE: x
@@ -118,7 +118,7 @@ jobs:
         os: [ubuntu-latest, macos-latest, windows-latest]
         # Do not forget to bump every 6 months!
         # LINT.IfChange(lint_goversion)
-        gover: ["1.26"]
+        gover: ["1.27"]
         # LINT.ThenChange(/go.mod:goversion)
     env:
       PYTHONDONTWRITEBYTECODE: x
@@ -230,7 +230,7 @@ jobs:
         os: [ubuntu-latest]
         # Do not forget to bump every 6 months!
         # LINT.IfChange(codeql_goversion)
-        gover: ["1.26"]
+        gover: ["1.27"]
         # LINT.ThenChange(/go.mod:goversion)
     permissions:
       security-events: write

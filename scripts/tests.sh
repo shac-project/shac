@@ -28,7 +28,7 @@ fi
 export GOTOOLCHAIN=local
 
 # LINT.IfChange(goversion)
-GO_CIPD_VERSION="version:3@1.26.1"
+GO_CIPD_VERSION="version:3@1.27.1"
 # LINT.ThenChange(/go.mod:goversion)
 
 cd "$(dirname "${BASH_SOURCE[0]}")"
