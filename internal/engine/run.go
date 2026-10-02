@@ -296,7 +296,7 @@ type Options struct {
 	// was run in the specified directory. It defaults to the current working
 	// directory.
 	Dir string
-	// Files lists specific files to analyze.
+	// Files lists specific files or directories to analyze.
 	Files []string
 	// AllFiles tells to consider all files as affected.
 	AllFiles bool
@@ -422,44 +422,58 @@ func runInner(ctx context.Context, o *Options, tmpdir string) error {
 		return err
 	}
 
-	var scm scmCheckout
+	resolvedPaths, err := resolvePaths(o.Files, root)
+	if err != nil {
+		return err
+	}
+
+	scm, err := getSCM(ctx, root, o.AllFiles)
+	if err != nil {
+		return err
+	}
+	scm = &cachingSCM{scm: scm}
 	if len(o.Files) > 0 {
-		var files []file
-		files, err = normalizeFiles(o.Files, root)
-		if err != nil {
-			return err
+		scm = &specifiedFilesOnly{
+			paths: resolvedPaths,
+			root:  root,
+			base:  scm,
 		}
-		var baseSCM scmCheckout
-		baseSCM, err = getSCM(ctx, root, false)
-		if err != nil {
-			return err
+	}
+	if len(o.Stdin) > 0 && len(o.Files) == 1 {
+		relPath := resolvedPaths[0]
+		if isDirPath(relPath) {
+			return fmt.Errorf("is a directory: %s", o.Files[0])
 		}
-		scm = &specifiedFilesOnly{files: files, root: root, base: baseSCM}
-	} else if len(o.Stdin) > 0 && len(o.Files) == 1 {
 		// Make a scm that is for just the one in-memory file
-		var files []file
-		files, err = normalizeFiles(o.Files, root)
-		if err != nil {
-			return err
-		}
-		scm = &inMemoryFile{root: root, targetFile: files[0], data: o.Stdin}
-	} else {
-		scm, err = getSCM(ctx, root, o.AllFiles)
-		if err != nil {
-			return err
-		}
-		if len(doc.Ignore) > 0 {
-			var patterns []gitignore.Pattern
-			for _, p := range doc.Ignore {
-				if p == "" {
-					return errEmptyIgnore
-				}
-				patterns = append(patterns, gitignore.ParsePattern(p, nil))
+		scm = &inMemoryFile{root: root, targetFile: &fileImpl{path: relPath}, data: o.Stdin, base: scm}
+	}
+
+	var matcher gitignore.Matcher
+	if len(doc.Ignore) > 0 {
+		var patterns []gitignore.Pattern
+		for _, p := range doc.Ignore {
+			if p == "" {
+				return errEmptyIgnore
 			}
-			scm = &filteredSCM{
-				matcher: gitignore.NewMatcher(patterns),
-				scm:     scm,
+			patterns = append(patterns, gitignore.ParsePattern(p, nil))
+		}
+		matcher = gitignore.NewMatcher(patterns)
+		var exemptPaths []string
+		for _, p := range resolvedPaths {
+			if p == "" {
+				continue
 			}
+			// Only exempt a directory argument if the directory itself matches
+			// an ignore pattern, so passing an unignored parent directory (e.g.
+			// "." or "a/") does not exempt ignored subdirectories inside it.
+			if !isDirPath(p) || matcher.Match(strings.Split(strings.TrimSuffix(p, "/"), "/"), true) {
+				exemptPaths = append(exemptPaths, p)
+			}
+		}
+		scm = &filteredSCM{
+			matcher:     matcher,
+			exemptPaths: exemptPaths,
+			scm:         scm,
 		}
 	}
 
@@ -534,32 +548,9 @@ func runInner(ctx context.Context, o *Options, tmpdir string) error {
 		// parallelism.
 		// Discover all the main files via the SCM. This enables us to not walk
 		// ignored files.
-		var subdirs []string
-		// If the scm provides a method to return the directories containing
-		// shac.star files, use that instead of calling `allFiles`, which may
-		// not return all shac.star files that should be considered, e.g.
-		// because files were specified on the command line.
-		//
-		// This is also an optimization to avoid doing a `git ls-files` just to
-		// discover shac.star files when files to analyze are specified on the
-		// command line, since `git ls-files` is slow on large repositories.
-		if v, ok := scm.(overridesShacFileDirs); ok {
-			subdirs, err = v.shacFileDirs(entryPoint)
-			if err != nil {
-				return err
-			}
-		} else {
-			files, err := scm.allFiles(ctx, fileFilter{includeSymlinks: true})
-			if err != nil {
-				return err
-			}
-			for _, f := range files {
-				n := f.rootedpath()
-				if filepath.Base(n) == entryPoint {
-					subdir := strings.ReplaceAll(filepath.Dir(n), "\\", "/")
-					subdirs = append(subdirs, subdir)
-				}
-			}
+		subdirs, err := shacFileDirs(ctx, scm, entryPoint)
+		if err != nil {
+			return err
 		}
 		if len(subdirs) == 0 {
 			return fmt.Errorf("no %s files found in %s", entryPoint, root)
@@ -661,6 +652,11 @@ func runInner(ctx context.Context, o *Options, tmpdir string) error {
 	if err := eg.Wait(); err != nil {
 		return err
 	}
+
+	if err := warnIfNoAffectedFilesInDirs(ctx, o, scm, resolvedPaths); err != nil {
+		return err
+	}
+
 	// If any check failed, return an error.
 	for _, s := range shacStates {
 		for i := range s.checks {
@@ -668,6 +664,44 @@ func runInner(ctx context.Context, o *Options, tmpdir string) error {
 				return ErrCheckFailed
 			}
 		}
+	}
+	return nil
+}
+
+// warnIfNoAffectedFilesInDirs logs a warning to stderr when directory arguments
+// were passed without --all and none of them contain any affected files, so
+// that `shac check <dir>` on a clean directory is not a silent no-op.
+func warnIfNoAffectedFilesInDirs(ctx context.Context, o *Options, scm scmCheckout, resolvedPaths []string) error {
+	if o.AllFiles || len(o.Stdin) > 0 {
+		return nil
+	}
+	if fc, ok := o.Report.(*findingCollector); ok && (fc.quiet || fc.rerun) {
+		return nil
+	}
+	var numDirs int
+	for _, spec := range resolvedPaths {
+		if isDirPath(spec) {
+			numDirs++
+		}
+	}
+	if numDirs == 0 {
+		return nil
+	}
+	affected, err := scm.affectedFiles(ctx, fileFilter{})
+	if err != nil {
+		return err
+	}
+	hasAffected := slices.ContainsFunc(affected, func(af file) bool {
+		return slices.ContainsFunc(resolvedPaths, func(spec string) bool {
+			return isDirPath(spec) && strings.HasPrefix(af.rootedpath(), spec)
+		})
+	})
+	if !hasAffected {
+		noun := "directory"
+		if numDirs > 1 {
+			noun = "directories"
+		}
+		fmt.Fprintf(os.Stderr, "WARNING: No affected files in the specified %s; pass --all to analyze all files in the %s\n", noun, noun)
 	}
 	return nil
 }
@@ -713,13 +747,13 @@ func resolveRoot(ctx context.Context, dir string) (string, error) {
 	return root, nil
 }
 
-// normalizeFiles makes all the file paths relative to the project root, sorts,
-// and removes duplicates.
+// resolvePaths makes all the file and directory paths relative to the project
+// root, sorts, and removes duplicates. Directory paths end with "/" (or are ""
+// for the project root).
 //
 // Input paths may be absolute or relative. If relative, they are assumed to be
 // relative to the current working directory.
-func normalizeFiles(files []string, root string) ([]file, error) {
-	var cwd string
+func resolvePaths(files []string, root string) ([]string, error) {
 	cwd, err := os.Getwd()
 	if err != nil {
 		return nil, err
@@ -729,7 +763,7 @@ func normalizeFiles(files []string, root string) ([]file, error) {
 	if err != nil {
 		return nil, err
 	}
-	var relativized []string
+	var resolvedPaths []string
 	for _, orig := range files {
 		f := orig
 		if !filepath.IsAbs(f) {
@@ -746,20 +780,12 @@ func normalizeFiles(files []string, root string) ([]file, error) {
 			return nil, err
 		}
 
-		// TODO(olivernewman): Support analyzing directories. This will require
-		// doing a filesystem traversal that respects the scm, so `shac check .`
-		// still ignores git-ignored files.
-		if fi.IsDir() {
-			return nil, fmt.Errorf("is a directory: %s", orig)
-		}
-
 		f, err = filepath.EvalSymlinks(f)
 		if err != nil {
 			return nil, err
 		}
 
-		var rel string
-		rel, err = filepath.Rel(resolvedRoot, f)
+		rel, err := filepath.Rel(resolvedRoot, f)
 		if err != nil {
 			return nil, err
 		}
@@ -769,17 +795,41 @@ func normalizeFiles(files []string, root string) ([]file, error) {
 			return nil, fmt.Errorf("cannot analyze file outside root: %s", orig)
 		}
 
-		relativized = append(relativized, rel)
+		relPath := filepath.ToSlash(rel)
+		if relPath == "." {
+			relPath = ""
+		} else if fi.IsDir() {
+			// Trailing slashes help downstream code identify directories and
+			// prevent prefix matching from accidentally matching sibling files
+			// with similar names (e.g. matching "foo/bar_test.go" when
+			// filtering for directory "foo/bar").
+			relPath += "/"
+		}
+		resolvedPaths = append(resolvedPaths, relPath)
 	}
 
-	slices.Sort(relativized)
-	relativized = slices.Compact(relativized)
+	slices.Sort(resolvedPaths)
+	resolvedPaths = slices.Compact(resolvedPaths)
 
-	var res []file
-	for _, f := range relativized {
-		res = append(res, &fileImpl{path: filepath.ToSlash(f)})
+	return resolvedPaths, nil
+}
+
+// isDirPath reports whether a root-relative path returned by resolvePaths
+// refers to a directory ("" for the root directory, or a "/" suffix for a
+// subdirectory).
+func isDirPath(p string) bool {
+	return p == "" || strings.HasSuffix(p, "/")
+}
+
+// matchesPathSpecs reports whether root-relative file path p matches any entry
+// in specs (either an exact file match or a file within a directory spec).
+func matchesPathSpecs(specs []string, p string) bool {
+	for _, spec := range specs {
+		if p == spec || (isDirPath(spec) && strings.HasPrefix(p, spec)) {
+			return true
+		}
 	}
-	return res, nil
+	return false
 }
 
 type execHandlerFunc func(ctx context.Context, cmd []string, raiseOnFailure bool, okRetcodes []int, tempDir string) (*subprocess, bool, error)

@@ -500,6 +500,226 @@ func TestRun_SpecificFiles(t *testing.T) {
 	})
 }
 
+func TestRun_SpecificFiles_Directory(t *testing.T) {
+	t.Parallel()
+
+	root := resolvedTempDir(t)
+
+	mkdirAll(t, filepath.Join(root, "subdir"))
+	writeFile(t, root, filepath.Join("subdir", "file1.txt"), "file1")
+	writeFile(t, root, filepath.Join("subdir", "file2.txt"), "file2")
+
+	writeFile(t, root, "shac.star", `
+def cb(ctx):
+  out = "\n"
+  for path in ctx.scm.affected_files():
+    out += path + "\n"
+  print(out)
+shac.register_check(cb)
+`)
+
+	r := reportPrint{reportNoPrint: reportNoPrint{t: t}}
+	o := Options{Report: &r, Dir: root, Files: []string{filepath.Join(root, "subdir")}}
+
+	if err := Run(t.Context(), &o); err != nil {
+		t.Fatalf("Run(%+v) failed: %s", o, err)
+	}
+
+	got := r.b.String()
+	want := "[//shac.star:6] \n" +
+		"subdir/file1.txt\n" +
+		"subdir/file2.txt\n\n"
+
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("Run(%+v) output mismatch (-want +got):\n%s", o, diff)
+	}
+}
+
+func TestRun_SpecificFiles_Directory_Git(t *testing.T) {
+	t.Parallel()
+
+	root := makeGit(t)
+
+	mkdirAll(t, filepath.Join(root, "subdir"))
+	writeFile(t, root, filepath.Join("subdir", "unmodified.txt"), "content")
+	writeFile(t, root, filepath.Join("subdir", "modified.txt"), "content")
+
+	runGit(t, root, "add", "subdir/unmodified.txt", "subdir/modified.txt")
+	runGit(t, root, "commit", "-m", "Add files in subdir")
+
+	writeFile(t, root, filepath.Join("subdir", "modified.txt"), "modified content")
+	writeFile(t, root, filepath.Join("subdir", "untracked.txt"), "untracked content")
+	writeFile(t, root, filepath.Join("subdir", "git_ignored.txt"), "git ignored content")
+	writeFile(t, root, ".gitignore", "subdir/git_ignored.txt\n")
+	writeFile(t, root, "shac.textproto", prototext.Format(&Document{
+		Ignore: []string{
+			"/subdir/shac_ignored.txt",
+		},
+	}))
+	writeFile(t, root, filepath.Join("subdir", "shac_ignored.txt"), "shac ignored content")
+
+	writeFile(t, root, "shac.star", `
+def cb(ctx):
+  out = "\n"
+  for path, meta in ctx.scm.affected_files().items():
+    out += path + ": " + meta.action + "\n"
+    ctx.emit.finding(level = "notice", message = "checked", filepath = path)
+  print(out)
+shac.register_check(cb)
+`)
+
+	tests := []struct {
+		name     string
+		files    []string
+		allFiles bool
+		want     string
+	}{
+		{
+			name:  "directory",
+			files: []string{filepath.Join(root, "subdir")},
+			want: "[//shac.star:7] \n" +
+				"subdir/modified.txt: M\n" +
+				"subdir/untracked.txt: A\n\n",
+		},
+		{
+			name:  "explicit_untracked_file",
+			files: []string{filepath.Join(root, "subdir", "untracked.txt")},
+			want: "[//shac.star:7] \n" +
+				"subdir/untracked.txt: A\n\n",
+		},
+		{
+			name:  "explicit_git_ignored_file",
+			files: []string{filepath.Join(root, "subdir", "git_ignored.txt")},
+			want: "[//shac.star:7] \n" +
+				"subdir/git_ignored.txt: \n\n",
+		},
+		{
+			name:  "explicit_shac_ignored_file",
+			files: []string{filepath.Join(root, "subdir", "shac_ignored.txt")},
+			want: "[//shac.star:7] \n" +
+				"subdir/shac_ignored.txt: A\n\n",
+		},
+		{
+			name:  "explicit_unmodified_file",
+			files: []string{filepath.Join(root, "subdir", "unmodified.txt")},
+			want: "[//shac.star:7] \n" +
+				"subdir/unmodified.txt: \n\n",
+		},
+		{
+			name: "explicit_unmodified_and_modified_files_remain_sorted",
+			files: []string{
+				filepath.Join(root, "subdir", "git_ignored.txt"),
+				filepath.Join(root, "subdir", "modified.txt"),
+				filepath.Join(root, "subdir", "unmodified.txt"),
+			},
+			want: "[//shac.star:7] \n" +
+				"subdir/git_ignored.txt: \n" +
+				"subdir/modified.txt: M\n" +
+				"subdir/unmodified.txt: \n\n",
+		},
+		{
+			name:     "directory_with_all_files",
+			files:    []string{filepath.Join(root, "subdir")},
+			allFiles: true,
+			want: "[//shac.star:7] \n" +
+				"subdir/modified.txt: M\n" +
+				"subdir/unmodified.txt: \n" +
+				"subdir/untracked.txt: \n\n",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			r := reportEmitPrint{reportPrint: reportPrint{reportNoPrint: reportNoPrint{t: t}}}
+			o := Options{Report: &r, Dir: root, Files: tc.files, AllFiles: tc.allFiles}
+
+			if err := Run(t.Context(), &o); err != nil {
+				t.Fatalf("Run(%+v) failed: %s", o, err)
+			}
+
+			got := r.b.String()
+			if diff := cmp.Diff(tc.want, got); diff != "" {
+				t.Errorf("Run(%+v) output mismatch (-want +got):\n%s", o, diff)
+			}
+		})
+	}
+}
+
+// Not parallel and must not call t.Parallel(): it temporarily redirects
+// os.Stderr to capture the warning, which would race with any test running
+// concurrently.
+func TestRun_SpecificFiles_Directory_NoAffectedWarning(t *testing.T) {
+	root := makeGit(t)
+
+	mkdirAll(t, filepath.Join(root, "clean_dir1"))
+	mkdirAll(t, filepath.Join(root, "clean_dir2"))
+	writeFile(t, root, filepath.Join("clean_dir1", "unmodified.txt"), "content")
+	writeFile(t, root, filepath.Join("clean_dir2", "unmodified.txt"), "content")
+	writeFile(t, root, "shac.star", `
+def cb(ctx):
+  for path in ctx.scm.affected_files():
+    print(path)
+shac.register_check(cb)
+`)
+	runGit(t, root, "add", "clean_dir1/unmodified.txt", "clean_dir2/unmodified.txt", "shac.star")
+	runGit(t, root, "commit", "-m", "Add clean dirs")
+	// Add another commit so clean_dir*/unmodified.txt are not affected in HEAD~1..HEAD.
+	writeFile(t, root, "other.txt", "other")
+	runGit(t, root, "add", "other.txt")
+	runGit(t, root, "commit", "-m", "Modify other.txt")
+
+	tests := []struct {
+		name       string
+		files      []string
+		wantStderr string
+	}{
+		{
+			name:       "single_directory",
+			files:      []string{filepath.Join(root, "clean_dir1")},
+			wantStderr: "WARNING: No affected files in the specified directory; pass --all to analyze all files in the directory\n",
+		},
+		{
+			name: "multiple_directories",
+			files: []string{
+				filepath.Join(root, "clean_dir1"),
+				filepath.Join(root, "clean_dir2"),
+			},
+			wantStderr: "WARNING: No affected files in the specified directories; pass --all to analyze all files in the directories\n",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			stderrPath := filepath.Join(t.TempDir(), "stderr")
+			stderr, err := os.Create(stderrPath)
+			if err != nil {
+				t.Fatalf("os.Create(%q) failed: %s", stderrPath, err)
+			}
+			origStderr := os.Stderr
+			os.Stderr = stderr
+			t.Cleanup(func() {
+				os.Stderr = origStderr
+				stderr.Close()
+			})
+
+			r := reportPrint{reportNoPrint: reportNoPrint{t: t}}
+			o := Options{Report: &r, Dir: root, Files: tc.files}
+			if err := Run(t.Context(), &o); err != nil {
+				t.Fatalf("Run(%+v) failed: %s", o, err)
+			}
+
+			os.Stderr = origStderr
+			if err := stderr.Sync(); err != nil {
+				t.Fatalf("stderr.Sync failed: %s", err)
+			}
+
+			if diff := cmp.Diff(tc.wantStderr, readFile(t, stderr.Name())); diff != "" {
+				t.Errorf("Run(%+v) stderr mismatch (-want +got):\n%s", o, diff)
+			}
+		})
+	}
+}
+
 func TestRun_AffectedFiles_ExcludeDirectories(t *testing.T) {
 	t.Parallel()
 
@@ -615,11 +835,7 @@ func TestRun_SpecificFiles_Fail(t *testing.T) {
 			files:   []string{filepath.Join(dirOutsideRoot, "outside-root.txt")},
 			wantErr: fmt.Sprintf("cannot analyze file outside root: %s", filepath.Join(dirOutsideRoot, "outside-root.txt")),
 		},
-		{
-			name:    "directory",
-			files:   []string{subdir},
-			wantErr: fmt.Sprintf("is a directory: %s", subdir),
-		},
+
 		{
 			name:    "nonexistent file",
 			files:   []string{filepath.Join(root, "nonexistent.txt")},
@@ -3619,6 +3835,121 @@ func TestResolveRoot_StopsAtShacTextprotoInsideGitRepo(t *testing.T) {
 	wantOuter := strings.ReplaceAll(filepath.Clean(outerRepo), string(os.PathSeparator), "/")
 	if gotSub != wantOuter {
 		t.Fatalf("resolveRoot(%q) = %q, want %q", subDir, gotSub, wantOuter)
+	}
+}
+
+func TestRun_OverridesShacFileDirs(t *testing.T) {
+	t.Parallel()
+
+	root := makeGit(t)
+
+	writeFile(t, root, "shac.star",
+		"def check_root(ctx):",
+		"  print(\"root check\")",
+		"shac.register_check(check_root)")
+	writeFile(t, root, filepath.Join("a", "shac.star"),
+		"def check_a(ctx):",
+		"  print(\"a check\")",
+		"shac.register_check(check_a)")
+	writeFile(t, root, filepath.Join("a", "b.txt"), "hello")
+	runGit(t, root, "add", ".")
+	runGit(t, root, "commit", "-m", "Add test files")
+
+	r := reportPrint{reportNoPrint: reportNoPrint{t: t}}
+	o := Options{Report: &r, Dir: root, Files: []string{filepath.Join(root, "a", "b.txt")}, Recurse: true}
+
+	if err := Run(t.Context(), &o); err != nil {
+		t.Fatalf("Run(%+v) failed: %s", o, err)
+	}
+
+	gotLines := strings.Split(strings.TrimSpace(r.b.String()), "\n")
+	slices.Sort(gotLines)
+	wantLines := []string{
+		"[//a/shac.star:2] a check",
+		"[//shac.star:2] root check",
+	}
+
+	if diff := cmp.Diff(wantLines, gotLines); diff != "" {
+		t.Errorf("Run(%+v) output mismatch (-want +got):\n%s", o, diff)
+	}
+}
+
+func TestRun_ShacFileDirs_IgnorePatterns(t *testing.T) {
+	t.Parallel()
+
+	root := makeGit(t)
+	writeFile(t, root, ".gitignore", "/a/git_ignored/\n")
+	writeFile(t, root, "shac.textproto", prototext.Format(&Document{
+		Ignore: []string{
+			"/a/ignored/",
+		},
+	}))
+
+	writeFile(t, root, "shac.star",
+		"def check_root(ctx):",
+		"  print(\"root check\")",
+		"shac.register_check(check_root)")
+	writeFile(t, root, filepath.Join("a", "shac.star"),
+		"def check_a(ctx):",
+		"  print(\"a check\")",
+		"shac.register_check(check_a)")
+	writeFile(t, root, filepath.Join("a", "ignored", "shac.star"),
+		"def check_ignored(ctx):",
+		"  print(\"ignored check\")",
+		"shac.register_check(check_ignored)")
+	writeFile(t, root, filepath.Join("a", "ignored", "nested", "shac.star"),
+		"def check_ignored_nested(ctx):",
+		"  print(\"ignored nested check\")",
+		"shac.register_check(check_ignored_nested)")
+	writeFile(t, root, filepath.Join("a", "git_ignored", "shac.star"),
+		"def check_git_ignored(ctx):",
+		"  print(\"git ignored check\")",
+		"shac.register_check(check_git_ignored)")
+	writeFile(t, root, filepath.Join("a", "b.txt"), "hello")
+	writeFile(t, root, filepath.Join("a", "ignored", "c.txt"), "hello")
+	runGit(t, root, "add", ".")
+	runGit(t, root, "commit", "-m", "Add test files")
+
+	tests := []struct {
+		name      string
+		files     []string
+		wantLines []string
+	}{
+		{
+			name:  "ignore_pattern_filters_directory",
+			files: []string{filepath.Join(root, "a")},
+			wantLines: []string{
+				"[//a/shac.star:2] a check",
+				"[//shac.star:2] root check",
+			},
+		},
+		{
+			name:  "explicit_cli_argument_exempts_directory",
+			files: []string{filepath.Join(root, "a", "ignored")},
+			wantLines: []string{
+				"[//a/ignored/nested/shac.star:2] ignored nested check",
+				"[//a/ignored/shac.star:2] ignored check",
+				"[//a/shac.star:2] a check",
+				"[//shac.star:2] root check",
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			r := reportPrint{reportNoPrint: reportNoPrint{t: t}}
+			o := Options{Report: &r, Dir: root, Files: tc.files, Recurse: true}
+
+			if err := Run(t.Context(), &o); err != nil {
+				t.Fatalf("Run(%+v) failed: %s", o, err)
+			}
+
+			gotLines := strings.Split(strings.TrimSpace(r.b.String()), "\n")
+			slices.Sort(gotLines)
+			if diff := cmp.Diff(tc.wantLines, gotLines); diff != "" {
+				t.Errorf("Run(%+v) output mismatch (-want +got):\n%s", o, diff)
+			}
+		})
 	}
 }
 

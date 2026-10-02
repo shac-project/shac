@@ -53,6 +53,13 @@ func Fix(ctx context.Context, o *Options, quiet bool, w io.Writer) error {
 	if o.Report != nil {
 		return fmt.Errorf("cannot overwrite reporter")
 	}
+	// Emitting formatted output to w (shac fmt --emit) only supports a single
+	// file, not a directory.
+	if w != nil && len(o.Files) == 1 {
+		if fi, err := os.Stat(o.Files[0]); err == nil && fi.IsDir() {
+			return fmt.Errorf("is a directory: %s", o.Files[0])
+		}
+	}
 	// Re-run passes narrow the allowlist and (possibly) the files; restore
 	// them so that the caller's Options are unchanged on return.
 	origAllowList, origFiles := o.Filter.AllowList, o.Files

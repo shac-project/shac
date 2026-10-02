@@ -38,10 +38,7 @@ func (c *fixCmd) SetFlags(f *flag.FlagSet) {
 }
 
 func (c *fixCmd) Execute(ctx context.Context, files []string) error {
-	o, err := c.options(files)
-	if err != nil {
-		return err
-	}
+	o := c.options(files)
 	o.Filter.FormatterFiltering = engine.OnlyNonFormatters
 	return engine.Fix(ctx, &o, c.quiet, nil)
 }

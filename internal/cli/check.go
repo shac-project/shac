@@ -51,10 +51,7 @@ func (c *checkCmd) Execute(ctx context.Context, files []string) error {
 	}
 	r.Reporters = append(r.Reporters, &reporting.SarifReport{Out: &buf})
 
-	o, err := c.options(files)
-	if err != nil {
-		return err
-	}
+	o := c.options(files)
 	o.Report = r
 
 	err = engine.Run(ctx, &o)

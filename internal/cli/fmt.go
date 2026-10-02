@@ -43,10 +43,7 @@ func (c *fmtCmd) SetFlags(f *flag.FlagSet) {
 }
 
 func (c *fmtCmd) Execute(ctx context.Context, files []string) error {
-	o, err := c.options(files)
-	if err != nil {
-		return err
-	}
+	o := c.options(files)
 	if c.emit && len(files) > 1 {
 		return fmt.Errorf("--emit is only available if you are formatting one file")
 	}

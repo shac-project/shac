@@ -95,10 +95,6 @@ func TestMainErr(t *testing.T) {
 			return []string{"check", "-C", root, "--only", "foocheck"},
 				fmt.Sprintf("no shac.star files found in %s", root)
 		},
-		"--all with positional arguments": func(t *testing.T) ([]string, string) {
-			return []string{"check", "--all", "foo.txt", "bar.txt"},
-				"--all cannot be set together with positional file arguments"
-		},
 		"--only flag without value": func(t *testing.T) ([]string, string) {
 			root := t.TempDir()
 			return []string{"check", "-C", root, "--only"},

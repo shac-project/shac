@@ -15,8 +15,6 @@
 package cli
 
 import (
-	"errors"
-
 	flag "github.com/spf13/pflag"
 	"go.fuchsia.dev/shac-project/shac/internal/engine"
 )
@@ -34,7 +32,7 @@ type commandBase struct {
 
 func (c *commandBase) SetFlags(f *flag.FlagSet) {
 	f.StringVarP(&c.cwd, "cwd", "C", ".", "directory in which to run shac")
-	f.BoolVar(&c.allFiles, "all", false, "checks all the files instead of guess the upstream to diff against")
+	f.BoolVar(&c.allFiles, "all", false, "checks all files instead of only affected files")
 	f.BoolVar(&c.noRecurse, "no-recurse", false, "do not look for shac.star files recursively")
 	f.StringVar(&c.entryPoint, "entrypoint", engine.DefaultEntryPoint, "basename of Starlark files to run")
 	f.StringSliceVar(&c.allowList, "only", nil, "comma-separated allowlist of checks to run; by default all checks are run")
@@ -44,10 +42,7 @@ func (c *commandBase) SetFlags(f *flag.FlagSet) {
 	f.BoolVar(&c.quiet, "quiet", false, "suppress non-actionable output, such as the completion line of checks that passed")
 }
 
-func (c *commandBase) options(files []string) (engine.Options, error) {
-	if c.allFiles && len(files) > 0 {
-		return engine.Options{}, errors.New("--all cannot be set together with positional file arguments")
-	}
+func (c *commandBase) options(files []string) engine.Options {
 	return engine.Options{
 		Dir:        c.cwd,
 		AllFiles:   c.allFiles,
@@ -59,5 +54,5 @@ func (c *commandBase) options(files []string) (engine.Options, error) {
 			AllowList: c.allowList,
 			DenyList:  c.denyList,
 		},
-	}, nil
+	}
 }

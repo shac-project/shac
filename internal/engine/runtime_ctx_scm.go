@@ -21,10 +21,12 @@ import (
 	"fmt"
 	"io/fs"
 	"log"
+	"maps"
 	"os"
 	"os/exec"
 	"path"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -150,16 +152,29 @@ type fileFilter struct {
 //
 // Returned files must be sorted.
 type scmCheckout interface {
+	// affectedFiles returns the list of files that are modified or untracked
+	// in the current checkout, relative to the comparison base.
 	affectedFiles(ctx context.Context, filter fileFilter) ([]file, error)
+
+	// allFiles returns all files in the checkout that shac cares about. It
+	// should always return all files even when a specific file set is provided.
 	allFiles(ctx context.Context, filter fileFilter) ([]file, error)
+
+	// newLines returns a Starlark tuple of tuples representing the lines in the
+	// file that are considered new/modified.
 	newLines(ctx context.Context, f file) (starlark.Value, error)
 	commits(ctx context.Context) ([]scmCommit, error)
 }
 
+// filteredSCM is an scmCheckout that filters files based on a
+// gitignore.Matcher, in support of the `ignore` field in shac.textproto.
 type filteredSCM struct {
-	matcher gitignore.Matcher
-	scm     scmCheckout
+	matcher     gitignore.Matcher
+	exemptPaths []string
+	scm         scmCheckout
 }
+
+var _ overridesShacFileDirs = (*filteredSCM)(nil)
 
 func (f *filteredSCM) affectedFiles(ctx context.Context, filter fileFilter) ([]file, error) {
 	files, err := f.scm.affectedFiles(ctx, filter)
@@ -179,22 +194,55 @@ func (f *filteredSCM) commits(ctx context.Context) ([]scmCommit, error) {
 	return f.scm.commits(ctx)
 }
 
-// filter modifies the input slice of files in-place, removing any items that
-// match one of the ignore patterns.
-func (f *filteredSCM) filter(files []file) []file {
-	offset := 0
-	for i := 0; i+offset < len(files); {
-		fi := files[i+offset]
-		if f.matcher.Match(strings.Split(fi.rootedpath(), "/"), false) {
-			offset++
-		} else {
-			i++
+func (f *filteredSCM) shacFileDirs(ctx context.Context, basename string) ([]string, error) {
+	raw, err := shacFileDirs(ctx, f.scm, basename)
+	if err != nil {
+		return nil, err
+	}
+	var dirs []string
+	for _, d := range raw {
+		if !f.isDirExempt(d) {
+			if d != "" && f.matcher.Match(strings.Split(d, "/"), true) {
+				continue
+			}
+			if f.matcher.Match(strings.Split(path.Join(d, basename), "/"), false) {
+				continue
+			}
 		}
-		if i+offset < len(files) {
-			files[i] = files[i+offset]
+		dirs = append(dirs, d)
+	}
+	return dirs, nil
+}
+
+// isDirExempt reports whether directory d (relative to the root, POSIX style)
+// is exempt from ignore patterns because an explicit CLI path argument is an
+// ancestor of, equal to, or inside d.
+func (f *filteredSCM) isDirExempt(d string) bool {
+	if d == "" {
+		return len(f.exemptPaths) > 0
+	}
+	for _, exempt := range f.exemptPaths {
+		cleanExempt := strings.TrimSuffix(exempt, "/")
+		isAncestor := strings.HasPrefix(cleanExempt, d+"/")
+		isDescendant := isDirPath(exempt) && strings.HasPrefix(d, exempt)
+		if cleanExempt == d || isAncestor || isDescendant {
+			return true
 		}
 	}
-	return files[:len(files)-offset]
+	return false
+}
+
+// filter returns a new slice containing only files that do not match any of the
+// ignore patterns.
+func (f *filteredSCM) filter(files []file) []file {
+	res := make([]file, 0, len(files))
+	for _, fi := range files {
+		p := fi.rootedpath()
+		if matchesPathSpecs(f.exemptPaths, p) || !f.matcher.Match(strings.Split(p, "/"), false) {
+			res = append(res, fi)
+		}
+	}
+	return res
 }
 
 // overridesShacFileDirs may be implemented by scm implementations that wish to
@@ -207,16 +255,47 @@ type overridesShacFileDirs interface {
 	scmCheckout
 	// shacFileDirs returns the relative paths to directories that contain a
 	// shac starlark file with the given basename.
-	shacFileDirs(basename string) ([]string, error)
+	shacFileDirs(ctx context.Context, basename string) ([]string, error)
+}
+
+// shacFileDirs returns the relative paths to directories that contain a shac
+// starlark file with the given basename, using overridesShacFileDirs when
+// implemented by scm to avoid a full `git ls-files` when only specific files
+// were requested on the command line.
+func shacFileDirs(ctx context.Context, scm scmCheckout, basename string) ([]string, error) {
+	if v, ok := scm.(overridesShacFileDirs); ok {
+		return v.shacFileDirs(ctx, basename)
+	}
+	return shacFileDirsFromAllFiles(ctx, scm, basename)
+}
+
+func shacFileDirsFromAllFiles(ctx context.Context, scm scmCheckout, basename string) ([]string, error) {
+	files, err := scm.allFiles(ctx, fileFilter{includeSymlinks: true})
+	if err != nil {
+		return nil, err
+	}
+	var subdirs []string
+	for _, f := range files {
+		n := f.rootedpath()
+		if path.Base(n) == basename {
+			subdir := path.Dir(n)
+			if subdir == "." {
+				subdir = ""
+			}
+			subdirs = append(subdirs, subdir)
+		}
+	}
+	return subdirs, nil
 }
 
 type inMemoryFile struct {
 	data       []byte
 	targetFile file
 	root       string
+	base       scmCheckout
 }
 
-var _ scmCheckout = (*inMemoryFile)(nil)
+var _ overridesShacFileDirs = (*inMemoryFile)(nil)
 
 func (s *inMemoryFile) affectedFiles(ctx context.Context, filter fileFilter) ([]file, error) {
 	return []file{s.targetFile}, nil
@@ -224,6 +303,13 @@ func (s *inMemoryFile) affectedFiles(ctx context.Context, filter fileFilter) ([]
 
 func (s *inMemoryFile) allFiles(ctx context.Context, filter fileFilter) ([]file, error) {
 	return []file{s.targetFile}, nil
+}
+
+func (s *inMemoryFile) shacFileDirs(ctx context.Context, basename string) ([]string, error) {
+	if s.base != nil {
+		return shacFileDirs(ctx, s.base, basename)
+	}
+	return nil, nil
 }
 
 func (s *inMemoryFile) newLines(ctx context.Context, f file) (starlark.Value, error) {
@@ -237,21 +323,60 @@ func (s *inMemoryFile) commits(ctx context.Context) ([]scmCommit, error) {
 	return nil, nil
 }
 
-// specifiedFilesOnly is an scm that returns only a specified set of files.
+// specifiedFilesOnly is an scm that filters affected files to a specified set
+// of files and directories while keeping explicit file arguments available even
+// if unmodified or ignored.
 type specifiedFilesOnly struct {
-	files []file
+	paths []string
 	root  string
 	base  scmCheckout
 }
 
 var _ overridesShacFileDirs = (*specifiedFilesOnly)(nil)
 
+// addExplicitFiles returns files with any explicitly specified file arguments
+// from s.paths that are not already present (e.g. because they are unmodified
+// in git or excluded by .gitignore) inserted in sorted order.
+func (s *specifiedFilesOnly) addExplicitFiles(files []file) []file {
+	cloned := false
+	for _, candidate := range s.paths {
+		if isDirPath(candidate) {
+			continue
+		}
+		idx, found := slices.BinarySearchFunc(files, candidate, func(f file, target string) int {
+			return strings.Compare(f.rootedpath(), target)
+		})
+		if !found {
+			if !cloned {
+				files = slices.Clone(files)
+				cloned = true
+			}
+			files = slices.Insert(files, idx, file(&fileImpl{path: candidate}))
+		}
+	}
+	return files
+}
+
 func (s *specifiedFilesOnly) affectedFiles(ctx context.Context, filter fileFilter) ([]file, error) {
-	return s.files, nil
+	affected, err := s.base.affectedFiles(ctx, filter)
+	if err != nil {
+		return nil, err
+	}
+	var filtered []file
+	for _, af := range affected {
+		if matchesPathSpecs(s.paths, af.rootedpath()) {
+			filtered = append(filtered, af)
+		}
+	}
+	return s.addExplicitFiles(filtered), nil
 }
 
 func (s *specifiedFilesOnly) allFiles(ctx context.Context, filter fileFilter) ([]file, error) {
-	return s.base.allFiles(ctx, filter)
+	all, err := s.base.allFiles(ctx, filter)
+	if err != nil {
+		return nil, err
+	}
+	return s.addExplicitFiles(all), nil
 }
 
 func (s *specifiedFilesOnly) newLines(ctx context.Context, f file) (starlark.Value, error) {
@@ -263,33 +388,59 @@ func (s *specifiedFilesOnly) commits(ctx context.Context) ([]scmCommit, error) {
 }
 
 // shacFileDirs returns all directories containing shac.star files that apply to
-// any of the listed files; i.e. every ancestor directory of one of the listed
-// files that contains a shac.star file.
-func (s *specifiedFilesOnly) shacFileDirs(basename string) ([]string, error) {
-	dirs := map[string]struct{}{}
-	for _, f := range s.files {
-		for cur := path.Dir(f.rootedpath()); ; cur = path.Dir(cur) {
-			dirs[cur] = struct{}{}
+// any of the listed files or directories.
+func (s *specifiedFilesOnly) shacFileDirs(ctx context.Context, basename string) ([]string, error) {
+	ancestorDirs := make(map[string]bool)
+	hasDirSpecs := false
+	for _, spec := range s.paths {
+		if isDirPath(spec) {
+			hasDirSpecs = true
+		}
+		// Directory specs have a trailing slash (or are ""), so path.Dir(spec)
+		// is the directory itself for directory specs and the parent directory
+		// for file specs.
+		for cur := path.Dir(spec); ; cur = path.Dir(cur) {
 			if cur == "." {
+				ancestorDirs[""] = true
 				break
+			}
+			ancestorDirs[cur] = true
+		}
+	}
+
+	dirs := make(map[string]bool)
+	for d := range ancestorDirs {
+		// Check whether the shac.star file exists on disk for ancestor
+		// directories so that when only explicit files are specified we avoid a
+		// full `git ls-files` call.
+		fi, err := os.Stat(filepath.Join(s.root, filepath.FromSlash(d), basename))
+		if errors.Is(err, fs.ErrNotExist) {
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
+		if !fi.IsDir() {
+			dirs[d] = true
+		}
+	}
+
+	if hasDirSpecs {
+		// Discover descendant shac.star files via the SCM rather than walking
+		// the filesystem directly, so git-ignored directories and submodules
+		// are not traversed.
+		allDirs, err := shacFileDirsFromAllFiles(ctx, s, basename)
+		if err != nil {
+			return nil, err
+		}
+		for _, d := range allDirs {
+			if matchesPathSpecs(s.paths, path.Join(d, basename)) {
+				dirs[d] = true
 			}
 		}
 	}
-	var res []string
-	for dir := range dirs {
-		// TODO(olivernewman): Check whether the shac.star file exists according
-		// to the scm, rather than just checking whether it exists on disk, but
-		// only if it's possible to do so without doing a full listing of all
-		// files in the scm.
-		_, err := os.Stat(filepath.Join(s.root, filepath.FromSlash(dir), basename))
-		if errors.Is(err, os.ErrNotExist) {
-			continue
-		} else if err != nil {
-			return nil, err
-		}
-		res = append(res, dir)
-	}
-	return res, nil
+
+	return slices.Sorted(maps.Keys(dirs)), nil
 }
 
 // subdirSCM is a scmCheckout that only reports files from a subdirectory.
@@ -397,6 +548,8 @@ type cachingSCM struct {
 	commitsErr    error
 }
 
+var _ overridesShacFileDirs = (*cachingSCM)(nil)
+
 func (c *cachingSCM) affectedFiles(ctx context.Context, filter fileFilter) ([]file, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -435,6 +588,13 @@ func (c *cachingSCM) commits(ctx context.Context) ([]scmCommit, error) {
 		c.commitsLoaded = true
 	}
 	return c.commitsVal, c.commitsErr
+}
+
+func (c *cachingSCM) shacFileDirs(ctx context.Context, basename string) ([]string, error) {
+	if v, ok := c.scm.(overridesShacFileDirs); ok {
+		return v.shacFileDirs(ctx, basename)
+	}
+	return shacFileDirsFromAllFiles(ctx, c, basename)
 }
 
 const (
