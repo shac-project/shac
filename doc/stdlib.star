@@ -1179,7 +1179,9 @@ def _testing_exec_mock(cmd, retcode = 0, stdout = "", stderr = "", handler = Non
       stderr: (optional) Standard error returned by the mocked process. Any
         occurrences of testing.root are replaced with the test checkout root.
       handler: (optional) A callable taking (cmd) that dynamically handles the
-        command and optionally returns testing.exec_result().
+        command and optionally returns testing.exec_result(). It may be called
+        more than once per command, since `testing.run()` re-runs checks to
+        apply overlapping fixes.
 
     Returns:
       An exec_mock struct for passing to testing.run(exec_mocks = [...]).
@@ -1364,7 +1366,12 @@ def _testing_run(check, *, files = None, commits = None, vars = None, exec_mocks
         findings: Tuple of finding structs emitted during the run.
         artifacts: Dict mapping artifact filepaths to string contents.
         files: Dict mapping non-deleted virtual file paths to their contents
-          after applying any non-overlapping single-replacement findings.
+          after applying single-replacement findings the way `shac fix`
+          does: overlapping findings (including multiple findings on the
+          same line) are applied by re-running the checks that emitted them
+          against the partially-fixed files until all are applied. Re-runs
+          don't affect findings or artifacts, and their print() output is
+          discarded. testing.run() fails if the fixes don't converge.
     """
     pass
 
