@@ -797,6 +797,9 @@ type shacConfig struct {
 	// realRoot is the underlying repository root on disk when running a test
 	// against a virtualized root directory. Native path style.
 	realRoot string
+	// extraMounts holds resolved symlink targets outside realRoot (e.g. from a
+	// Bazel runfiles tree) that must be mounted into the sandbox during tests.
+	extraMounts []sandbox.Mount
 	// vars is the map of runtime variables and their values.
 	vars map[string]string
 	// subdir is the relative directory in which this shac.star is located.

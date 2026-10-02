@@ -18,7 +18,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
+	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -724,6 +727,150 @@ func TestRunTests_ExplicitFileArgs(t *testing.T) {
 	}
 }
 
+func TestRunTests_Subdir(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	toolPath := filepath.Join(root, "prebuilt", "tool.sh")
+	if err := os.MkdirAll(filepath.Dir(toolPath), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(toolPath, []byte("#!/bin/sh\necho \"from-prebuilt:$1\"\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	writeFile(t, root, "build/sub_test.star", ""+
+		"def _cb(ctx):\n"+
+		"    for f in ctx.scm.affected_files():\n"+
+		"        content = str(ctx.io.read_file(f))\n"+
+		"        out = ctx.os.exec([ctx.scm.root + '/../prebuilt/tool.sh', f]).wait().stdout.strip()\n"+
+		"        ctx.emit.finding(\n"+
+		"            level = 'warning',\n"+
+		"            message = out,\n"+
+		"            filepath = f,\n"+
+		"            line = 1,\n"+
+		"            col = 1,\n"+
+		"            end_line = 1,\n"+
+		"            end_col = len(content) + 1,\n"+
+		"            replacements = [content + '_fixed'],\n"+
+		"        )\n"+
+		"\n"+
+		"def test_subdir_real_exec():\n"+
+		"    res = testing.run(\n"+
+		"        _cb,\n"+
+		"        subdir = 'build',\n"+
+		"        files = {\n"+
+		"            'BUILD.gn': 'gn_content',\n"+
+		"            'sub/defs.gni': 'gni_content',\n"+
+		"        },\n"+
+		"    )\n"+
+		"    asserts.eq(len(res.findings), 2)\n"+
+		"    asserts.eq(res.findings[0].filepath, 'BUILD.gn')\n"+
+		"    asserts.eq(res.findings[0].message, 'from-prebuilt:BUILD.gn')\n"+
+		"    asserts.eq(res.findings[1].filepath, 'sub/defs.gni')\n"+
+		"    asserts.eq(res.findings[1].message, 'from-prebuilt:sub/defs.gni')\n"+
+		"    asserts.eq(res.files['BUILD.gn'], 'gn_content_fixed')\n"+
+		"    asserts.eq(res.files['sub/defs.gni'], 'gni_content_fixed')\n"+
+		"\n"+
+		"def test_subdir_mock_exec():\n"+
+		"    res = testing.run(\n"+
+		"        _cb,\n"+
+		"        subdir = 'build',\n"+
+		"        files = {'BUILD.gn': 'gn_content'},\n"+
+		"        exec_mocks = [\n"+
+		"            testing.exec_mock(\n"+
+		"                cmd = [testing.root + '/../prebuilt/tool.sh', 'BUILD.gn'],\n"+
+		"                stdout = 'from-mock:BUILD.gn\\n',\n"+
+		"            ),\n"+
+		"        ],\n"+
+		"    )\n"+
+		"    asserts.eq(len(res.findings), 1)\n"+
+		"    asserts.eq(res.findings[0].message, 'from-mock:BUILD.gn')\n")
+
+	rep := &capturingTestReporter{}
+	if err := RunTests(t.Context(), &Options{
+		Dir:          root,
+		TestReporter: rep,
+	}); err != nil {
+		t.Fatalf("Unexpected error: %v (results: %+v)", err, rep.results)
+	}
+	want := []testResultRecord{
+		{name: "test_subdir_mock_exec"},
+		{name: "test_subdir_real_exec"},
+	}
+	if diff := cmp.Diff(want, rep.results, cmp.AllowUnexported(testResultRecord{})); diff != "" {
+		t.Fatalf("Unexpected test results (-want +got):\n%s", diff)
+	}
+}
+
+func TestRunTests_RunfilesSymlinkTree(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlinks require elevated privileges on Windows")
+	}
+	t.Parallel()
+	checkoutDir := t.TempDir()
+	runfilesDir := t.TempDir()
+
+	writeFile(t, checkoutDir, "shac.textproto", "min_shac_version: \"0.1.0\"\n")
+	toolSrc := filepath.Join(checkoutDir, "prebuilt", "tool.sh")
+	if err := os.MkdirAll(filepath.Dir(toolSrc), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(toolSrc, []byte("#!/bin/sh\necho \"runfiles-ok\"\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, checkoutDir, "scripts/shac/checks.star", ""+
+		"def _cb(ctx):\n"+
+		"    out = ctx.os.exec([ctx.scm.root + '/prebuilt/tool.sh']).wait().stdout.strip()\n"+
+		"    ctx.emit.finding(level = 'notice', message = out)\n"+
+		"cb = shac.check(_cb)\n")
+	writeFile(t, checkoutDir, "scripts/shac/checks_test.star", ""+
+		"load('//scripts/shac/checks.star', 'cb')\n"+
+		"def test_symlinked():\n"+
+		"    res = testing.run(cb, files = {'foo.txt': 'hi'})\n"+
+		"    asserts.eq(len(res.findings), 1)\n"+
+		"    asserts.eq(res.findings[0].message, 'runfiles-ok')\n")
+
+	for _, rel := range []string{
+		"shac.textproto",
+		"prebuilt/tool.sh",
+		"scripts/shac/checks.star",
+		"scripts/shac/checks_test.star",
+	} {
+		dst := filepath.Join(runfilesDir, filepath.FromSlash(rel))
+		if err := os.MkdirAll(filepath.Dir(dst), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		src := filepath.Join(checkoutDir, filepath.FromSlash(rel))
+		relTarget, err := filepath.Rel(filepath.Dir(dst), src)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Symlink(relTarget, dst); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	for _, files := range [][]string{
+		nil,
+		{filepath.Join(runfilesDir, "scripts/shac/checks_test.star")},
+	} {
+		rep := &capturingTestReporter{}
+		if err := RunTests(t.Context(), &Options{
+			Dir:          runfilesDir,
+			Files:        files,
+			TestReporter: rep,
+		}); err != nil {
+			t.Fatalf("Unexpected error (files=%v): %v (results: %+v)", files, err, rep.results)
+		}
+		want := []testResultRecord{
+			{name: "test_symlinked"},
+		}
+		if diff := cmp.Diff(want, rep.results, cmp.AllowUnexported(testResultRecord{})); diff != "" {
+			t.Fatalf("Unexpected test results (files=%v) (-want +got):\n%s", files, diff)
+		}
+	}
+}
+
 type testNoopReport struct{}
 
 func (testNoopReport) EmitFinding(ctx context.Context, check string, level Level, message, root, file string, s Span, replacements []string, props map[string]string) error {
@@ -742,4 +889,76 @@ func (testNoopReport) CheckCompleted(ctx context.Context, check string, start ti
 }
 
 func (testNoopReport) Print(ctx context.Context, check, file string, line int, message string) {
+}
+
+func TestRunTests_WriteFileDoesNotModifyRealCheckout(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlinks require elevated privileges on Windows")
+	}
+	t.Parallel()
+	root := t.TempDir()
+	writeFile(t, root, "README.md", "original")
+	writeFile(t, root, "a_test.star", ""+
+		"def _write(cmd):\n"+
+		"    testing.write_file('README.md', 'updated')\n"+
+		"def _cb(ctx):\n"+
+		"    ctx.os.exec(['tool']).wait()\n"+
+		"    ctx.emit.finding(level = 'notice', message = str(ctx.io.read_file('README.md')))\n"+
+		"def test_write():\n"+
+		"    res = testing.run(\n"+
+		"        _cb,\n"+
+		"        exec_mocks = [testing.exec_mock(cmd = ['tool'], handler = _write)],\n"+
+		"    )\n"+
+		"    asserts.eq(res.findings[0].message, 'updated')\n")
+	rep := &capturingTestReporter{}
+	if err := RunTests(t.Context(), &Options{Dir: root, TestReporter: rep}); err != nil {
+		t.Fatalf("Unexpected error: %v (results: %+v)", err, rep.results)
+	}
+	got, err := os.ReadFile(filepath.Join(root, "README.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != "original" {
+		t.Errorf("Real README.md was modified: %q", got)
+	}
+}
+
+func TestDetachFromRealRoot(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlinks require elevated privileges on Windows")
+	}
+	t.Parallel()
+	realRoot := t.TempDir()
+	testRoot := t.TempDir()
+	writeFile(t, realRoot, "README.md", "original")
+	writeFile(t, realRoot, "scripts/a.txt", "a")
+	for _, name := range []string{"README.md", "scripts"} {
+		if err := os.Symlink(filepath.Join(realRoot, name), filepath.Join(testRoot, name)); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	for _, rel := range []string{"README.md", "scripts/out.txt", "new/dir/file.txt"} {
+		p := filepath.Join(testRoot, filepath.FromSlash(rel))
+		if err := detachFromRealRoot(testRoot, p); err != nil {
+			t.Fatalf("detachFromRealRoot(%q): %v", rel, err)
+		}
+		if err := os.MkdirAll(filepath.Dir(p), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte("updated"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if got, err := os.ReadFile(filepath.Join(realRoot, "README.md")); err != nil || string(got) != "original" {
+		t.Errorf("Real README.md = %q, %v; want unmodified", got, err)
+	}
+	if _, err := os.Stat(filepath.Join(realRoot, "scripts", "out.txt")); !errors.Is(err, fs.ErrNotExist) {
+		t.Errorf("Expected scripts/out.txt not to be written to the real checkout, got %v", err)
+	}
+	// Siblings of the written file should stay visible in the test root.
+	if got, err := os.ReadFile(filepath.Join(testRoot, "scripts", "a.txt")); err != nil || string(got) != "a" {
+		t.Errorf("Test root scripts/a.txt = %q, %v; want %q", got, err, "a")
+	}
 }

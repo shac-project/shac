@@ -1315,7 +1315,7 @@ def _testing_finding(
     """
     pass
 
-def _testing_run(check, *, files = None, commits = None, vars = None, exec_mocks = None, args = None):
+def _testing_run(check, *, files = None, commits = None, vars = None, exec_mocks = None, args = None, subdir = None):
     """Executes a check (or 0-argument check registration function) hermetically.
 
     Can only be called during `shac test`.
@@ -1339,15 +1339,25 @@ def _testing_run(check, *, files = None, commits = None, vars = None, exec_mocks
     Args:
       check: A shac.check object, a check implementation function taking ctx, or
         a 0-argument function that registers checks via shac.register_check().
-      files: (optional) Dict mapping relative file paths to either string
-        contents or testing.file() specs.
+      files: (optional) Dict mapping file paths (relative to subdir, if set)
+        to either string contents or testing.file() specs.
       commits: (optional) Sequence of testing.commit() specs returned by
         ctx.scm.commits().
       vars: (optional) Dict of runtime variable overrides for ctx.vars.get().
       exec_mocks: (optional) Sequence of testing.exec_mock() specs intercepting
-        ctx.os.exec() calls. Unmatched commands execute in the real sandbox.
+        ctx.os.exec() calls. Unmatched commands execute in the real sandbox,
+        with the same access to the repository as they have under shac check
+        (including write access if shac.textproto sets writable_root).
       args: (optional) Dict of keyword arguments to bind to the check via
         with_args().
+      subdir: (optional) Relative subdirectory within the repository root to
+        scope the check run to, matching the behavior of nested shac.star
+        entrypoints. When set, ctx.scm.root points to this subdirectory, and
+        all paths are relative to it rather than to the repository root: the
+        keys of files, the filepath of each finding, and the keys of the
+        result's files. For example, with subdir = "build", pass
+        files = {"BUILD.gn": ...} to create //build/BUILD.gn, and expect
+        findings for it to have filepath = "BUILD.gn".
 
     Returns:
       A result struct with fields:
