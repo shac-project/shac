@@ -26,6 +26,7 @@ import (
 	"path"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"slices"
 	"strings"
 	"sync"
@@ -968,11 +969,40 @@ func cmdArgMatches(wantVal starlark.Value, gotStr string, isTool bool, scmRootSl
 		if wantTrimmed == gotTrimmed {
 			return true
 		}
+		// go_install() and similar helpers append ".exe" to tool paths on
+		// Windows. Tolerate any PATHEXT suffix so the same mock works on every
+		// OS.
+		if runtime.GOOS == "windows" {
+			if rest, ok := strings.CutPrefix(gotTrimmed, wantTrimmed); ok && isExecExt(rest, os.Getenv("PATHEXT")) {
+				return true
+			}
+		}
 	}
 	if wantStr == gotStr {
 		return true
 	}
 	return strings.Contains(rawWant, testingRootPlaceholder) && path.Clean(wantStr) == path.Clean(gotStr)
+}
+
+// isExecExt reports whether ext is one of the executable extensions in
+// pathext, a Windows %PATHEXT%-style list. An empty pathext falls back to the
+// same defaults as exec.LookPath.
+func isExecExt(ext, pathext string) bool {
+	if ext == "" {
+		return false
+	}
+	if pathext == "" {
+		pathext = ".com;.exe;.bat;.cmd"
+	}
+	for e := range strings.SplitSeq(pathext, ";") {
+		if e != "" && !strings.HasPrefix(e, ".") {
+			e = "." + e
+		}
+		if strings.EqualFold(e, ext) {
+			return true
+		}
+	}
+	return false
 }
 
 func testingRun(th *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {

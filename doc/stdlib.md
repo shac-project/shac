@@ -1218,7 +1218,7 @@ def test_ruff_unused_import():
 
 ### Arguments
 
-* **cmd**: Sequence of strings (or testing.any_args wildcards) matching the command arguments passed to ctx.os.exec(). Each testing.any_args matches zero or more arguments, like "*" in a shell glob, so mocks can tolerate flags being added or reordered.
+* **cmd**: Sequence of strings (or testing.any_args wildcards) matching the command arguments passed to ctx.os.exec(). Each testing.any_args matches zero or more arguments, like "*" in a shell glob, so mocks can tolerate flags being added or reordered. On Windows, the first element also matches the same command with an extension listed in %PATHEXT% appended (such as ".exe"), so the same mock works on every OS even when a check appends ".exe" to tool paths on Windows.
 * **retcode**: (optional) Exit code returned by the mocked process. Defaults to 0. Cannot be combined with handler.
 * **stdout**: (optional) Standard output returned by the mocked process. Any occurrences of testing.root are replaced with the test checkout root.
 * **stderr**: (optional) Standard error returned by the mocked process. Any occurrences of testing.root are replaced with the test checkout root.

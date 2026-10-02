@@ -248,6 +248,33 @@ func TestRunTests_Success(t *testing.T) {
 	}
 }
 
+func TestIsExecExt(t *testing.T) {
+	t.Parallel()
+	data := []struct {
+		name    string
+		ext     string
+		pathext string
+		want    bool
+	}{
+		{"default exe", ".exe", "", true},
+		{"default cmd uppercase", ".CMD", "", true},
+		{"default excludes ps1", ".ps1", "", false},
+		{"custom list", ".ps1", ".EXE;.PS1", true},
+		{"custom list excludes default", ".bat", ".EXE;.PS1", false},
+		{"entry without dot", ".exe", "EXE", true},
+		{"empty ext", "", ".exe;", false},
+		{"not an extension", "x.exe", "", false},
+	}
+	for _, d := range data {
+		t.Run(d.name, func(t *testing.T) {
+			t.Parallel()
+			if got := isExecExt(d.ext, d.pathext); got != d.want {
+				t.Fatalf("isExecExt(%q, %q) = %v, want %v", d.ext, d.pathext, got, d.want)
+			}
+		})
+	}
+}
+
 func TestExecMockMatches(t *testing.T) {
 	t.Parallel()
 	const root = "/tmp/root"
@@ -267,6 +294,13 @@ func TestExecMockMatches(t *testing.T) {
 		{"backtracks past early match", []starlark.Value{starlark.String("tool"), anyArgs, starlark.String("f")}, []string{"tool", "f", "-a", "f"}, true},
 		{"multiple anys", []starlark.Value{anyArgs, starlark.String("-x"), anyArgs}, []string{"tool", "a", "-x", "b"}, true},
 		{"absolute tool path", []starlark.Value{starlark.String(".tools/gosec"), anyArgs}, []string{root + "/.tools/gosec", "-quiet"}, true},
+		{"windows exe suffix", []starlark.Value{starlark.String(".tools/gosec"), anyArgs}, []string{root + "/.tools/gosec.exe", "-quiet"}, runtime.GOOS == "windows"},
+		{"windows uppercase bat suffix", []starlark.Value{starlark.String("tool")}, []string{"tool.BAT"}, runtime.GOOS == "windows"},
+		{"windows dotted tool name", []starlark.Value{starlark.String("python3.11")}, []string{"python3.11.exe"}, runtime.GOOS == "windows"},
+		{"windows different stem", []starlark.Value{starlark.String("tool")}, []string{"toolx.exe"}, false},
+		{"non-executable suffix", []starlark.Value{starlark.String("tool")}, []string{"tool.txt"}, false},
+		{"explicit exe never matches bare", []starlark.Value{starlark.String("tool.exe")}, []string{"tool"}, false},
+		{"suffix only on tool", []starlark.Value{starlark.String("tool"), starlark.String("file")}, []string{"tool", "file.exe"}, false},
 		{"root placeholder", []starlark.Value{starlark.String("tool"), starlark.String(testingRootPlaceholder + "/a/../b")}, []string{"tool", root + "/b"}, true},
 	}
 	for _, d := range data {
