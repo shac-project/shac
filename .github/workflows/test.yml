@@ -80,6 +80,9 @@ jobs:
     - name: 'Check: shac check'
       if: always()
       run: shac check
+    - name: 'Check: shac test'
+      if: always()
+      run: shac test
     - name: "Check: tree is clean"
       if: always()
       run: |
