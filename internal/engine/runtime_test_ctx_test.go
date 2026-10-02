@@ -799,11 +799,16 @@ func TestRunTests_ExplicitFileArgs(t *testing.T) {
 func TestRunTests_Subdir(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
-	toolPath := filepath.Join(root, "prebuilt", "tool.sh")
+	// Windows can't execute shebang scripts, so use an equivalent batch file.
+	toolName, toolContents := "tool.sh", "#!/bin/sh\necho \"from-prebuilt:$1\"\n"
+	if runtime.GOOS == "windows" {
+		toolName, toolContents = "tool.bat", "@echo from-prebuilt:%1\r\n"
+	}
+	toolPath := filepath.Join(root, "prebuilt", toolName)
 	if err := os.MkdirAll(filepath.Dir(toolPath), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(toolPath, []byte("#!/bin/sh\necho \"from-prebuilt:$1\"\n"), 0o700); err != nil {
+	if err := os.WriteFile(toolPath, []byte(toolContents), 0o700); err != nil {
 		t.Fatal(err)
 	}
 
@@ -811,7 +816,7 @@ func TestRunTests_Subdir(t *testing.T) {
 		"def _cb(ctx):\n"+
 		"    for f in ctx.scm.affected_files():\n"+
 		"        content = str(ctx.io.read_file(f))\n"+
-		"        out = ctx.os.exec([ctx.scm.root + '/../prebuilt/tool.sh', f]).wait().stdout.strip()\n"+
+		"        out = ctx.os.exec([ctx.scm.root + '/../prebuilt/"+toolName+"', f]).wait().stdout.strip()\n"+
 		"        ctx.emit.finding(\n"+
 		"            level = 'warning',\n"+
 		"            message = out,\n"+
@@ -847,7 +852,7 @@ func TestRunTests_Subdir(t *testing.T) {
 		"        files = {'BUILD.gn': 'gn_content'},\n"+
 		"        exec_mocks = [\n"+
 		"            testing.exec_mock(\n"+
-		"                cmd = [testing.root + '/../prebuilt/tool.sh', 'BUILD.gn'],\n"+
+		"                cmd = [testing.root + '/../prebuilt/"+toolName+"', 'BUILD.gn'],\n"+
 		"                stdout = 'from-mock:BUILD.gn\\n',\n"+
 		"            ),\n"+
 		"        ],\n"+
