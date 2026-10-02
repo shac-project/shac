@@ -40,6 +40,24 @@ import (
 	"golang.org/x/sync/semaphore"
 )
 
+const testingRootPlaceholder = "/__shac_test_root__"
+
+// anyArgs is a sentinel value used as testing.any_args to match zero or more
+// command-line arguments in testing.exec_mock().
+var anyArgs = toValue("any_args", starlark.StringDict{})
+
+type mockExitError struct {
+	code int
+}
+
+func (e *mockExitError) Error() string {
+	return fmt.Sprintf("exit status %d", e.code)
+}
+
+func (e *mockExitError) ExitCode() int {
+	return e.code
+}
+
 // getAsserts returns the predeclared asserts module.
 //
 // Make sure to update //doc/stdlib.star whenever this function is modified.
@@ -59,10 +77,15 @@ func getAsserts() starlark.StringDict {
 // Make sure to update //doc/stdlib.star whenever this function is modified.
 func getTesting() starlark.StringDict {
 	return starlark.StringDict{
-		"commit":  newBuiltin("testing.commit", testingCommit),
-		"file":    newBuiltin("testing.file", testingFile),
-		"finding": newBuiltin("testing.finding", testingFinding),
-		"run":     starlark.NewBuiltin("testing.run", withCheckBacktrace(testingRun)),
+		"any_args":    anyArgs,
+		"commit":      newBuiltin("testing.commit", testingCommit),
+		"exec_mock":   newBuiltin("testing.exec_mock", testingExecMock),
+		"exec_result": newBuiltin("testing.exec_result", testingExecResult),
+		"file":        newBuiltin("testing.file", testingFile),
+		"finding":     newBuiltin("testing.finding", testingFinding),
+		"root":        starlark.String(testingRootPlaceholder),
+		"run":         starlark.NewBuiltin("testing.run", withCheckBacktrace(testingRun)),
+		"write_file":  newBuiltinNone("testing.write_file", testingWriteFile),
 	}
 }
 
@@ -516,6 +539,157 @@ func newFindingStruct(message, level, filepath string, line, col, endLine, endCo
 	return res
 }
 
+func testingExecMock(ctx context.Context, s *shacState, name string, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+	var argcmd starlark.Sequence
+	var argretcode starlark.Int
+	var argstdout starlark.String
+	var argstderr starlark.String
+	var arghandler starlark.Value = starlark.None
+	if err := starlark.UnpackArgs(name, args, kwargs,
+		"cmd", &argcmd,
+		"retcode?", &argretcode,
+		"stdout?", &argstdout,
+		"stderr?", &argstderr,
+		"handler??", &arghandler,
+	); err != nil {
+		return nil, err
+	}
+	if argcmd.Len() == 0 {
+		return nil, errors.New("for parameter \"cmd\": must not be empty")
+	}
+	cmdTuple := make(starlark.Tuple, 0, argcmd.Len())
+	iter := argcmd.Iterate()
+	var elem starlark.Value
+	for iter.Next(&elem) {
+		if elem == anyArgs {
+			cmdTuple = append(cmdTuple, elem)
+			continue
+		}
+		if _, ok := elem.(starlark.String); !ok {
+			iter.Done()
+			return nil, fmt.Errorf("for parameter \"cmd\": element must be str or testing.any_args, got %s", elem.Type())
+		}
+		cmdTuple = append(cmdTuple, elem)
+	}
+	iter.Done()
+
+	retcode, err := parseRetcode(argretcode)
+	if err != nil {
+		return nil, err
+	}
+	if arghandler != starlark.None {
+		if _, ok := arghandler.(starlark.Callable); !ok {
+			return nil, fmt.Errorf("for parameter \"handler\": got %s, want callable", arghandler.Type())
+		}
+		if retcode != 0 || argstdout != "" || argstderr != "" {
+			return nil, errors.New("cannot specify \"retcode\", \"stdout\", or \"stderr\" when \"handler\" is set")
+		}
+	}
+	res := toValue("exec_mock", starlark.StringDict{
+		"cmd":     cmdTuple,
+		"handler": arghandler,
+		"retcode": starlark.MakeInt(retcode),
+		"stderr":  argstderr,
+		"stdout":  argstdout,
+	})
+	res.Freeze()
+	return res, nil
+}
+
+func testingExecResult(ctx context.Context, s *shacState, name string, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+	var argretcode starlark.Int
+	var argstdout starlark.String
+	var argstderr starlark.String
+	if err := starlark.UnpackArgs(name, args, kwargs,
+		"retcode?", &argretcode,
+		"stdout?", &argstdout,
+		"stderr?", &argstderr,
+	); err != nil {
+		return nil, err
+	}
+	retcode, err := parseRetcode(argretcode)
+	if err != nil {
+		return nil, err
+	}
+	res := toValue("completed_subprocess", starlark.StringDict{
+		"retcode": starlark.MakeInt(retcode),
+		"stderr":  argstderr,
+		"stdout":  argstdout,
+	})
+	res.Freeze()
+	return res, nil
+}
+
+// parseRetcode rejects exit codes that a real process can't return, which
+// would otherwise get silently clamped when converted to an int.
+func parseRetcode(v starlark.Int) (int, error) {
+	retcode, err := starlark.AsInt32(v)
+	if err != nil || retcode < 0 {
+		return 0, fmt.Errorf("for parameter \"retcode\": got %s, want a non-negative int", v)
+	}
+	return retcode, nil
+}
+
+func testingWriteFile(ctx context.Context, s *shacState, name string, args starlark.Tuple, kwargs []starlark.Tuple) error {
+	var argfilepath starlark.String
+	var argcontent starlark.Value
+	if err := starlark.UnpackArgs(name, args, kwargs,
+		"filepath", &argfilepath,
+		"content", &argcontent,
+	); err != nil {
+		return err
+	}
+	// Outside testing.run() there's no test checkout to write into, and the
+	// next testing.run() call creates a fresh one anyway.
+	if _, ok := s.scm.(*virtualSCM); !ok {
+		return errors.New("can only be called during testing.run()")
+	}
+	var contentStr string
+	switch v := argcontent.(type) {
+	case starlark.String:
+		contentStr = string(v)
+	case starlark.Bytes:
+		contentStr = string(v)
+	default:
+		return fmt.Errorf("for parameter \"content\": got %s, want str or bytes", argcontent.Type())
+	}
+	scmRootSlash := filepath.ToSlash(filepath.Join(s.root, s.subdir))
+	contentStr = strings.ReplaceAll(contentStr, testingRootPlaceholder, scmRootSlash)
+
+	dst := strings.ReplaceAll(string(argfilepath), testingRootPlaceholder, scmRootSlash)
+	if !filepath.IsAbs(dst) {
+		var err error
+		dst, err = absPath(dst, filepath.Join(s.root, s.subdir))
+		if err != nil {
+			return fmt.Errorf("for parameter \"filepath\": %s %w", argfilepath, err)
+		}
+	}
+	cleaned := filepath.Clean(dst)
+	// Restrict writes to the test's temporary directory tree so a test can never
+	// overwrite files in the real repository checkout.
+	if !isWithinDir(cleaned, s.tmpdir) && !isWithinDir(cleaned, s.root) {
+		return fmt.Errorf("for parameter \"filepath\": %q is outside the test temporary directory", argfilepath)
+	}
+	if s.realRoot != "" && isWithinDir(cleaned, s.realRoot) && !isWithinDir(cleaned, s.tmpdir) {
+		return fmt.Errorf("for parameter \"filepath\": %q cannot write to real repository root", argfilepath)
+	}
+	if err := os.MkdirAll(filepath.Dir(cleaned), 0o700); err != nil {
+		return err
+	}
+	return os.WriteFile(cleaned, []byte(contentStr), 0o600)
+}
+
+func isWithinDir(target, dir string) bool {
+	if dir == "" {
+		return false
+	}
+	rel, err := filepath.Rel(filepath.Clean(dir), filepath.Clean(target))
+	if err != nil {
+		return false
+	}
+	return rel == "." || filepath.IsLocal(rel)
+}
+
 // virtualFile is a file passed to testing.run(). It embeds fileImpl so it
 // gets the same lazily-computed metadata as a real file.
 type virtualFile struct {
@@ -694,6 +868,57 @@ func withCheckBacktrace(impl func(*starlark.Thread, *starlark.Builtin, starlark.
 	}
 }
 
+type execMockEntry struct {
+	cmd     starlark.Tuple
+	retcode int
+	stdout  string
+	stderr  string
+	handler starlark.Callable
+	used    bool
+}
+
+func (m *execMockEntry) matches(cmd []string, scmRootSlash string) bool {
+	return m.matchesFrom(0, cmd, 0, scmRootSlash)
+}
+
+// matchesFrom reports whether m.cmd[wi:] matches cmd[gi:], treating
+// testing.any_args like a shell "*". Mock commands are short and rarely contain
+// more than one wildcard, so plain backtracking is fast enough.
+func (m *execMockEntry) matchesFrom(wi int, cmd []string, gi int, scmRootSlash string) bool {
+	for ; wi < len(m.cmd); wi, gi = wi+1, gi+1 {
+		if m.cmd[wi] == anyArgs {
+			for skip := gi; skip <= len(cmd); skip++ {
+				if m.matchesFrom(wi+1, cmd, skip, scmRootSlash) {
+					return true
+				}
+			}
+			return false
+		}
+		if gi >= len(cmd) || !cmdArgMatches(m.cmd[wi], cmd[gi], gi == 0, scmRootSlash) {
+			return false
+		}
+	}
+	return gi == len(cmd)
+}
+
+func cmdArgMatches(wantVal starlark.Value, gotStr string, isTool bool, scmRootSlash string) bool {
+	rawWant := string(wantVal.(starlark.String))
+	wantStr := strings.ReplaceAll(rawWant, testingRootPlaceholder, scmRootSlash)
+	if isTool {
+		// Allow matching repo-relative tool paths (such as ".tools/gobin/gosec")
+		// even when the check constructs cmd[0] using ctx.scm.root.
+		wantTrimmed := strings.TrimPrefix(wantStr, scmRootSlash+"/")
+		gotTrimmed := strings.TrimPrefix(gotStr, scmRootSlash+"/")
+		if wantTrimmed == gotTrimmed {
+			return true
+		}
+	}
+	if wantStr == gotStr {
+		return true
+	}
+	return strings.Contains(rawWant, testingRootPlaceholder) && path.Clean(wantStr) == path.Clean(gotStr)
+}
+
 func testingRun(th *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	ctx := getContext(th)
 	s := ctxShacState(ctx)
@@ -701,12 +926,14 @@ func testingRun(th *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, 
 	var argfiles = starlark.NewDict(0)
 	var argcommits starlark.Sequence
 	var argvars = starlark.NewDict(0)
+	var argexecMocks starlark.Sequence
 	var argcheckArgs = starlark.NewDict(0)
 	if err := starlark.UnpackArgs(fn.Name(), args, kwargs,
 		"check", &argcheck,
 		"files?", &argfiles,
 		"commits?", &argcommits,
 		"vars?", &argvars,
+		"exec_mocks?", &argexecMocks,
 		"args?", &argcheckArgs,
 	); err != nil {
 		return nil, err
@@ -738,6 +965,11 @@ func testingRun(th *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, 
 		vars[string(k)] = string(v)
 	}
 
+	mocks, err := parseExecMocks(argexecMocks)
+	if err != nil {
+		return nil, err
+	}
+
 	testRootDir, err := s.newTempDir()
 	if err != nil {
 		return nil, err
@@ -747,14 +979,88 @@ func testingRun(th *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, 
 	}
 	scmRootSlash := filepath.ToSlash(testRootDir)
 
-	// Prints from the check under test belong in the calling test's output,
-	// so reuse the test thread's print impl.
+	// Prints from the check under test (and from exec_mock handlers) belong
+	// in the calling test's output, so reuse the test thread's print impl.
 	pi := th.Print
 
+	var mocksMu sync.Mutex
 	rep := newTestReport()
 	vscm := &virtualSCM{
 		files:      virtualFiles,
 		scmCommits: scmCommits,
+	}
+
+	var cState *shacState
+	execHandler := func(execCtx context.Context, cmd []string, raiseOnFailure bool, okRetcodes []int, tempDir string) (*subprocess, bool, error) {
+		mocksMu.Lock()
+		var matched *execMockEntry
+		for _, m := range mocks {
+			if !m.used && m.matches(cmd, scmRootSlash) {
+				m.used = true
+				matched = m
+				break
+			}
+		}
+		if matched == nil {
+			for _, m := range mocks {
+				if m.matches(cmd, scmRootSlash) {
+					matched = m
+					break
+				}
+			}
+		}
+		mocksMu.Unlock()
+		if matched == nil {
+			return nil, false, nil
+		}
+
+		retcode := matched.retcode
+		stdoutStr := strings.ReplaceAll(matched.stdout, testingRootPlaceholder, scmRootSlash)
+		stderrStr := strings.ReplaceAll(matched.stderr, testingRootPlaceholder, scmRootSlash)
+
+		if matched.handler != nil {
+			cmdVals := make(starlark.Tuple, len(cmd))
+			for i, arg := range cmd {
+				cmdVals[i] = starlark.String(arg)
+			}
+			handlerTh := cState.env.thread(execCtx, "exec_mock_handler", pi)
+			resVal, callErr := starlark.Call(handlerTh, matched.handler, starlark.Tuple{cmdVals}, nil)
+			if callErr != nil {
+				return nil, true, callErr
+			}
+			if resVal != starlark.None {
+				st, ok := resVal.(*starlarkstruct.Struct)
+				if !ok || st.Constructor() != starlark.String("completed_subprocess") {
+					return nil, true, fmt.Errorf("exec_mock handler must return None or testing.exec_result(), got %s", resVal.Type())
+				}
+				rcVal, _ := st.Attr("retcode")
+				outVal, _ := st.Attr("stdout")
+				errVal, _ := st.Attr("stderr")
+				retcode = intToInt(rcVal.(starlark.Int))
+				stdoutStr = strings.ReplaceAll(string(outVal.(starlark.String)), testingRootPlaceholder, scmRootSlash)
+				stderrStr = strings.ReplaceAll(string(errVal.(starlark.String)), testingRootPlaceholder, scmRootSlash)
+			}
+		}
+
+		stdoutBuf, stderrBuf := buffers.get(), buffers.get()
+		stdoutBuf.WriteString(stdoutStr)
+		stderrBuf.WriteString(stderrStr)
+
+		errs := make(chan error, 1)
+		if retcode != 0 {
+			errs <- &mockExitError{code: retcode}
+		}
+		close(errs)
+
+		return &subprocess{
+			args:           cmd,
+			stdout:         stdoutBuf,
+			stderr:         stderrBuf,
+			raiseOnFailure: raiseOnFailure,
+			okRetcodes:     okRetcodes,
+			tempDir:        tempDir,
+			errs:           errs,
+		}, true, nil
 	}
 
 	cConfig := s.shacConfig
@@ -763,10 +1069,11 @@ func testingRun(th *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, 
 	cConfig.tmpdir = testRootDir + "-tmp"
 	cConfig.vars = vars
 	cConfig.scm = vscm
+	cConfig.execHandler = execHandler
 	// Unlike the test file itself, testing.run() executes whatever checks get
 	// registered.
 	cConfig.forbidRegisterCheck = false
-	cState := &shacState{
+	cState = &shacState{
 		shacConfig: cConfig,
 	}
 	cCtx := context.WithValue(ctx, &shacStateCtxKey, cState)
@@ -786,6 +1093,12 @@ func testingRun(th *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, 
 	for _, rc := range checksToRun {
 		if err = rc.call(cCtx, cState.env, callArgs, pi); err != nil {
 			return nil, err
+		}
+	}
+
+	for _, m := range mocks {
+		if !m.used {
+			return nil, fmt.Errorf("unused exec_mock: %s", m.cmd.String())
 		}
 	}
 
@@ -953,6 +1266,38 @@ func parseVirtualCommits(seq starlark.Sequence) ([]scmCommit, error) {
 	return res, nil
 }
 
+func parseExecMocks(seq starlark.Sequence) ([]*execMockEntry, error) {
+	if seq == nil {
+		return nil, nil
+	}
+	var res []*execMockEntry
+	iter := seq.Iterate()
+	defer iter.Done()
+	var elem starlark.Value
+	for iter.Next(&elem) {
+		st, ok := elem.(*starlarkstruct.Struct)
+		if !ok || st.Constructor() != starlark.String("exec_mock") {
+			return nil, fmt.Errorf("for parameter \"exec_mocks\": element must be testing.exec_mock(), got %s", elem.Type())
+		}
+		cmdVal, _ := st.Attr("cmd")
+		retcodeVal, _ := st.Attr("retcode")
+		stdoutVal, _ := st.Attr("stdout")
+		stderrVal, _ := st.Attr("stderr")
+		handlerVal, _ := st.Attr("handler")
+		entry := &execMockEntry{
+			cmd:     cmdVal.(starlark.Tuple),
+			retcode: intToInt(retcodeVal.(starlark.Int)),
+			stdout:  string(stdoutVal.(starlark.String)),
+			stderr:  string(stderrVal.(starlark.String)),
+		}
+		if handlerVal != starlark.None {
+			entry.handler = handlerVal.(starlark.Callable)
+		}
+		res = append(res, entry)
+	}
+	return res, nil
+}
+
 func materializeTestRoot(testRootDir string, virtualFiles []*virtualFile) error {
 	for _, vf := range virtualFiles {
 		if vf.a == "D" {
@@ -1072,6 +1417,7 @@ func runTestsInner(ctx context.Context, tmpdir string, o *Options) error {
 				allowNetwork:              doc.AllowNetwork,
 				writableRoot:              doc.WritableRoot,
 				root:                      root,
+				realRoot:                  root,
 				vars:                      vars,
 				tmpdir:                    fileTmpDir,
 				sandbox:                   sb,

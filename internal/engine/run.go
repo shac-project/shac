@@ -779,6 +779,8 @@ func normalizeFiles(files []string, root string) ([]file, error) {
 	return res, nil
 }
 
+type execHandlerFunc func(ctx context.Context, cmd []string, raiseOnFailure bool, okRetcodes []int, tempDir string) (*subprocess, bool, error)
+
 // shacConfig holds immutable configuration for a shacState.
 type shacConfig struct {
 	env          *starlarkEnv
@@ -792,6 +794,9 @@ type shacConfig struct {
 	// root is the root for the root shac.star that was executed. Native path
 	// style.
 	root string
+	// realRoot is the underlying repository root on disk when running a test
+	// against a virtualized root directory. Native path style.
+	realRoot string
 	// vars is the map of runtime variables and their values.
 	vars map[string]string
 	// subdir is the relative directory in which this shac.star is located.
@@ -811,6 +816,9 @@ type shacConfig struct {
 
 	// Limits the number of concurrent subprocesses launched by ctx.os.exec().
 	subprocessSem *semaphore.Weighted
+
+	// execHandler optionally intercepts ctx.os.exec() calls during testing.
+	execHandler execHandlerFunc
 
 	// forbidRegisterCheck is set on the state used to load and run a
 	// `*_test.star` file, where checks registered by the test file itself

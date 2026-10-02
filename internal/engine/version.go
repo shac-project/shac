@@ -26,7 +26,7 @@ var (
 	// Version is the current tool version.
 	//
 	// TODO(maruel): Add proper version, preferably from git tag.
-	Version = shacVersion{0, 1, 39}
+	Version = shacVersion{0, 1, 40}
 )
 
 func (v shacVersion) String() string {

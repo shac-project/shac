@@ -94,10 +94,15 @@ func (s *subprocess) wait() (starlark.Value, error) {
 	return val, err
 }
 
+type exitCoder interface {
+	error
+	ExitCode() int
+}
+
 func (s *subprocess) waitInner() (starlark.Value, error) {
 	retcode := 0
 	if err := <-s.errs; err != nil {
-		if errExit, ok := errors.AsType[*exec.ExitError](err); ok {
+		if errExit, ok := errors.AsType[exitCoder](err); ok {
 			retcode = errExit.ExitCode()
 		} else {
 			// Something other than a normal non-zero exit.
@@ -142,7 +147,7 @@ func (s *subprocess) cleanup() error {
 	var err error
 	// If Process is not nil then the command successfully started. If
 	// ProcessState is nil then the command hasn't yet completed.
-	if s.cmd.Process != nil && s.cmd.ProcessState == nil {
+	if s.cmd != nil && s.cmd.Process != nil && s.cmd.ProcessState == nil {
 		err = s.cmd.Process.Kill()
 		// Kill() is non-blocking, so it's necessary to wait for the process to
 		// exit before cleaning up resources.
@@ -301,6 +306,21 @@ func ctxOsExec(ctx context.Context, s *shacState, name string, args starlark.Tup
 	fullCmd := sequenceToStrings(argcmd)
 	if fullCmd == nil {
 		return nil, fmt.Errorf("for parameter \"cmd\": got %s, want sequence of str", argcmd.Type())
+	}
+
+	if s.execHandler != nil {
+		var proc *subprocess
+		var handled bool
+		proc, handled, err = s.execHandler(ctx, slices.Clone(fullCmd), bool(argraiseOnFailure), okRetcodes, tempDir)
+		if err != nil {
+			return nil, err
+		}
+		if handled {
+			cleanupFuncs = cleanupFuncs[:0]
+			chk := ctxCheck(ctx)
+			chk.subprocesses = append(chk.subprocesses, proc)
+			return proc, nil
+		}
 	}
 
 	if filepath.IsAbs(fullCmd[0]) {

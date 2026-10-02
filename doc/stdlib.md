@@ -1109,10 +1109,25 @@ It is only available in `*_test.star` files run by `shac test`.
 
 Fields:
 
+- any_args
 - commit
+- exec_mock
+- exec_result
 - file
 - finding
+- root
 - run
+- write_file
+
+## testing.any_args
+
+testing.any_args is a wildcard sentinel for matching zero or more
+arguments in testing.exec_mock(cmd = [...]).
+
+## testing.root
+
+testing.root is a placeholder string that expands to the test checkout
+root path inside testing.exec_mock() and testing.write_file().
 
 ## testing.commit
 
@@ -1145,6 +1160,107 @@ def test_commit_msg_missing_bug():
 ### Returns
 
 A commit struct with hash and message attributes.
+
+## testing.exec_mock
+
+Constructs a mock specification for ctx.os.exec() calls in testing.run().
+
+### Example
+
+```python
+load("//checks/ruff.star", "ruff")
+
+def test_ruff_clean():
+    res = testing.run(
+        ruff,
+        files = {"main.py": "print('hi')\n"},
+        exec_mocks = [
+            testing.exec_mock(
+                cmd = ["ruff", "check", "--output-format=json", testing.any_args],
+                stdout = "[]",
+            ),
+        ],
+    )
+    asserts.eq(res.findings, ())
+
+def test_ruff_unused_import():
+    res = testing.run(
+        ruff,
+        files = {"main.py": "import os\n"},
+        exec_mocks = [
+            testing.exec_mock(
+                cmd = ["ruff", "check", "--output-format=json", "main.py"],
+                retcode = 1,
+                stdout = json.encode([{
+                    "filename": testing.root + "/main.py",
+                    "location": {"row": 1},
+                    "message": "`os` imported but unused",
+                }]),
+            ),
+        ],
+    )
+    asserts.eq(
+        res.findings,
+        (
+            testing.finding(
+                filepath = "main.py",
+                line = 1,
+                message = "`os` imported but unused",
+            ),
+        ),
+    )
+```
+
+### Arguments
+
+* **cmd**: Sequence of strings (or testing.any_args wildcards) matching the command arguments passed to ctx.os.exec(). Each testing.any_args matches zero or more arguments, like "*" in a shell glob, so mocks can tolerate flags being added or reordered.
+* **retcode**: (optional) Exit code returned by the mocked process. Defaults to 0. Cannot be combined with handler.
+* **stdout**: (optional) Standard output returned by the mocked process. Any occurrences of testing.root are replaced with the test checkout root.
+* **stderr**: (optional) Standard error returned by the mocked process. Any occurrences of testing.root are replaced with the test checkout root.
+* **handler**: (optional) A callable taking (cmd) that dynamically handles the command and optionally returns testing.exec_result().
+
+### Returns
+
+An exec_mock struct for passing to testing.run(exec_mocks = [...]).
+
+## testing.exec_result
+
+Constructs a subprocess result to return from an exec_mock handler.
+
+### Example
+
+```python
+load("//checks/black.star", "black")
+
+def _fake_black(cmd):
+    if cmd[-1] == "bad.py":
+        return testing.exec_result(retcode = 123, stderr = "cannot parse\n")
+    return testing.exec_result(stdout = "x = 1\n")
+
+def test_black():
+    res = testing.run(
+        black,
+        files = {"bad.py": "x = (\n", "ugly.py": "x=1\n"},
+        exec_mocks = [
+            testing.exec_mock(
+                cmd = ["black", "-q", "-", "--stdin-filename", testing.any_args],
+                handler = _fake_black,
+            ),
+        ],
+    )
+    asserts.eq(res.findings[0].message, "cannot parse")
+    asserts.eq(res.files["ugly.py"], "x = 1\n")
+```
+
+### Arguments
+
+* **retcode**: (optional) Exit code of the subprocess. Defaults to 0.
+* **stdout**: (optional) Standard output string. Defaults to "".
+* **stderr**: (optional) Standard error string. Defaults to "".
+
+### Returns
+
+A completed_subprocess struct.
 
 ## testing.file
 
@@ -1257,6 +1373,7 @@ def test_no_tabs():
 * **files**: (optional) Dict mapping relative file paths to either string contents or testing.file() specs.
 * **commits**: (optional) Sequence of testing.commit() specs returned by ctx.scm.commits().
 * **vars**: (optional) Dict of runtime variable overrides for ctx.vars.get().
+* **exec_mocks**: (optional) Sequence of testing.exec_mock() specs intercepting ctx.os.exec() calls. Unmatched commands execute in the real sandbox.
 * **args**: (optional) Dict of keyword arguments to bind to the check via with_args().
 
 ### Returns
@@ -1266,3 +1383,38 @@ A result struct with fields:
   artifacts: Dict mapping artifact filepaths to string contents.
   files: Dict mapping non-deleted virtual file paths to their contents
     after applying any non-overlapping single-replacement findings.
+
+## testing.write_file
+
+Writes a file inside the test checkout from within `testing.run()`.
+
+Typically used in a `testing.exec_mock()` handler to simulate a tool that
+modifies files in place. Fails if called outside of `testing.run()`, since
+each `testing.run()` call creates a fresh test checkout.
+
+### Example
+
+```python
+load("//checks/buildifier.star", "buildifier")
+
+def _buildifier_in_place(cmd):
+    testing.write_file(cmd[-1], "x = 1\n")
+
+def test_buildifier():
+    res = testing.run(
+        buildifier,
+        files = {"BUILD.bazel": "x=1\n"},
+        exec_mocks = [
+            testing.exec_mock(
+                cmd = ["buildifier", testing.any_args],
+                handler = _buildifier_in_place,
+            ),
+        ],
+    )
+    asserts.eq(res.files["BUILD.bazel"], "x = 1\n")
+```
+
+### Arguments
+
+* **filepath**: Relative path (resolved against the test checkout root) or absolute path within the test temporary directory.
+* **content**: String or bytes to write to the file.

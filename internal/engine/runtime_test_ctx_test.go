@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/google/go-cmp/cmp"
+	"go.starlark.net/starlark"
 )
 
 type testResultRecord struct {
@@ -173,7 +174,42 @@ func TestRunTests_Success(t *testing.T) {
 		"        files = {'a.txt': 'BAD\\n'},\n"+
 		"    )\n"+
 		"    asserts.eq(len(res.findings), 1)\n"+
-		"    asserts.eq(res.files['a.txt'], 'GOOD\\n')\n")
+		"    asserts.eq(res.files['a.txt'], 'GOOD\\n')\n"+
+		"\n"+
+		"def test_exec_mock_and_write_file():\n"+
+		"    def _exec_check(ctx):\n"+
+		"        print('from check')\n"+
+		"        tmp = ctx.io.tempfile('initial', name = 'input.txt')\n"+
+		"        res1 = ctx.os.exec(['my_tool', '--fix', tmp]).wait()\n"+
+		"        asserts.eq(res1.stdout, 'root=' + ctx.scm.root)\n"+
+		"        updated = str(ctx.io.read_file(tmp))\n"+
+		"        ctx.emit.finding(\n"+
+		"            level = 'error',\n"+
+		"            message = 'fixed',\n"+
+		"            filepath = 'f.txt',\n"+
+		"            line = 1,\n"+
+		"            col = 1,\n"+
+		"            end_line = 1,\n"+
+		"            end_col = 8,\n"+
+		"            replacements = [updated],\n"+
+		"        )\n"+
+		"\n"+
+		"    def _handler(cmd):\n"+
+		"        print('from handler')\n"+
+		"        testing.write_file(cmd[2], 'updated_by_tool')\n"+
+		"        return testing.exec_result(stdout = 'root=' + testing.root)\n"+
+		"\n"+
+		"    res = testing.run(\n"+
+		"        _exec_check,\n"+
+		"        files = {'f.txt': 'initial'},\n"+
+		"        exec_mocks = [\n"+
+		"            testing.exec_mock(\n"+
+		"                cmd = ['my_tool', '--fix', testing.any_args],\n"+
+		"                handler = _handler,\n"+
+		"            ),\n"+
+		"        ],\n"+
+		"    )\n"+
+		"    asserts.eq(res.files['f.txt'], 'updated_by_tool')\n")
 
 	rep := &capturingTestReporter{}
 	err := RunTests(t.Context(), &Options{
@@ -186,10 +222,46 @@ func TestRunTests_Success(t *testing.T) {
 	want := []testResultRecord{
 		{name: "test_assertions"},
 		{name: "test_check_and_fixes"},
+		{name: "test_exec_mock_and_write_file", prints: []string{
+			"[//checks_test.star:63] from check",
+			"[//checks_test.star:80] from handler",
+		}},
 		{name: "test_register_function"},
 	}
 	if diff := cmp.Diff(want, rep.results, cmp.AllowUnexported(testResultRecord{})); diff != "" {
 		t.Fatalf("Unexpected test results (-want +got):\n%s", diff)
+	}
+}
+
+func TestExecMockMatches(t *testing.T) {
+	t.Parallel()
+	const root = "/tmp/root"
+	data := []struct {
+		name string
+		want []starlark.Value
+		cmd  []string
+		ok   bool
+	}{
+		{"exact", []starlark.Value{starlark.String("tool"), starlark.String("-x")}, []string{"tool", "-x"}, true},
+		{"extra arg", []starlark.Value{starlark.String("tool")}, []string{"tool", "-x"}, false},
+		{"missing arg", []starlark.Value{starlark.String("tool"), starlark.String("-x")}, []string{"tool"}, false},
+		{"trailing any matches none", []starlark.Value{starlark.String("tool"), anyArgs}, []string{"tool"}, true},
+		{"trailing any matches many", []starlark.Value{starlark.String("tool"), anyArgs}, []string{"tool", "-a", "-b", "f"}, true},
+		{"middle any", []starlark.Value{starlark.String("tool"), anyArgs, starlark.String("./...")}, []string{"tool", "-a", "-b", "./..."}, true},
+		{"middle any wrong suffix", []starlark.Value{starlark.String("tool"), anyArgs, starlark.String("./...")}, []string{"tool", "-a", "f"}, false},
+		{"backtracks past early match", []starlark.Value{starlark.String("tool"), anyArgs, starlark.String("f")}, []string{"tool", "f", "-a", "f"}, true},
+		{"multiple anys", []starlark.Value{anyArgs, starlark.String("-x"), anyArgs}, []string{"tool", "a", "-x", "b"}, true},
+		{"absolute tool path", []starlark.Value{starlark.String(".tools/gosec"), anyArgs}, []string{root + "/.tools/gosec", "-quiet"}, true},
+		{"root placeholder", []starlark.Value{starlark.String("tool"), starlark.String(testingRootPlaceholder + "/a/../b")}, []string{"tool", root + "/b"}, true},
+	}
+	for _, d := range data {
+		t.Run(d.name, func(t *testing.T) {
+			t.Parallel()
+			m := &execMockEntry{cmd: starlark.Tuple(d.want)}
+			if got := m.matches(d.cmd, root); got != d.ok {
+				t.Errorf("matches(%q) = %v, want %v", d.cmd, got, d.ok)
+			}
+		})
 	}
 }
 
@@ -427,6 +499,36 @@ func TestRunTests_Failures(t *testing.T) {
 				"def test_fail():\n" +
 				"    asserts.fails(lambda: fail('actual error'), 'expected.*')\n",
 			wantErr: "asserts.fails: expected error matching \"expected.*\", got \"fail: actual error\"",
+		},
+		{
+			name: "unused exec_mock",
+			content: "" +
+				"def _cb(ctx):\n" +
+				"    pass\n" +
+				"def test_fail():\n" +
+				"    testing.run(_cb, exec_mocks = [testing.exec_mock(cmd = ['unused'])])\n",
+			wantErr: "unused exec_mock: (\"unused\",)",
+		},
+		{
+			name: "exec_mock negative retcode",
+			content: "" +
+				"def test_fail():\n" +
+				"    testing.exec_mock(cmd = ['foo'], retcode = -1)\n",
+			wantErr: "testing.exec_mock: for parameter \"retcode\": got -1, want a non-negative int",
+		},
+		{
+			name: "exec_result negative retcode",
+			content: "" +
+				"def test_fail():\n" +
+				"    testing.exec_result(retcode = -1)\n",
+			wantErr: "testing.exec_result: for parameter \"retcode\": got -1, want a non-negative int",
+		},
+		{
+			name: "write_file outside testing.run",
+			content: "" +
+				"def test_fail():\n" +
+				"    testing.write_file('foo.txt', 'x')\n",
+			wantErr: "testing.write_file: can only be called during testing.run()",
 		},
 		{
 			name: "out of bounds replacement span",
