@@ -376,11 +376,8 @@ func ctxOsExec(ctx context.Context, s *shacState, name string, args starlark.Tup
 			// These are required for bash to work.
 			{Path: "/lib"},
 			{Path: "/lib64"},
-			// OS header files.
-			{Path: "/usr/include"},
 			// System compilers.
 			{Path: "/usr/lib"},
-			{Path: "/usr/share"},
 			// Make the parent directory of tempDir available, since it is the root
 			// of all ctx.os.tempdir() calls, which can be used as scratch pads for
 			// this executable.
@@ -395,12 +392,13 @@ func ctxOsExec(ctx context.Context, s *shacState, name string, args starlark.Tup
 		config.Mounts = append(config.Mounts, s.extraMounts...)
 		config.Mounts = append(config.Mounts, passthroughMounts...)
 
-		// Explicitly mount standard binary directories. On systems with a
-		// merged /usr layout (like Debian 12+), /bin is a symlink to /usr/bin.
-		// A restricted $PATH might omit /bin, so we must ensure it's mounted
-		// for scripts that rely on standard shebangs like #!/bin/sh to function
-		// correctly.
-		for _, p := range []string{"/bin", "/usr/bin", "/sbin", "/usr/sbin"} {
+		// Explicitly mount standard binary and system directories if present.
+		// On systems with a merged /usr layout (like Debian 12+), /bin is a
+		// symlink to /usr/bin. A restricted $PATH might omit /bin, so we must
+		// ensure it's mounted for scripts that rely on standard shebangs like
+		// #!/bin/sh to function correctly. Optional directories like
+		// /usr/include and /usr/share may be absent in minimal containers.
+		for _, p := range []string{"/bin", "/usr/bin", "/sbin", "/usr/sbin", "/usr/include", "/usr/share"} {
 			if fi, errStat := os.Stat(p); errStat == nil && fi.IsDir() {
 				config.Mounts = append(config.Mounts, sandbox.Mount{Path: p})
 			}
