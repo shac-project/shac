@@ -1777,13 +1777,7 @@ func runTestsInner(ctx context.Context, tmpdir string, o *Options) error {
 			}
 			caseCtx := context.WithValue(ctx, &shacStateCtxKey, caseState)
 			th := caseState.env.thread(caseCtx, tc.displayName, pi)
-			th.Load = func(th *starlark.Thread, str string) (starlark.StringDict, error) {
-				skn, loadErr := parseSourceKey(th.Local("shac.pkg").(sourceKey), str)
-				if loadErr != nil {
-					return nil, loadErr
-				}
-				return caseState.env.loadInner(th, skn)
-			}
+			th.Load = caseState.env.loadFrom
 			th.SetLocal("shac.top", tc.sk)
 			th.SetLocal("shac.pkg", tc.sk)
 			_, callErr := starlark.Call(th, tc.fn, nil, nil)

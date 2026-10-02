@@ -1412,6 +1412,11 @@ def _testing_write_file(filepath, content):
 
 # testing is a global module exposing test harness primitives for `shac test`.
 # It is only available in `*_test.star` files run by `shac test`.
+#
+# Unlike other files, `*_test.star` files can load() private ("_"-prefixed)
+# symbols, e.g. `load("//checks/foo.star", "_foo_check")`, so tests can
+# exercise a check's internal helpers without the check file having to export
+# them.
 testing = struct(
     # testing.any_args is a wildcard sentinel for matching zero or more
     # arguments in testing.exec_mock(cmd = [...]).
