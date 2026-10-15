@@ -902,9 +902,11 @@ type shacState struct {
 	// complete the serial part, after which execution becomes concurrent.
 	doneLoading bool
 
-	mu          sync.Mutex
-	printCalled bool
-	tmpdirIndex int
+	mu            sync.Mutex
+	printCalled   bool
+	tmpdirIndex   int
+	scmFilesMu    sync.Mutex
+	scmFilesCache map[scmFilesCacheKey]*scmFilesCacheEntry
 }
 
 // ctxShacState pulls out *runState from the context.

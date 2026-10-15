@@ -1057,34 +1057,25 @@ func (r *rawTree) commits(ctx context.Context) ([]scmCommit, error) {
 
 // Starlark adapter code.
 
+type scmFilesCacheKey struct {
+	allFiles bool
+	filter   fileFilter
+	hasGlob  bool
+	globKey  string
+}
+
+type scmFilesCacheEntry struct {
+	mu  sync.Mutex
+	val starlark.Value
+}
+
 // ctxScmAffectedFiles implements native function ctx.scm.affected_files().
 //
 // It returns a dictionary.
 //
 // Make sure to update //doc/stdlib.star whenever this function is modified.
 func ctxScmAffectedFiles(ctx context.Context, s *shacState, name string, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
-	var argincludeDeleted starlark.Bool
-	var argincludeSymlinks starlark.Bool
-	var argglob starlark.Value
-	if err := starlark.UnpackArgs(name, args, kwargs,
-		"include_deleted?", &argincludeDeleted,
-		"include_symlinks?", &argincludeSymlinks,
-		"glob??", &argglob,
-	); err != nil {
-		return nil, err
-	}
-	files, err := s.scm.affectedFiles(ctx, fileFilter{
-		includeDeleted:  bool(argincludeDeleted),
-		includeSymlinks: bool(argincludeSymlinks),
-	})
-	if err != nil {
-		return nil, err
-	}
-	files, err = filterFilesByGlob(files, argglob)
-	if err != nil {
-		return nil, err
-	}
-	return ctxScmFilesReturnValue(files), nil
+	return ctxScmFiles(ctx, s, name, args, kwargs, false)
 }
 
 // ctxScmAllFiles implements native function ctx.scm.all_files().
@@ -1093,6 +1084,10 @@ func ctxScmAffectedFiles(ctx context.Context, s *shacState, name string, args st
 //
 // Make sure to update //doc/stdlib.star whenever this function is modified.
 func ctxScmAllFiles(ctx context.Context, s *shacState, name string, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+	return ctxScmFiles(ctx, s, name, args, kwargs, true)
+}
+
+func ctxScmFiles(ctx context.Context, s *shacState, name string, args starlark.Tuple, kwargs []starlark.Tuple, allFiles bool) (starlark.Value, error) {
 	var argincludeDeleted starlark.Bool
 	var argincludeSymlinks starlark.Bool
 	var argglob starlark.Value
@@ -1103,18 +1098,52 @@ func ctxScmAllFiles(ctx context.Context, s *shacState, name string, args starlar
 	); err != nil {
 		return nil, err
 	}
-	files, err := s.scm.allFiles(ctx, fileFilter{
+	patterns, hasGlob, globKey, err := parseGlobPatterns(argglob)
+	if err != nil {
+		return nil, err
+	}
+	filter := fileFilter{
 		includeDeleted:  bool(argincludeDeleted),
 		includeSymlinks: bool(argincludeSymlinks),
-	})
+	}
+	key := scmFilesCacheKey{
+		allFiles: allFiles,
+		filter:   filter,
+		hasGlob:  hasGlob,
+		globKey:  globKey,
+	}
+
+	s.scmFilesMu.Lock()
+	if s.scmFilesCache == nil {
+		s.scmFilesCache = make(map[scmFilesCacheKey]*scmFilesCacheEntry)
+	}
+	entry, ok := s.scmFilesCache[key]
+	if !ok {
+		entry = &scmFilesCacheEntry{}
+		s.scmFilesCache[key] = entry
+	}
+	s.scmFilesMu.Unlock()
+
+	entry.mu.Lock()
+	defer entry.mu.Unlock()
+	if entry.val != nil {
+		return entry.val, nil
+	}
+
+	var files []file
+	if allFiles {
+		files, err = s.scm.allFiles(ctx, filter)
+	} else {
+		files, err = s.scm.affectedFiles(ctx, filter)
+	}
 	if err != nil {
 		return nil, err
 	}
-	files, err = filterFilesByGlob(files, argglob)
-	if err != nil {
-		return nil, err
+	if hasGlob {
+		files = filterFilesByGlob(files, patterns)
 	}
-	return ctxScmFilesReturnValue(files), nil
+	entry.val = ctxScmFilesReturnValue(files)
+	return entry.val, nil
 }
 
 // ctxScmCommits implements native function ctx.scm.commits().
@@ -1137,13 +1166,15 @@ func ctxScmCommits(ctx context.Context, s *shacState, name string, args starlark
 	return starlark.Tuple(res), nil
 }
 
-// ctxScmFilesReturnValue converts a list of files into a starlark.Dict to
-// return from the ctx.scm.all_files() and ctx.scm.affected_files() functions.
+// ctxScmFilesReturnValue converts a list of files into a frozen starlark.Dict
+// to return from the ctx.scm.all_files() and ctx.scm.affected_files()
+// functions.
 func ctxScmFilesReturnValue(files []file) starlark.Value {
 	out := starlark.NewDict(len(files))
 	for _, f := range files {
 		_ = out.SetKey(starlark.String(f.relpath()), f.getMetadata())
 	}
+	out.Freeze()
 	return out
 }
 
@@ -1182,23 +1213,40 @@ func unsafeString(b []byte) string {
 	return unsafe.String(unsafe.SliceData(b), len(b))
 }
 
-func filterFilesByGlob(files []file, glob starlark.Value) ([]file, error) {
+// parseGlobPatterns validates the `glob` argument of ctx.scm.*_files() and
+// returns its patterns. hasGlob is false if `glob` wasn't set. globKey encodes
+// the patterns as a string that can be used in a map key.
+func parseGlobPatterns(glob starlark.Value) (patterns []string, hasGlob bool, globKey string, err error) {
 	if glob == nil || glob == starlark.None {
-		return files, nil
+		return nil, false, "", nil
 	}
-	var patterns []string
 	switch v := glob.(type) {
 	case starlark.String:
 		patterns = []string{string(v)}
 	case starlark.Sequence:
 		patterns = sequenceToStrings(v)
 		if patterns == nil {
-			return nil, fmt.Errorf("\"glob\" must be string or sequence of strings")
+			return nil, false, "", fmt.Errorf("\"glob\" must be string or sequence of strings")
 		}
 	default:
-		return nil, fmt.Errorf("\"glob\" must be string or sequence of strings")
+		return nil, false, "", fmt.Errorf("\"glob\" must be string or sequence of strings")
 	}
+	// Prefix each pattern with its length so that different pattern lists
+	// always get different keys. Plain concatenation would give ["ab"] and
+	// ["a", "b"] the same key.
+	var b strings.Builder
+	for _, p := range patterns {
+		if p == "" {
+			return nil, false, "", fmt.Errorf("\"glob\" pattern cannot be empty")
+		}
+		fmt.Fprintf(&b, "%d:%s", len(p), p)
+	}
+	return patterns, true, b.String(), nil
+}
 
+// filterFilesByGlob returns the files that match patterns, which must have
+// been validated by parseGlobPatterns.
+func filterFilesByGlob(files []file, patterns []string) []file {
 	// If all patterns are negative, we need to prepend "**" because in
 	// gitignore syntax, negative patterns only take effect if a file was also
 	// matched by a positive pattern. Otherwise no files would be matched, which
@@ -1216,9 +1264,6 @@ func filterFilesByGlob(files []file, glob starlark.Value) ([]file, error) {
 	}
 
 	for _, p := range patterns {
-		if p == "" {
-			return nil, fmt.Errorf("\"glob\" pattern cannot be empty")
-		}
 		gitPatterns = append(gitPatterns, gitignore.ParsePattern(p, nil))
 	}
 	matcher := gitignore.NewMatcher(gitPatterns)
@@ -1229,5 +1274,5 @@ func filterFilesByGlob(files []file, glob starlark.Value) ([]file, error) {
 			out = append(out, f)
 		}
 	}
-	return out, nil
+	return out
 }
