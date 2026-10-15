@@ -522,24 +522,22 @@ func runInner(ctx context.Context, o *Options, tmpdir string) error {
 			scm = &subdirSCM{s: scm, subdir: normalized}
 		}
 		return &shacState{
-			shacConfig: shacConfig{
-				allFiles:                  o.AllFiles,
-				allowNetwork:              doc.AllowNetwork,
-				env:                       &env,
-				filter:                    o.Filter,
-				entryPoint:                entryPoint,
-				r:                         o.Report,
-				root:                      root,
-				sandbox:                   sb,
-				scm:                       scm,
-				subdir:                    subdir,
-				subprocessSem:             subprocessSem,
-				tmpdir:                    filepath.Join(tmpdir, strconv.Itoa(idx)),
-				writableRoot:              doc.WritableRoot,
-				vars:                      vars,
-				passthroughEnv:            doc.PassthroughEnv,
-				allowedFindingsProperties: doc.allowedFindingsProperties(),
-			},
+			allFiles:                  o.AllFiles,
+			allowNetwork:              doc.AllowNetwork,
+			env:                       &env,
+			filter:                    o.Filter,
+			entryPoint:                entryPoint,
+			r:                         o.Report,
+			root:                      root,
+			sandbox:                   sb,
+			scm:                       scm,
+			subdir:                    subdir,
+			subprocessSem:             subprocessSem,
+			tmpdir:                    filepath.Join(tmpdir, strconv.Itoa(idx)),
+			writableRoot:              doc.WritableRoot,
+			vars:                      vars,
+			passthroughEnv:            doc.PassthroughEnv,
+			allowedFindingsProperties: doc.allowedFindingsProperties(),
 		}, nil
 	}
 	var shacStates []*shacState

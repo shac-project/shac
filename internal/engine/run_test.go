@@ -472,7 +472,7 @@ func TestRun_SpecificFiles(t *testing.T) {
 				)
 			)`)
 
-		r := reportPrint{reportNoPrint: reportNoPrint{t: t}}
+		r := reportPrint{t: t}
 		var absFiles []string
 		for _, f := range files {
 			absFiles = append(absFiles, filepath.Join(root, f))
@@ -518,7 +518,7 @@ def cb(ctx):
 shac.register_check(cb)
 `)
 
-	r := reportPrint{reportNoPrint: reportNoPrint{t: t}}
+	r := reportPrint{t: t}
 	o := Options{Report: &r, Dir: root, Files: []string{filepath.Join(root, "subdir")}}
 
 	if err := Run(t.Context(), &o); err != nil {
@@ -630,7 +630,7 @@ shac.register_check(cb)
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			r := reportEmitPrint{reportPrint: reportPrint{reportNoPrint: reportNoPrint{t: t}}}
+			r := reportEmitPrint{t: t}
 			o := Options{Report: &r, Dir: root, Files: tc.files, AllFiles: tc.allFiles}
 
 			if err := Run(t.Context(), &o); err != nil {
@@ -702,7 +702,7 @@ shac.register_check(cb)
 				stderr.Close()
 			})
 
-			r := reportPrint{reportNoPrint: reportNoPrint{t: t}}
+			r := reportPrint{t: t}
 			o := Options{Report: &r, Dir: root, Files: tc.files}
 			if err := Run(t.Context(), &o); err != nil {
 				t.Fatalf("Run(%+v) failed: %s", o, err)
@@ -747,7 +747,7 @@ def cb(ctx):
 shac.register_check(cb)
 `)
 
-	r := reportPrint{reportNoPrint: reportNoPrint{t: t}}
+	r := reportPrint{t: t}
 	o := Options{Report: &r, Dir: root}
 
 	if err := Run(t.Context(), &o); err != nil {
@@ -797,7 +797,7 @@ def cb(ctx):
 shac.register_check(cb)
 `)
 
-	r := reportPrint{reportNoPrint: reportNoPrint{t: t}}
+	r := reportPrint{t: t}
 	o := Options{Report: &r, Dir: root}
 
 	if err := Run(t.Context(), &o); err != nil {
@@ -846,7 +846,7 @@ func TestRun_SpecificFiles_Fail(t *testing.T) {
 	for i := range data {
 		t.Run(data[i].name, func(t *testing.T) {
 			t.Parallel()
-			r := reportPrint{reportNoPrint: reportNoPrint{t: t}}
+			r := reportPrint{t: t}
 			o := Options{Report: &r, Dir: root, EntryPoint: "shac.star", Files: data[i].files}
 			err := Run(t.Context(), &o)
 			if err == nil {
@@ -927,7 +927,7 @@ func TestRun_Filtering(t *testing.T) {
 	}
 	for i := range data {
 		t.Run(data[i].name, func(t *testing.T) {
-			r := reportPrint{reportNoPrint: reportNoPrint{t: t}}
+			r := reportPrint{t: t}
 			o := Options{Report: &r, Dir: root, Filter: data[i].filter}
 			if err := Run(t.Context(), &o); err != nil {
 				t.Helper()
@@ -1022,7 +1022,7 @@ func TestRun_Filtering_MultipleFiles(t *testing.T) {
 	}
 	for i := range data {
 		t.Run(data[i].name, func(t *testing.T) {
-			r := reportPrint{reportNoPrint: reportNoPrint{t: t}}
+			r := reportPrint{t: t}
 			o := Options{Report: &r, Dir: root, Filter: data[i].filter, Recurse: true}
 			err := Run(t.Context(), &o)
 			if data[i].wantErr != "" {
@@ -1116,7 +1116,7 @@ func TestRun_Ignore(t *testing.T) {
 			},
 		}))
 
-		r := reportPrint{reportNoPrint: reportNoPrint{t: t}}
+		r := reportPrint{t: t}
 		o := Options{Report: &r, Dir: root, AllFiles: false, EntryPoint: "shac.star"}
 		err := Run(t.Context(), &o)
 		if err == nil {
@@ -1154,7 +1154,7 @@ func TestRun_Vars(t *testing.T) {
 			root := t.TempDir()
 			main := "ctx-var-value.star"
 			copyFile(t, root, filepath.Join("testdata", main))
-			r := reportPrint{reportNoPrint: reportNoPrint{t: t}}
+			r := reportPrint{t: t}
 			o := Options{
 				Report:     &r,
 				Dir:        root,
@@ -1243,7 +1243,7 @@ func TestRun_PassthroughEnv(t *testing.T) {
 	copyFile(t, root, filepath.Join("testdata", main))
 	copyFile(t, root, filepath.Join("testdata", "ctx-os-exec-passthrough_env.go"))
 
-	r := reportPrint{reportNoPrint: reportNoPrint{t: t}}
+	r := reportPrint{t: t}
 	o := Options{
 		Report:     &r,
 		Dir:        root,
@@ -1592,7 +1592,7 @@ func TestRun_SCM_Git_Untracked(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			r := reportPrint{reportNoPrint: reportNoPrint{t: t}}
+			r := reportPrint{t: t}
 			// Don't specify `main` so it defaults to shac.star.
 			// Specify `recurse` so we use the scm to discover shac.star files.
 			o := Options{Report: &r, Dir: root, Recurse: true}
@@ -1940,7 +1940,7 @@ func TestRun_SCM_Git_Recursive(t *testing.T) {
 		"shac.register_check(cb)")
 	runGit(t, root, "add", ".")
 	runGit(t, root, "commit", "-m", "Second commit")
-	r := reportEmitPrint{reportPrint: reportPrint{reportNoPrint: reportNoPrint{t: t}}}
+	r := reportEmitPrint{t: t}
 	o := Options{Report: &r, Dir: root, Recurse: true}
 	if err := Run(t.Context(), &o); err != nil {
 		t.Fatal(err)
@@ -2030,7 +2030,7 @@ func TestRun_SCM_Git_Recursive_Symlink(t *testing.T) {
 	runGit(t, root, "add", ".")
 	runGit(t, root, "commit", "-m", "Second commit")
 
-	r := reportPrint{reportNoPrint: reportNoPrint{t: t}}
+	r := reportPrint{t: t}
 	o := Options{Report: &r, Dir: root, Recurse: true}
 	if err := Run(t.Context(), &o); err != nil {
 		t.Fatal(err)
@@ -2103,7 +2103,7 @@ func TestRun_SCM_Git_Recursive_Shared(t *testing.T) {
 		"      print(p)")
 	runGit(t, root, "add", ".")
 	runGit(t, root, "commit", "-m", "Second commit")
-	r := reportEmitPrint{reportPrint: reportPrint{reportNoPrint: reportNoPrint{t: t}}}
+	r := reportEmitPrint{t: t}
 	o := Options{Report: &r, Dir: root, Recurse: true}
 	if err := Run(t.Context(), &o); err != nil {
 		t.Fatal(err)
@@ -3002,7 +3002,7 @@ func TestTestDataEmit(t *testing.T) {
 	for i := range data {
 		t.Run(data[i].name, func(t *testing.T) {
 			t.Parallel()
-			r := reportEmitNoPrint{reportNoPrint: reportNoPrint{t: t}}
+			r := reportEmitNoPrint{t: t}
 			o := Options{Report: &r, Dir: root, EntryPoint: data[i].name}
 			err := Run(t.Context(), &o)
 			if data[i].err != "" {
@@ -3061,7 +3061,7 @@ func TestRun_FormatterDefaultMessage(t *testing.T) {
 				"",
 				"shac.register_check(shac.check(cb, formatter = True))",
 			)
-			r := reportEmitNoPrint{reportNoPrint: reportNoPrint{t: t}}
+			r := reportEmitNoPrint{t: t}
 			o := Options{Report: &r, Dir: root, AllFiles: data[i].allFiles, EntryPoint: "shac.star"}
 			if err := Run(t.Context(), &o); err == nil {
 				t.Fatal("expected the check to fail")
@@ -3337,7 +3337,7 @@ func TestRun_Vendored(t *testing.T) {
 
 // testStarlarkPrint test a starlark file that calls print().
 func testStarlarkPrint(t testing.TB, root, name string, all bool, ignoreOrder bool, want string, files ...string) {
-	r := reportPrint{reportNoPrint: reportNoPrint{t: t}}
+	r := reportPrint{t: t}
 	o := Options{Report: &r, Dir: root, AllFiles: all, EntryPoint: name, Files: files}
 	if err := Run(t.Context(), &o); err != nil {
 		t.Helper()
@@ -3884,7 +3884,7 @@ func TestRun_OverridesShacFileDirs(t *testing.T) {
 	runGit(t, root, "add", ".")
 	runGit(t, root, "commit", "-m", "Add test files")
 
-	r := reportPrint{reportNoPrint: reportNoPrint{t: t}}
+	r := reportPrint{t: t}
 	o := Options{Report: &r, Dir: root, Files: []string{filepath.Join(root, "a", "b.txt")}, Recurse: true}
 
 	if err := Run(t.Context(), &o); err != nil {
@@ -3966,7 +3966,7 @@ func TestRun_ShacFileDirs_IgnorePatterns(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			r := reportPrint{reportNoPrint: reportNoPrint{t: t}}
+			r := reportPrint{t: t}
 			o := Options{Report: &r, Dir: root, Files: tc.files, Recurse: true}
 
 			if err := Run(t.Context(), &o); err != nil {

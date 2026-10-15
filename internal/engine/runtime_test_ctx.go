@@ -758,7 +758,7 @@ type virtualFile struct {
 
 func newVirtualFile(path, action, content string, affected bool) *virtualFile {
 	return &virtualFile{
-		fileImpl: fileImpl{path: path, a: action},
+		path: path, a: action,
 		content:  content,
 		affected: affected,
 	}
@@ -1691,20 +1691,18 @@ func runTestsInner(ctx context.Context, tmpdir string, o *Options) error {
 			return err
 		}
 		s := &shacState{
-			shacConfig: shacConfig{
-				env:                       env,
-				allowNetwork:              doc.AllowNetwork,
-				writableRoot:              doc.WritableRoot,
-				root:                      root,
-				realRoot:                  root,
-				vars:                      vars,
-				tmpdir:                    fileTmpDir,
-				sandbox:                   sb,
-				passthroughEnv:            doc.PassthroughEnv,
-				allowedFindingsProperties: doc.allowedFindingsProperties(),
-				subprocessSem:             subprocessSem,
-				forbidRegisterCheck:       true,
-			},
+			env:                       env,
+			allowNetwork:              doc.AllowNetwork,
+			writableRoot:              doc.WritableRoot,
+			root:                      root,
+			realRoot:                  root,
+			vars:                      vars,
+			tmpdir:                    fileTmpDir,
+			sandbox:                   sb,
+			passthroughEnv:            doc.PassthroughEnv,
+			allowedFindingsProperties: doc.allowedFindingsProperties(),
+			subprocessSem:             subprocessSem,
+			forbidRegisterCheck:       true,
 		}
 		loadCtx := context.WithValue(ctx, &shacStateCtxKey, s)
 		sk := sourceKey{orig: relPath, pkg: "__main__", relpath: relPath}
