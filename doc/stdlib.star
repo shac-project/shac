@@ -338,6 +338,38 @@ def _ctx_io_read_file(filepath, size = None):
     """
     pass
 
+def _ctx_io_stat(filepath):
+    """Returns information about the file or directory at filepath.
+
+    Symlinks are followed.
+
+    Example:
+      ```python
+      def cb(ctx):
+          info = ctx.io.stat(ctx.scm.root + "/out/tool")
+          if not info or not info.is_file:
+              fail("tool has not been built")
+
+      shac.register_check(cb)
+      ```
+
+    Args:
+      filepath: Path of the file or directory. Relative paths are resolved
+        against the directory containing the shac.star file and must be in POSIX
+        format, using / separator. Absolute paths are also accepted.
+
+    Returns:
+      None if nothing exists at filepath, including when a parent component of
+      filepath is not a directory, filepath is a dangling symlink, or filepath
+      is part of a symlink loop. Otherwise a struct with the following fields:
+
+      - is_dir: True if filepath is a directory.
+      - is_file: True if filepath is a regular file.
+
+      Other errors, such as permission denied, fail the check.
+    """
+    pass
+
 def _ctx_io_tempdir():
     """Returns a new temporary directory."""
     pass
@@ -632,6 +664,7 @@ ctx = struct(
     # ctx.io is the object that exposes the API to interact with the file system.
     io = struct(
         read_file = _ctx_io_read_file,
+        stat = _ctx_io_stat,
         tempdir = _ctx_io_tempdir,
         tempfile = _ctx_io_tempfile,
     ),

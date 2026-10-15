@@ -2426,6 +2426,26 @@ func TestTestDataFailOrThrow(t *testing.T) {
 			"  //ctx-io-read_file-windows.star:16:21: in cb\n",
 		},
 		{
+			"ctx-io-stat-escape.star",
+			"ctx.io.stat: for parameter \"filepath\": \"../checks.go\" cannot escape root",
+			"  //ctx-io-stat-escape.star:16:16: in cb\n",
+		},
+		{
+			"ctx-io-stat-missing_arg.star",
+			"ctx.io.stat: missing argument for filepath",
+			"  //ctx-io-stat-missing_arg.star:16:16: in cb\n",
+		},
+		{
+			"ctx-io-stat-unclean.star",
+			"ctx.io.stat: for parameter \"filepath\": \"path/../file.txt\" pass cleaned path",
+			"  //ctx-io-stat-unclean.star:16:16: in cb\n",
+		},
+		{
+			"ctx-io-stat-windows.star",
+			"ctx.io.stat: for parameter \"filepath\": \"test\\\\data.txt\" use POSIX style path",
+			"  //ctx-io-stat-windows.star:16:16: in cb\n",
+		},
+		{
 			"ctx-os-exec-10Mib-exceed.star",
 			"wait: process returned too much stderr",
 			"  //ctx-os-exec-10Mib-exceed.star:16:93: in cb\n",
@@ -3084,6 +3104,15 @@ func TestTestDataPrint(t *testing.T) {
 		{
 			name: "ctx-io-read_file.star",
 			want: "[//ctx-io-read_file.star:17] {\"key\": \"value\"}\n",
+		},
+		{
+			name: "ctx-io-stat.star",
+			want: "[//ctx-io-stat.star:16] file: stat(is_dir = False, is_file = True)\n" +
+				"[//ctx-io-stat.star:17] directory: stat(is_dir = True, is_file = False)\n" +
+				"[//ctx-io-stat.star:18] missing: None\n" +
+				"[//ctx-io-stat.star:19] parent is a file: None\n" +
+				"[//ctx-io-stat.star:20] absolute file is_file: True\n" +
+				"[//ctx-io-stat.star:21] absolute missing: None\n",
 		},
 		{
 			name: "ctx-io-tempdir.star",

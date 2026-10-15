@@ -24,6 +24,7 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
+	"syscall"
 
 	"go.starlark.net/starlark"
 )
@@ -46,13 +47,9 @@ func ctxIoReadFile(ctx context.Context, s *shacState, name string, args starlark
 	if !ok {
 		return nil, fmt.Errorf("for parameter \"size\": %s is an invalid size", argsize)
 	}
-	dst := string(argfilepath)
-	if !filepath.IsAbs(dst) {
-		var err error
-		dst, err = absPath(dst, filepath.Join(s.root, s.subdir))
-		if err != nil {
-			return nil, fmt.Errorf("for parameter \"filepath\": %s %w", argfilepath, err)
-		}
+	dst, err := resolveFilepath(s, string(argfilepath))
+	if err != nil {
+		return nil, fmt.Errorf("for parameter \"filepath\": %s %w", argfilepath, err)
 	}
 	b, err := readFileImpl(dst, size)
 	if err != nil {
@@ -65,6 +62,27 @@ func ctxIoReadFile(ctx context.Context, s *shacState, name string, args starlark
 	}
 	// TODO(maruel): Use unsafe conversion to save a memory copy.
 	return starlark.Bytes(b), nil
+}
+
+// ctxIoStat implements native function ctx.io.stat().
+//
+// Make sure to update //doc/stdlib.star whenever this function is modified.
+func ctxIoStat(ctx context.Context, s *shacState, name string, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+	var argfilepath starlark.String
+	if err := starlark.UnpackArgs(name, args, kwargs,
+		"filepath", &argfilepath,
+	); err != nil {
+		return nil, err
+	}
+	dst, err := resolveFilepath(s, string(argfilepath))
+	if err != nil {
+		return nil, fmt.Errorf("for parameter \"filepath\": %s %w", argfilepath, err)
+	}
+	v, err := statImpl(dst)
+	if err != nil {
+		return nil, fmt.Errorf("for parameter \"filepath\": %s %w", argfilepath, err)
+	}
+	return v, nil
 }
 
 // ctxIoTempdir implements native function ctx.io.tempdir().
@@ -121,6 +139,46 @@ func ctxIoTempfile(ctx context.Context, s *shacState, name string, args starlark
 }
 
 // Support functions.
+
+// resolveFilepath converts a user-provided path argument into an absolute
+// path.
+//
+// Relative paths are resolved against the directory containing the current
+// shac.star file and must not escape it. Absolute paths are used as-is.
+func resolveFilepath(s *shacState, dst string) (string, error) {
+	if filepath.IsAbs(dst) {
+		return dst, nil
+	}
+	return absPath(dst, filepath.Join(s.root, s.subdir))
+}
+
+// statImpl returns None if nothing exists at path, otherwise a struct
+// describing the file.
+//
+// Symlinks are followed, matching what a subprocess would see when opening the
+// path.
+func statImpl(path string) (starlark.Value, error) {
+	info, err := os.Stat(path)
+	if err != nil {
+		// A path component that is a regular file (ENOTDIR) or a symlink loop
+		// (ELOOP) means the path can't refer to anything, which callers care
+		// about the same way as a missing file.
+		if errors.Is(err, fs.ErrNotExist) || errors.Is(err, syscall.ENOTDIR) || errors.Is(err, syscall.ELOOP) {
+			return starlark.None, nil
+		}
+		// Strip the *fs.PathError wrapper, which contains the absolute host
+		// path, for determinism.
+		var pathErr *fs.PathError
+		if errors.As(err, &pathErr) {
+			err = pathErr.Err
+		}
+		return nil, err
+	}
+	return toValue("stat", starlark.StringDict{
+		"is_dir":  starlark.Bool(info.IsDir()),
+		"is_file": starlark.Bool(info.Mode().IsRegular()),
+	}), nil
+}
 
 // readFileImpl is similar to os.ReadFile() albeit it limits the amount of data
 // returned to max bytes when specified.
