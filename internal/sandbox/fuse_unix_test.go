@@ -17,12 +17,14 @@
 package sandbox
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"runtime"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
+	"go.fuchsia.dev/shac-project/shac/internal/execsupport"
 )
 
 func TestResolveFuseMounts(t *testing.T) {
@@ -226,8 +228,76 @@ func TestNewSandbox_InsideOuterNsjail(t *testing.T) {
 			{Path: childTmp, Writable: true},
 		},
 	})
-	out, err := cmd.CombinedOutput()
+	var out bytes.Buffer
+	cmd.Stdout = &out
+	cmd.Stderr = &out
+	if err := execsupport.Run(t.Context(), cmd); err != nil {
+		t.Fatalf("inner test in outer nsjail failed: %s\noutput:\n%s", err, out.String())
+	}
+}
+
+// TestNsjailSandbox_DevShm verifies that nsjailSandbox mounts a writable,
+// isolated tmpfs at /dev/shm inside the sandbox. It re-executes the test binary
+// inside nsjail (with SHAC_TEST_DEV_SHM_INNER=1) to write a file under
+// /dev/shm, then checks from the outer process that the write succeeded inside
+// the sandbox without creating the file in the host's /dev/shm.
+func TestNsjailSandbox_DevShm(t *testing.T) {
+	if runtime.GOOS != "linux" || (runtime.GOARCH != "amd64" && runtime.GOARCH != "arm64") {
+		t.Skip("nsjail is only supported on linux/amd64 and linux/arm64")
+	}
+	t.Parallel()
+
+	if os.Getenv("SHAC_TEST_DEV_SHM_INNER") == "1" {
+		shmFile := os.Getenv("SHAC_TEST_DEV_SHM_FILE")
+		if err := os.WriteFile(shmFile, []byte("isolated"), 0o600); err != nil {
+			t.Fatalf("failed to write to %s inside nsjail: %s", shmFile, err)
+		}
+		return
+	}
+
+	sb, err := New(t.TempDir())
 	if err != nil {
-		t.Fatalf("inner test in outer nsjail failed: %v\noutput:\n%s", err, out)
+		t.Fatalf("New() failed: %s", err)
+	}
+	if _, ok := sb.(nsjailSandbox); !ok {
+		t.Skipf("host environment uses %T, skipping nsjail /dev/shm test", sb)
+	}
+
+	exe, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	childTmp := t.TempDir()
+	shmFile := filepath.Join("/dev/shm", "shac-test-"+filepath.Base(childTmp))
+	t.Cleanup(func() {
+		_ = os.Remove(shmFile)
+	})
+
+	cmd := sb.Command(t.Context(), &Config{
+		Cmd: []string{exe, "-test.run=^TestNsjailSandbox_DevShm$"},
+		Cwd: childTmp,
+		Env: map[string]string{
+			"SHAC_TEST_DEV_SHM_INNER": "1",
+			"SHAC_TEST_DEV_SHM_FILE":  shmFile,
+			"TMPDIR":                  childTmp,
+		},
+		Mounts: []Mount{
+			// Include /dev as a read-only mount to verify that the ephemeral
+			// /dev/shm tmpfs is mounted after bind mounts and is not shadowed.
+			{Path: "/dev"},
+			{Path: "/lib"},
+			{Path: "/lib64"},
+			{Path: "/usr/lib"},
+			{Path: childTmp, Writable: true},
+		},
+	})
+	var out bytes.Buffer
+	cmd.Stdout = &out
+	cmd.Stderr = &out
+	if err := execsupport.Run(t.Context(), cmd); err != nil {
+		t.Fatalf("inner test in nsjail failed: %s\noutput:\n%s", err, out.String())
+	}
+	if _, err := os.Stat(shmFile); !os.IsNotExist(err) {
+		t.Fatalf("expected %s not to exist on host /dev/shm, got err=%v", shmFile, err)
 	}
 }

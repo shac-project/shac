@@ -168,7 +168,13 @@ func (s nsjailSandbox) Command(ctx context.Context, config *Config) *exec.Cmd {
 		}
 		args = append(args, flag, val)
 	}
-	args = append(args, "--")
+	// Mount an ephemeral tmpfs (4 MiB in nsjail) at /dev/shm after all bind
+	// mounts so it overlays any parent mount (such as / or /dev) and lets tools
+	// that rely on POSIX semaphores or small shared-memory objects (such as
+	// Python's multiprocessing.Pool and concurrent.futures.ProcessPoolExecutor)
+	// work inside the sandbox without accessing or leaking into the host's
+	// /dev/shm.
+	args = append(args, "--tmpfsmount", "/dev/shm", "--")
 	args = append(args, config.Cmd...)
 	return exec.CommandContext(ctx, s.nsjailPath, args...)
 }
