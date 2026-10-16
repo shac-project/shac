@@ -3326,6 +3326,104 @@ func TestRun_FilesystemSandbox(t *testing.T) {
 	testStarlarkPrint(t, root, "ctx-os-exec-filesystem_sandbox.star", false, false, want)
 }
 
+func TestRun_CancelStopsStarlark(t *testing.T) {
+	t.Parallel()
+	loop := []string{
+		"def loop():",
+		"    while True:",
+		"        pass",
+		"",
+	}
+	data := []struct {
+		name  string
+		lines []string
+		// wantErr is a substring of the expected error. If empty, Run is
+		// expected to return context.Canceled.
+		wantErr string
+	}{
+		{
+			name: "during check",
+			lines: []string{
+				"def cb(ctx):",
+				"    print(\"looping\")",
+				"    loop()",
+				"",
+				"shac.register_check(cb)",
+			},
+		},
+		{
+			name: "during load",
+			lines: []string{
+				"print(\"looping\")",
+				"loop()",
+			},
+		},
+		{
+			// When one check fails, the other checks get canceled. Register
+			// the failing check first so this works even if only one check
+			// can run at a time.
+			name: "another check failed",
+			lines: []string{
+				"def failing(ctx):",
+				"    fail(\"oh no\")",
+				"",
+				"def looping(ctx):",
+				"    loop()",
+				"",
+				"shac.register_check(failing)",
+				"shac.register_check(looping)",
+			},
+			wantErr: "oh no",
+		},
+	}
+	for _, tc := range data {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			root := t.TempDir()
+			writeFile(t, root, "shac.star", append(slices.Clone(loop), tc.lines...)...)
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			// Cancel once the Starlark code is running, the same as when a user
+			// hits Ctrl-C. shac sends the output of Starlark print() calls to
+			// the reporter's Print method, so reportCancelOnPrint cancels the
+			// context when the Starlark code prints "looping" right before it
+			// enters its infinite loop. That way the cancellation is guaranteed
+			// to happen while the Starlark code is running, without relying on
+			// timing. The "another check failed" case doesn't print, since the
+			// failing check cancels the context instead.
+			r := reportCancelOnPrint{t: t, cancel: cancel}
+			err := runWithDeadline(t, func() error {
+				return Run(ctx, &Options{Report: &r, Dir: root})
+			})
+			if tc.wantErr == "" {
+				if !errors.Is(err, context.Canceled) {
+					t.Fatalf("expected context.Canceled, got %s", err)
+				}
+			} else if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+				t.Fatalf("expected an error containing %q, got %s", tc.wantErr, err)
+			}
+		})
+	}
+}
+
+// runWithDeadline returns f's result, failing the test if f doesn't return
+// promptly. This keeps a regression that stops Starlark code from being
+// canceled from hanging until the global `go test` timeout.
+func runWithDeadline(t *testing.T, f func() error) error {
+	t.Helper()
+	errs := make(chan error, 1)
+	go func() {
+		errs <- f()
+	}()
+	select {
+	case err := <-errs:
+		return err
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for Starlark code to be canceled")
+		return nil
+	}
+}
+
 func TestRun_Vendored(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
@@ -3525,6 +3623,17 @@ func (r *reportNoPrint) CheckCompleted(ctx context.Context, check string, start 
 
 func (r *reportNoPrint) Print(ctx context.Context, check, file string, line int, message string) {
 	r.t.Errorf("unexpected print: %s %s(%d): %s", check, file, line, message)
+}
+
+// reportCancelOnPrint cancels a context when a check prints, so tests can
+// cancel shac at a known point in the middle of a check.
+type reportCancelOnPrint struct {
+	reportNoPrint
+	cancel context.CancelFunc
+}
+
+func (r *reportCancelOnPrint) Print(ctx context.Context, check, file string, line int, message string) {
+	r.cancel()
 }
 
 type reportPrint struct {

@@ -1158,3 +1158,30 @@ func TestDetachFromRealRoot(t *testing.T) {
 		t.Errorf("Test root scripts/a.txt = %q, %v; want %q", got, err, "a")
 	}
 }
+
+func TestRunTests_Cancel(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	writeFile(t, root, "a_test.star", ""+
+		"def test_loop():\n"+
+		"    while True:\n"+
+		"        pass\n")
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	// TestRun_CancelStopsStarlark cancels when the check calls print(), but
+	// `shac test` doesn't report a test's print() output until the test
+	// finishes, so that can't work here. Cancel after a short delay instead.
+	// The exact delay doesn't matter: the test should see context.Canceled
+	// whether the cancellation happens before or during test_loop.
+	time.AfterFunc(10*time.Millisecond, cancel)
+	rep := &capturingTestReporter{}
+	err := runWithDeadline(t, func() error {
+		return RunTests(ctx, &Options{Dir: root, TestReporter: rep})
+	})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("expected context.Canceled, got %s", err)
+	}
+	if len(rep.results) != 0 {
+		t.Fatalf("canceled tests shouldn't be reported, got %v", rep.results)
+	}
+}

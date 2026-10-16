@@ -127,11 +127,20 @@ type starlarkEnv struct {
 
 // thread returns a new starlark thread.
 //
+// Starlark code running on the thread stops when ctx is done, so that shac
+// exits promptly when it's interrupted. Call the returned function once the
+// thread is no longer needed. Callers should return ctx.Err() rather than the
+// thread's error when ctx is done, since the error then most likely just says
+// that the thread was canceled.
+//
 // load() statement is not allowed.
-func (e *starlarkEnv) thread(ctx context.Context, name string, pi printImpl) *starlark.Thread {
+func (e *starlarkEnv) thread(ctx context.Context, name string, pi printImpl) (*starlark.Thread, func() bool) {
 	t := &starlark.Thread{Name: name, Print: pi}
 	t.SetLocal("shac.context", ctx)
-	return t
+	stop := context.AfterFunc(ctx, func() {
+		t.Cancel(context.Cause(ctx).Error())
+	})
+	return t, stop
 }
 
 // getContext returns the context.Context given a starlark thread.
@@ -144,11 +153,16 @@ func getContext(t *starlark.Thread) context.Context {
 // A thread will be implicitly created.
 func (e *starlarkEnv) load(ctx context.Context, sk sourceKey, pi printImpl) (starlark.StringDict, error) {
 	// We are the root thread. Start a thread implicitly.
-	t := e.thread(ctx, sk.String(), pi)
+	t, stop := e.thread(ctx, sk.String(), pi)
+	defer stop()
 	t.Load = e.loadFrom
 	t.SetLocal("shac.top", sk)
 	t.SetLocal("shac.pkg", sk)
-	return e.loadInner(t, sk)
+	globals, err := e.loadInner(t, sk)
+	if err != nil && ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
+	return globals, err
 }
 
 // privateLoadPrefix is prepended to the `_`-prefixed names in a test file's

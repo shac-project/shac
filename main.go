@@ -31,11 +31,15 @@ import (
 )
 
 func main() {
-	signalChannel := make(chan os.Signal, 2)
+	// Only the first signal is read. Later signals use the default behavior.
+	signalChannel := make(chan os.Signal, 1)
 	signal.Notify(signalChannel, syscall.SIGTERM, syscall.SIGINT)
 	ctx, cancel := context.WithCancel(context.Background())
 	go func() {
 		sig := <-signalChannel
+		// Restore the default signal behavior so that a second Ctrl-C kills
+		// shac immediately if it's slow to shut down.
+		signal.Stop(signalChannel)
 		cancel()
 		// Print a goroutine stacktrace only on SIGTERM - we only want to see a
 		// stack trace when shac gets canceled by automation, which may indicate

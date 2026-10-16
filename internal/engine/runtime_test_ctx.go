@@ -1146,7 +1146,8 @@ func testingRun(th *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, 
 				for i, arg := range cmd {
 					cmdVals[i] = starlark.String(arg)
 				}
-				handlerTh := cState.env.thread(execCtx, "exec_mock_handler", pi)
+				handlerTh, stop := cState.env.thread(execCtx, "exec_mock_handler", pi)
+				defer stop()
 				resVal, callErr := starlark.Call(handlerTh, matched.handler, starlark.Tuple{cmdVals}, nil)
 				if callErr != nil {
 					return nil, true, callErr
@@ -1804,7 +1805,8 @@ func runTestsInner(ctx context.Context, tmpdir string, o *Options) error {
 				shacConfig: caseConfig,
 			}
 			caseCtx := context.WithValue(ctx, &shacStateCtxKey, caseState)
-			th := caseState.env.thread(caseCtx, tc.displayName, pi)
+			th, stop := caseState.env.thread(caseCtx, tc.displayName, pi)
+			defer stop()
 			th.Load = caseState.env.loadFrom
 			th.SetLocal("shac.top", tc.sk)
 			th.SetLocal("shac.pkg", tc.sk)
@@ -1827,6 +1829,10 @@ func runTestsInner(ctx context.Context, tmpdir string, o *Options) error {
 		})
 	}
 	_ = eg.Wait()
+	// Don't report tests that were canceled as failures.
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 
 	failed := false
 	for _, out := range outcomes {

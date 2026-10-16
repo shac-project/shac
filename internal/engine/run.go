@@ -987,8 +987,13 @@ func ctxCheck(ctx context.Context) *registeredCheck {
 // A "normal" error will still have this function return nil.
 func (c *registeredCheck) call(ctx context.Context, env *starlarkEnv, args starlark.Tuple, pi printImpl) error {
 	ctx = context.WithValue(ctx, &checkCtxKey, c)
-	th := env.thread(ctx, c.name, pi)
+	th, stop := env.thread(ctx, c.name, pi)
+	defer stop()
 	if r, err := starlark.Call(th, c.impl, args, c.kwargs); err != nil {
+		if ctx.Err() != nil {
+			// The error was most likely caused by the thread being canceled.
+			return ctx.Err()
+		}
 		if c.failErr != nil {
 			// fail() was called, return this error since this is an abnormal failure.
 			return c.failErr
