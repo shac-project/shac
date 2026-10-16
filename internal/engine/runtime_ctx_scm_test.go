@@ -147,9 +147,7 @@ func TestCtxScmFilesCaching(t *testing.T) {
 		},
 	}
 	s := &shacState{
-		shacConfig: shacConfig{
-			scm: vscm,
-		},
+		scm: vscm,
 	}
 
 	callAffected := func(kwargs ...starlark.Tuple) *starlark.Dict {
@@ -233,9 +231,7 @@ func TestCtxScmFilesCaching(t *testing.T) {
 	// Concurrent callers with identical and distinct globs must be race-free
 	// and return the same cached pointer per key.
 	sConcurrent := &shacState{
-		shacConfig: shacConfig{
-			scm: vscm,
-		},
+		scm: vscm,
 	}
 	const workers = 16
 	results := make([]*starlark.Dict, workers)

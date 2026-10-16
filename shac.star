@@ -19,7 +19,7 @@ This file will evolve as new shac functionality is being added.
 
 load("//checks/buildifier.star", "buildifier")
 load("//checks/check_doc.star", "check_docs")
-load("//checks/go.star", "gofmt", "gosec", "govet", "ineffassign", "no_fork_without_lock", "shadow", "staticcheck")
+load("//checks/go.star", "gofix", "gofmt", "gosec", "govet", "ineffassign", "no_fork_without_lock", "shadow", "staticcheck")
 load("//checks/licenses.star", "check_license_headers")
 
 def suggest_version_bump(ctx):
@@ -86,6 +86,7 @@ shac.register_check(buildifier)
 shac.register_check(check_commit_subject_length)
 shac.register_check(check_docs)
 shac.register_check(check_license_headers)
+shac.register_check(gofix)
 shac.register_check(gofmt)
 shac.register_check(gosec)
 shac.register_check(govet)

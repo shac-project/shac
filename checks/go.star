@@ -282,7 +282,7 @@ def govet(
       analyzers: Names of analyzers to run (run `go tool vet help` to see all
         options).
     """
-    output = ctx.os.exec(
+    stdout = ctx.os.exec(
         [
             "go",
             "vet",
@@ -291,38 +291,186 @@ def govet(
         ["-" + a for a in analyzers] +
         ["./..."],
         env = go_env(ctx),
-    ).wait().stderr
+    ).wait().stdout
 
-    # output is of the form:
-    # # pkg1
-    # {}
-    # # pkg2
-    # {
-    #   ...
-    # }
-    findings_by_package = {}
-    current_package_lines = []
-    lines = output.splitlines()
-    for i, line in enumerate(lines):
-        if line.startswith(("warning: ", "go: ")):
-            # E.g. "warning: GOPATH set to GOROOT () has no effect"
-            continue
-        if not line.startswith("# "):
-            current_package_lines.append(line)
-            if i + 1 < len(lines):
+    for finding in _parse_analyzer_json(stdout, "go vet"):
+        _emit_analyzer_finding(ctx, finding, "go vet")
+
+def _gofix(ctx):
+    """Runs the `go fix` analyzers on a Go code base.
+
+    `go fix` runs a suite of analyzers that modernize Go code by rewriting
+    outdated idioms to take advantage of newer language features and standard
+    library APIs, e.g. replacing `interface{}` with `any`, or a
+    `sort.Slice` call with `slices.Sort`. The set of analyzers depends on the
+    Go toolchain version, so upgrading Go may produce new findings.
+
+    Each hunk of `go fix -diff` output is emitted as a separate finding, with a
+    replacement so that `shac fix` can apply it. Applying all of them is
+    equivalent to running `go fix ./...` once. A finding's message is the message of
+    each `go fix` diagnostic within the hunk, if any; some hunks, such as one
+    that adds an import, support a fix elsewhere in the file.
+
+    See https://pkg.go.dev/cmd/fix for more details.
+
+    Args:
+      ctx: A ctx instance.
+    """
+    env = go_env(ctx)
+    json_proc = ctx.os.exec(["go", "fix", "-json", "./..."], env = env)
+
+    # The changes come from `go fix -diff` rather than from applying the -json
+    # output's suggested fixes, because `go fix` does more than apply the
+    # edits: it merges and drops conflicting fixes, removes imports that the
+    # fixes made unused, formats the result, and skips generated files.
+    # `go fix -diff` exits 1 if there are any diffs.
+    diff_proc = ctx.os.exec(["go", "fix", "-diff", "./..."], env = env, ok_retcodes = (0, 1))
+
+    changes_by_file = _parse_diff(ctx, diff_proc.wait().stdout)
+
+    # Diagnostics outside of all hunks aren't reported, so the check fails if
+    # and only if `go fix` would change something. These include diagnostics
+    # in generated files, which `go fix` doesn't change, and diagnostics whose
+    # fixes `go fix` dropped because they conflicted with other fixes, which
+    # will show up in the diff after the other fixes are applied.
+    messages = {}
+    for finding in _parse_analyzer_json(json_proc.wait().stdout, "go fix"):
+        filepath, line, _ = _parse_posn(ctx, finding["posn"], "go fix")
+        for i, change in enumerate(changes_by_file.get(filepath, [])):
+            if change["line"] <= line and line <= change["end_line"]:
+                hunk_messages = messages.setdefault((filepath, i), [])
+                if finding["message"] not in hunk_messages:
+                    hunk_messages.append(finding["message"])
+                break
+
+    for filepath, changes in changes_by_file.items():
+        for i, change in enumerate(changes):
+            ctx.emit.finding(
+                level = "error",
+                filepath = filepath,
+                line = change["line"],
+                end_line = change["end_line"],
+                message = "\n".join(messages.get((filepath, i), [])) or
+                          "`go fix` suggests this change as part of a fix elsewhere in this file.",
+                replacements = [change["replacement"]],
+            )
+
+gofix = shac.check(_gofix)
+
+def _relpath(ctx, path):
+    """Converts an absolute path from Go tooling to a root-relative path.
+
+    Returns None if the path isn't within the root.
+    """
+
+    # Use string operations rather than a regex containing the root, since the
+    # root may contain regex metacharacters, e.g. backslashes on Windows.
+    path = path.replace("\\", "/")
+    root = ctx.scm.root.replace("\\", "/") + "/"
+    if not path.startswith(root):
+        return None
+    return path[len(root):]
+
+def _parse_posn(ctx, posn, tool, allow_invalid = False):
+    """Parses a "file:line[:col]" position into (relpath, line, col).
+
+    If the position is invalid, returns None if allow_invalid is set, and fails
+    otherwise.
+    """
+
+    # The non-greedy match takes the first ":<line>" suffix that leaves only an
+    # optional ":<col>", which handles colons in Windows drive letters.
+    match = ctx.re.match(r"^(.+?):(\d+)(?::(\d+))?$", posn)
+    filepath = _relpath(ctx, match.groups[1]) if match else None
+    if not filepath:
+        if allow_invalid:
+            return None
+        fail("unrecognized position %r in `%s` output" % (posn, tool))
+    col = int(match.groups[3]) if match.groups[3] else None
+    return filepath, int(match.groups[2]), col
+
+def _parse_analyzer_json(stdout, tool):
+    """Returns the diagnostics from `go vet -json` or `go fix -json` output."""
+
+    # The output is a stream of JSON objects, one per package, which exits 0
+    # even if there are diagnostics. JSON strings can't contain literal
+    # newlines and the objects' contents are indented, so "}\n{" only occurs
+    # between objects.
+    diagnostics = []
+    for pkg_output in json.decode("[%s]" % stdout.strip().replace("}\n{", "},{")):
+        for pkg_findings in pkg_output.values():
+            for analyzer, findings in pkg_findings.items():
+                # Analyzers that fail on a package report {"error": "..."}
+                # instead of a list of findings.
+                if type(findings) == "dict":
+                    fail("`%s` analyzer %s failed: %s" % (tool, analyzer, findings.get("error")))
+                diagnostics.extend(findings)
+    return diagnostics
+
+def _emit_analyzer_finding(ctx, finding, tool):
+    filepath, line, col = _parse_posn(ctx, finding["posn"], tool)
+    end_kwargs = {}
+
+    # `end` may be missing or "-".
+    end = _parse_posn(ctx, finding.get("end", ""), tool, allow_invalid = True)
+
+    # Analyzers that don't set an end position report end == posn, which isn't
+    # a useful span to highlight.
+    if end and col and end[2] and end[0] == filepath and (end[1], end[2]) > (line, col):
+        end_kwargs = {"end_line": end[1], "end_col": end[2]}
+
+    ctx.emit.finding(
+        level = "error",
+        filepath = filepath,
+        line = line,
+        col = col,
+        message = finding["message"],
+        **end_kwargs
+    )
+
+def _parse_diff(ctx, diff):
+    """Parses `go fix -diff` output into one change per diff hunk.
+
+    Returns:
+      A dict mapping each modified file's path to a list of changes, each a dict
+      with the hunk's line range in the original file (`line` and `end_line`,
+      1-based and inclusive) and the `replacement` for those lines.
+    """
+    changes_by_file = {}
+    changes = None
+    old_left, new_left = 0, 0
+    for line in diff.splitlines(True):
+        if old_left or new_left:
+            # Hunk bodies are delimited by the header's line counts, since a
+            # removed line could look like a "---" file header.
+            if line.startswith("\\"):
+                # "\ No newline at end of file". `go fix` output is always
+                # formatted, so this only applies to removed lines.
                 continue
-        if current_package_lines:
-            findings_by_package.update(json.decode("\n".join(current_package_lines)))
-            current_package_lines = []
-
-    for pkg_findings in findings_by_package.values():
-        for check_findings in pkg_findings.values():
-            for finding in check_findings:
-                match = ctx.re.match(r"^%s/(.+):(\d+):(\d+)$" % ctx.scm.root, finding["posn"])
-                ctx.emit.finding(
-                    level = "error",
-                    filepath = match.groups[1],
-                    line = int(match.groups[2]),
-                    col = int(match.groups[3]),
-                    message = finding["message"],
-                )
+            if not line.startswith("+"):
+                old_left -= 1
+            if not line.startswith("-"):
+                changes[-1]["replacement"] += line[1:]
+                new_left -= 1
+        elif line.startswith("--- ") and line.endswith(" (old)\n"):
+            filepath = _relpath(ctx, line[len("--- "):-len(" (old)\n")])
+            if not filepath:
+                fail("unrecognized file in `go fix -diff` output: %r" % line)
+            changes = changes_by_file.setdefault(filepath, [])
+        elif not line.startswith("+++ "):
+            # A missing count means 1. `go fix` always includes context lines,
+            # so there's no ambiguity with an empty range.
+            hunk = ctx.re.match(r"^@@ -(\d+)(?:,(\d+))? \+\d+(?:,(\d+))? @@", line)
+            if not hunk or changes == None:
+                fail("unrecognized line in `go fix -diff` output: %r" % line)
+            start = int(hunk.groups[1])
+            old_left = int(hunk.groups[2] or 1)
+            new_left = int(hunk.groups[3] or 1)
+            changes.append({
+                "line": start,
+                "end_line": start + old_left - 1,
+                "replacement": "",
+            })
+    if old_left or new_left:
+        fail("truncated `go fix -diff` output")
+    return changes_by_file

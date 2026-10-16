@@ -168,8 +168,7 @@ func statImpl(path string) (starlark.Value, error) {
 		}
 		// Strip the *fs.PathError wrapper, which contains the absolute host
 		// path, for determinism.
-		var pathErr *fs.PathError
-		if errors.As(err, &pathErr) {
+		if pathErr, ok := errors.AsType[*fs.PathError](err); ok {
 			err = pathErr.Err
 		}
 		return nil, err
