@@ -1600,7 +1600,15 @@ func RunTests(ctx context.Context, o *Options) error {
 	if err != nil {
 		return err
 	}
-	err = runTestsInner(ctx, tmpdir, o)
+	// Resolve symlinks so that the roots of the checkouts that tests run
+	// against match the paths that subprocesses report, like `shac check`
+	// does for its root. On macOS, the temporary directory is under /var,
+	// which is a symlink to /private/var, so for example `go fix -diff`
+	// reports paths under /private/var.
+	resolvedTmpdir, err := filepath.EvalSymlinks(tmpdir)
+	if err == nil {
+		err = runTestsInner(ctx, resolvedTmpdir, o)
+	}
 	if err2 := os.RemoveAll(tmpdir); err == nil {
 		err = err2
 	}
