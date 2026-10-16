@@ -300,6 +300,16 @@ $ shac fmt
 - no_trailing_whitespace (all good!)
 ```
 
+`shac fmt` only runs formatters. To apply the fixes from all checks, formatters
+or not, and then report the findings that couldn't be fixed, run `shac fix`.
+Like `shac check`, it fails if any of the remaining findings is an error.
+
+Pass `--fix-level=warning` or `--fix-level=error` to only apply the fixes of
+findings at or above that level, and `--fail-level` to change the minimum level
+of remaining findings that causes a failure, as with `shac check`. Pass
+`--exit-zero` to exit 0 even if findings remain, so that a failure means shac
+itself failed, e.g. because a check crashed.
+
 ## Road map
 
 Planned features/changes, in descending order by priority:

@@ -15,11 +15,16 @@
 package engine
 
 import (
+	"context"
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/google/go-cmp/cmp"
 )
@@ -213,7 +218,8 @@ func TestFix(t *testing.T) {
 			},
 		},
 		{
-			name: "various_level_findings.star",
+			name:  "various_level_findings.star",
+			level: Notice,
 			want: []string{
 				"NOTICE",
 				"WARNING",
@@ -247,6 +253,7 @@ func TestFix(t *testing.T) {
 			o := Options{
 				Dir:        root,
 				EntryPoint: data[i].name,
+				FixLevel:   data[i].level,
 				config:     "../config/valid.textproto",
 			}
 			err = Fix(t.Context(), &o, true, nil)
@@ -274,6 +281,306 @@ func TestFix(t *testing.T) {
 				t.Fatalf("Wrong updated other.txt lines (-want +got):\n%s", diff)
 			}
 		})
+	}
+}
+
+// TestFix_FixLevel verifies that only findings at or above the fix level are
+// fixed.
+func TestFix_FixLevel(t *testing.T) {
+	t.Parallel()
+	data := []struct {
+		level Level
+		want  []string
+	}{
+		{Nothing, []string{"NOTICE", "WARNING", "ERROR", "that may be modified", ""}},
+		{Error, []string{"These are", "the contents", "ERROR", "that may be modified", ""}},
+		{Warning, []string{"These are", "WARNING", "ERROR", "that may be modified", ""}},
+	}
+	for _, d := range data {
+		t.Run(string(d.level), func(t *testing.T) {
+			t.Parallel()
+			root := t.TempDir()
+			writeFile(t, root, "file.txt", "These are\nthe contents\nof the file\nthat may be modified\n")
+			copyFile(t, root, filepath.Join("testdata", "fix", "various_level_findings.star"))
+			o := Options{
+				Dir:        root,
+				EntryPoint: "various_level_findings.star",
+				FixLevel:   d.level,
+				config:     "../config/valid.textproto",
+			}
+			if err := Fix(t.Context(), &o, true, nil); err != nil {
+				t.Fatal(err)
+			}
+			got := strings.Split(readFile(t, filepath.Join(root, "file.txt")), "\n")
+			if diff := cmp.Diff(d.want, got); diff != "" {
+				t.Fatalf("Wrong updated file lines (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+// reportCompletions records findings and how many times each check completed.
+type reportCompletions struct {
+	reportEmitNoPrint
+	completions map[string]int
+}
+
+func (r *reportCompletions) CheckCompleted(ctx context.Context, check string, start time.Time, d time.Duration, l Level, err error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.completions == nil {
+		r.completions = map[string]int{}
+	}
+	r.completions[check]++
+}
+
+func TestFix_Report(t *testing.T) {
+	t.Parallel()
+
+	data := []struct {
+		name string
+		// star is the content of shac.star.
+		star      string
+		fixLevel  Level
+		failLevel Level
+		// want is the expected content of file.txt after fixing.
+		want string
+		// wantFindings are the reported findings, as "<check>/<level>:<line>".
+		wantFindings []string
+		wantErr      error
+	}{
+		{
+			// Nothing to fix, so the findings of the first and only pass are
+			// reported.
+			name: "nothing_to_fix",
+			star: "" +
+				"def unfixable(ctx):\n" +
+				"    ctx.emit.finding(level = \"error\", filepath = \"file.txt\", line = 2, message = \"bad\")\n" +
+				"\n" +
+				"shac.register_check(unfixable)\n",
+			want:         "a\nb\n",
+			wantFindings: []string{"unfixable/error:2"},
+			wantErr:      ErrCheckFailed,
+		},
+		{
+			// The fixed error is not reported, but the unfixable error is, at
+			// its line after the fix inserted a line above it.
+			name: "remaining_error_after_fix",
+			star: "" +
+				"def header(ctx):\n" +
+				"    if not str(ctx.io.read_file(\"file.txt\")).startswith(\"HEADER\"):\n" +
+				"        ctx.emit.finding(level = \"error\", filepath = \"file.txt\", line = 1, message = \"no header\", replacements = [\"HEADER\\na\\n\"])\n" +
+				"\n" +
+				"def unfixable(ctx):\n" +
+				"    lines = str(ctx.io.read_file(\"file.txt\")).splitlines()\n" +
+				"    ctx.emit.finding(level = \"error\", filepath = \"file.txt\", line = lines.index(\"b\") + 1, message = \"bad\")\n" +
+				"\n" +
+				"shac.register_check(header)\n" +
+				"shac.register_check(unfixable)\n",
+			want:         "HEADER\na\nb\n",
+			wantFindings: []string{"unfixable/error:3"},
+			wantErr:      ErrCheckFailed,
+		},
+		{
+			// header's fix introduces trailing whitespace, which trailing_ws
+			// didn't report in the first pass. It must still be fixed, and
+			// nothing reported.
+			name: "fix_causes_new_finding",
+			star: "" +
+				"def header(ctx):\n" +
+				"    if not str(ctx.io.read_file(\"file.txt\")).startswith(\"HEADER\"):\n" +
+				"        ctx.emit.finding(level = \"error\", filepath = \"file.txt\", line = 1, message = \"no header\", replacements = [\"HEADER  \\na\\n\"])\n" +
+				"\n" +
+				"def trailing_ws(ctx):\n" +
+				"    for i, l in enumerate(str(ctx.io.read_file(\"file.txt\")).split(\"\\n\")):\n" +
+				"        if l.endswith(\" \"):\n" +
+				"            ctx.emit.finding(level = \"error\", filepath = \"file.txt\", line = i + 1, message = \"trailing ws\", replacements = [l.rstrip() + \"\\n\"])\n" +
+				"\n" +
+				"shac.register_check(header)\n" +
+				"shac.register_check(trailing_ws)\n",
+			want: "HEADER\na\nb\n",
+		},
+		{
+			// Warnings below the fix level aren't fixed, but they are reported
+			// without failing.
+			name: "warning_not_fixed",
+			star: "" +
+				"def warn(ctx):\n" +
+				"    ctx.emit.finding(level = \"warning\", filepath = \"file.txt\", line = 1, message = \"meh\", replacements = [\"A\"])\n" +
+				"\n" +
+				"shac.register_check(warn)\n",
+			fixLevel:     Error,
+			want:         "a\nb\n",
+			wantFindings: []string{"warn/warning:1"},
+		},
+		{
+			// Remaining warnings fail with a warning fail level.
+			name: "warning_not_fixed_fails",
+			star: "" +
+				"def warn(ctx):\n" +
+				"    ctx.emit.finding(level = \"warning\", filepath = \"file.txt\", line = 1, message = \"meh\", replacements = [\"A\"])\n" +
+				"\n" +
+				"shac.register_check(warn)\n",
+			fixLevel:     Error,
+			failLevel:    Warning,
+			want:         "a\nb\n",
+			wantFindings: []string{"warn/warning:1"},
+			wantErr:      ErrCheckFailed,
+		},
+		{
+			name: "warning_fixed",
+			star: "" +
+				"def warn(ctx):\n" +
+				"    if str(ctx.io.read_file(\"file.txt\")).startswith(\"a\"):\n" +
+				"        ctx.emit.finding(level = \"warning\", filepath = \"file.txt\", line = 1, message = \"meh\", replacements = [\"A\\n\"])\n" +
+				"\n" +
+				"shac.register_check(warn)\n",
+			want: "A\nb\n",
+		},
+	}
+	for _, d := range data {
+		t.Run(d.name, func(t *testing.T) {
+			t.Parallel()
+			root := t.TempDir()
+			writeFile(t, root, "file.txt", "a\nb\n")
+			writeFile(t, root, "shac.star", d.star)
+			r := &reportCompletions{t: t}
+			o := Options{
+				Report:    r,
+				Dir:       root,
+				FixLevel:  d.fixLevel,
+				FailLevel: d.failLevel,
+				config:    "../config/valid.textproto",
+			}
+			if err := Fix(t.Context(), &o, true, nil); !errors.Is(err, d.wantErr) {
+				t.Fatalf("Fix() error = %v, want %v", err, d.wantErr)
+			}
+			if o.Report != r {
+				t.Errorf("Fix() did not restore o.Report")
+			}
+			if got := readFile(t, filepath.Join(root, "file.txt")); got != d.want {
+				t.Errorf("file.txt = %q, want %q", got, d.want)
+			}
+			var gotFindings []string
+			for _, f := range r.findings {
+				gotFindings = append(gotFindings, fmt.Sprintf("%s/%s:%d", f.Check, f.Level, f.Span.Start.Line))
+			}
+			if diff := cmp.Diff(d.wantFindings, gotFindings); diff != "" {
+				t.Errorf("Wrong findings (-want +got):\n%s", diff)
+			}
+			// Every check's results are reported exactly once.
+			for check, n := range r.completions {
+				if n != 1 {
+					t.Errorf("check %s completed %d times, want 1", check, n)
+				}
+			}
+		})
+	}
+}
+
+// TestFix_RunCounts verifies how many times each check runs, since checks can
+// be slow.
+func TestFix_RunCounts(t *testing.T) {
+	t.Parallel()
+
+	fmtImpl := "" +
+		"def fmt(ctx):\n" +
+		"    for i, l in enumerate(str(ctx.io.read_file(\"file.txt\")).split(\"\\n\")):\n" +
+		"        if l != l.rstrip():\n" +
+		"            ctx.emit.finding(level = \"error\", filepath = \"file.txt\", line = i + 1, message = \"ws\", replacements = [l.rstrip() + \"\\n\"])\n"
+	data := []struct {
+		name string
+		// file is the initial content of file.txt.
+		file string
+		// noFormatter omits the "fmt" formatter check.
+		noFormatter bool
+		// other is the implementation of the "other" check, a non-formatter.
+		// It's omitted if empty.
+		other string
+		want  map[string]int
+	}{
+		{
+			name: "only_formatter",
+			file: "a  \n",
+			want: map[string]int{"fmt": 2},
+		},
+		{
+			name:        "only_other",
+			file:        "a\n",
+			noFormatter: true,
+			other: "" +
+				"    if not str(ctx.io.read_file(\"file.txt\")).startswith(\"H\"):\n" +
+				"        ctx.emit.finding(level = \"error\", filepath = \"file.txt\", line = 1, message = \"h\", replacements = [\"H\\na\\n\"])\n",
+			// Once to fix, and once more to confirm.
+			want: map[string]int{"other": 2},
+		},
+		{
+			name:  "nothing_to_fix",
+			file:  "a\n",
+			other: "    pass\n",
+			want:  map[string]int{"fmt": 1, "other": 1},
+		},
+		{
+			// The formatter runs again to confirm its fix, but the other
+			// check only runs on the formatted file.
+			name:  "formatting_only",
+			file:  "a  \n",
+			other: "    pass\n",
+			want:  map[string]int{"fmt": 2, "other": 1},
+		},
+		{
+			// The other check's fix adds trailing whitespace, so all the
+			// checks run again after it.
+			name: "other_fix",
+			file: "a\n",
+			other: "" +
+				"    if not str(ctx.io.read_file(\"file.txt\")).startswith(\"H\"):\n" +
+				"        ctx.emit.finding(level = \"error\", filepath = \"file.txt\", line = 1, message = \"h\", replacements = [\"H  \\na\\n\"])\n",
+			want: map[string]int{"fmt": 3, "other": 3},
+		},
+	}
+	for _, d := range data {
+		t.Run(d.name, func(t *testing.T) {
+			t.Parallel()
+			root := t.TempDir()
+			writeFile(t, root, "file.txt", d.file)
+			star := ""
+			if !d.noFormatter {
+				star += fmtImpl + "shac.register_check(shac.check(fmt, formatter = True))\n"
+			}
+			if d.other != "" {
+				star += "def other(ctx):\n" + d.other + "shac.register_check(other)\n"
+			}
+			writeFile(t, root, "shac.star", star)
+			var mu sync.Mutex
+			got := map[string]int{}
+			o := Options{
+				Report: &reportCompletions{t: t},
+				Dir:    root,
+				config: "../config/valid.textproto",
+				checkStarted: func(name string) {
+					mu.Lock()
+					defer mu.Unlock()
+					got[name]++
+				},
+			}
+			if err := Fix(t.Context(), &o, true, nil); err != nil {
+				t.Fatal(err)
+			}
+			if diff := cmp.Diff(d.want, got); diff != "" {
+				t.Errorf("Wrong check run counts (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestFix_ReportWithWriter(t *testing.T) {
+	t.Parallel()
+	o := Options{Report: &reportNoPrint{t: t}, Dir: t.TempDir()}
+	var b strings.Builder
+	err := Fix(t.Context(), &o, true, &b)
+	if err == nil || err.Error() != "cannot report findings when writing fixed contents" {
+		t.Fatalf("Fix() error = %v", err)
 	}
 }
 

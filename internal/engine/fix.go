@@ -42,16 +42,34 @@ const maxFixPasses = 5
 // Fix loads a main shac.star file from a root directory and runs checks defined
 // in it, then applies suggested fixes to files on disk.
 //
+// Only findings with a single replacement and a level at or above o.FixLevel
+// are fixed.
+//
 // Findings whose spans overlap are not applied together, since the later
 // finding's replacement was computed against file contents that the earlier
 // finding's replacement changes. Instead, only non-overlapping findings are
-// applied in each pass, and the checks are re-run until nothing is skipped. An
-// error is returned if the fixes don't converge: either because a pass leaves
-// the fixed files in a state already seen after an earlier pass (a no-op or
-// oscillating fix), or because maxFixPasses is reached.
+// applied in each pass, and the checks that had findings skipped are re-run
+// until nothing is skipped. An error is returned if the fixes don't converge:
+// either because a pass leaves the fixed files in a state already seen after
+// an earlier pass (a no-op or oscillating fix), or because maxFixPasses is
+// reached.
+//
+// If o.Report is set, the findings that remain once everything is fixed are
+// reported to it, and ErrCheckFailed is returned if any of them is at or above
+// o.FailLevel. Applying fixes can resolve or move other findings, and even cause
+// new ones from checks that had none on the fixed files, so after any fix the
+// checks are run again on all the files, both to fix the new findings and to
+// report accurate results. To avoid running slow checks more than needed, the
+// formatters are run and fixed first, like `shac fmt && shac check` would, so
+// that the other checks normally run only once, on formatted files. All the
+// checks are only re-run if the other checks' fixes change files.
 func Fix(ctx context.Context, o *Options, quiet bool, w io.Writer) error {
-	if o.Report != nil {
-		return fmt.Errorf("cannot overwrite reporter")
+	if o.FixLevel != Nothing && !o.FixLevel.isValid() {
+		return fmt.Errorf("invalid fix level %q", o.FixLevel)
+	}
+	report := o.Report
+	if report != nil && w != nil {
+		return errors.New("cannot report findings when writing fixed contents")
 	}
 	// Emitting formatted output to w (shac fmt --emit) only supports a single
 	// file, not a directory.
@@ -60,57 +78,179 @@ func Fix(ctx context.Context, o *Options, quiet bool, w io.Writer) error {
 			return fmt.Errorf("is a directory: %s", o.Files[0])
 		}
 	}
-	// Re-run passes narrow the allowlist and (possibly) the files; restore
-	// them so that the caller's Options are unchanged on return.
-	origAllowList, origFiles := o.Filter.AllowList, o.Files
+	// Passes narrow the checks and (possibly) the files; restore them so that
+	// the caller's Options are unchanged on return.
+	origFilter, origFiles := o.Filter, o.Files
 	defer func() {
-		o.Report = nil
-		o.Filter.AllowList = origAllowList
+		o.Report = report
+		o.Filter = origFilter
 		o.Files = origFiles
+		o.noDirWarning = false
 	}()
 
+	lo := loopOptions{quiet: quiet, warnDirs: !quiet, record: report != nil, w: w}
+	if report == nil || o.Filter.FormatterFiltering != AllChecks {
+		rec, _, err := fixLoop(ctx, o, lo)
+		return replay(ctx, report, err, rec)
+	}
+
+	o.Filter.FormatterFiltering = OnlyFormatters
+	formatters, _, err := fixLoop(ctx, o, lo)
+	noFormatters := errors.Is(err, errNoChecksToRun)
+	if noFormatters {
+		err = nil
+	}
+	if err != nil {
+		return replay(ctx, report, err, formatters)
+	}
+
+	// If the other checks' fixes change files, all the checks run again below,
+	// so there's no need to finish fixing in this phase.
+	o.Filter.FormatterFiltering = OnlyNonFormatters
+	// Without formatters, the first phase stopped before it could warn about
+	// directories without affected files.
+	others, changed, err := fixLoop(ctx, o, loopOptions{quiet: quiet, warnDirs: noFormatters && !quiet, record: true, stopOnChange: true})
+	if errors.Is(err, errNoChecksToRun) && !noFormatters {
+		err = nil
+	}
+	if err != nil || !changed {
+		return replay(ctx, report, err, formatters, others)
+	}
+
+	// The other checks' fixes changed files, which may need formatting again
+	// or otherwise affect any check's findings.
+	if !quiet {
+		fmt.Fprintln(os.Stderr, "re-running all checks since fixes changed files")
+	}
+	o.Filter.FormatterFiltering = AllChecks
+	rec, _, err := fixLoop(ctx, o, loopOptions{quiet: quiet, record: true})
+	return replay(ctx, report, err, rec)
+}
+
+// replay reports the output recorded by recs to report, if set, and returns
+// err if set, or ErrCheckFailed if any recorded check failed.
+func replay(ctx context.Context, report Report, err error, recs ...*recorder) error {
+	if report == nil {
+		return err
+	}
+	var failed bool
+	for _, rec := range recs {
+		if rec == nil {
+			continue
+		}
+		if err2 := rec.replay(ctx, report); errors.Is(err2, ErrCheckFailed) {
+			failed = true
+		} else if err2 != nil && err == nil {
+			err = err2
+		}
+	}
+	if err == nil && failed {
+		return ErrCheckFailed
+	}
+	return err
+}
+
+// loopOptions configures fixLoop.
+type loopOptions struct {
+	quiet bool
+	// warnDirs enables the warning about directory arguments without affected
+	// files in the first pass.
+	warnDirs bool
+	// record makes fixLoop run the checks again on all the files after any
+	// fix, until a pass changes no file, and return the output of that last
+	// pass.
+	record bool
+	// stopOnChange makes fixLoop return as soon as a pass changes a file,
+	// without a recorder.
+	stopOnChange bool
+	// w receives the fixed contents instead of the files, as in Fix().
+	w io.Writer
+}
+
+// fixLoop runs the checks selected by o and applies their fixes until a pass
+// leaves nothing to fix, as described by Fix().
+//
+// If the loop fails, the returned recorder holds the output of the failed pass
+// if lo.record is set and the pass ran all the checks on all the files, since
+// that output is then accurate. changed reports whether any file was changed.
+func fixLoop(ctx context.Context, o *Options, lo loopOptions) (rec *recorder, changed bool, err error) {
+	quiet, w := lo.quiet, lo.w
+	origAllowList, origFiles := o.Filter.AllowList, o.Files
 	// state holds the digest of every file fixed so far, keyed by absolute
 	// path; files that were never fixed are unchanged since the first pass.
 	// seen holds the fingerprint of the input of every re-run pass so far:
 	// the on-disk state plus the checks and files the pass is narrowed to.
 	state := map[string][sha256.Size]byte{}
 	seen := map[[sha256.Size]byte]struct{}{}
+	// full is true if the pass runs all the checks on all the files, rather
+	// than only re-running the checks that had findings skipped.
+	full := true
+	// fixingPasses counts the passes that applied or skipped fixes. They are
+	// bounded by maxFixPasses, unlike the full pass that finds nothing left to
+	// fix and only confirms the findings to report.
+	fixingPasses := 0
 	for pass := 1; ; pass++ {
-		res, err := fixOnce(ctx, o, quiet, pass > 1, w)
+		fc := newFindingCollector(o.fixLevel(), quiet, pass > 1)
+		rec = nil
+		if lo.record && full {
+			// Record the output of the checks so that it can be reported if
+			// this pass turns out to be the last one.
+			rec = &recorder{failLevel: o.failLevel()}
+			fc.tee = rec
+		}
+		o.noDirWarning = !lo.warnDirs || pass > 1
+		res, err := fixOnce(ctx, o, fc, w)
 		if err != nil {
-			return err
+			return rec, changed, err
 		}
-		if res.numSkipped == 0 {
-			return nil
+		changed = changed || res.changed
+		if lo.stopOnChange && res.changed {
+			return nil, true, nil
 		}
+
+		var nextChecks, nextFiles []string
+		var msg string
 		noun := "finding"
 		if res.numSkipped != 1 {
 			noun += "s"
 		}
-		if w != nil {
-			// When writing to w instead of modifying files in place, re-running
-			// the checks would see the unmodified files and produce the same
-			// findings, so there's no point in doing another pass. This is a
-			// limitation of the mode rather than a misbehaving check, so warn
-			// (even in quiet mode, since silently leaving findings unfixed is
-			// worse than a bit of noise) instead of failing.
-			fmt.Fprintf(os.Stderr, "%d %s not applied due to overlap with other fixes; apply the emitted fixes and run again\n", res.numSkipped, noun)
-			return nil
-		}
-		// Only the checks that had findings skipped need to run again; the
-		// checks whose findings were all applied have nothing left to do.
-		// Every skipped check ran in this pass, so it is allowed by the
-		// original filter and the narrowed allowlist is a subset of it.
-		nextChecks := res.skippedChecks
-		// Similarly only the files with skipped findings need to be analyzed
-		// again, but only narrow o.Files when the caller already specified
-		// files, so that every pass runs in the same mode. Switching from git
-		// mode to files mode would change what the checks see:
-		// affected_files() reports action == "" for specified files, and the
-		// ignore list from shac.textproto is not applied to them.
-		nextFiles := origFiles
-		if len(origFiles) > 0 {
-			nextFiles = res.skippedFiles
+		if res.numSkipped == 0 {
+			if !lo.record || (full && !res.changed) {
+				return rec, changed, nil
+			}
+			nextChecks, nextFiles, full = origAllowList, origFiles, true
+			msg = fmt.Sprintf("re-running checks to find remaining findings (pass %d)", pass+1)
+		} else {
+			if w != nil {
+				// When writing to w instead of modifying files in place,
+				// re-running the checks would see the unmodified files and
+				// produce the same findings, so there's no point in doing
+				// another pass. This is a limitation of the mode rather than
+				// a misbehaving check, so warn (even in quiet mode, since
+				// silently leaving findings unfixed is worse than a bit of
+				// noise) instead of failing.
+				fmt.Fprintf(os.Stderr, "%d %s not applied due to overlap with other fixes; apply the emitted fixes and run again\n", res.numSkipped, noun)
+				return nil, changed, nil
+			}
+			// Only the checks that had findings skipped need to run again;
+			// the checks whose findings were all applied have nothing left to
+			// do. Every skipped check ran in this pass, so it is allowed by
+			// the original filter and the narrowed allowlist is a subset of
+			// it.
+			nextChecks = res.skippedChecks
+			// Similarly only the files with skipped findings need to be
+			// analyzed again, but only narrow o.Files when the caller already
+			// specified files, so that every pass runs in the same mode.
+			// Switching from git mode to files mode would change what the
+			// checks see: affected_files() reports action == "" for specified
+			// files, and the ignore list from shac.textproto is not applied to
+			// them.
+			nextFiles = origFiles
+			if len(origFiles) > 0 {
+				nextFiles = res.skippedFiles
+			}
+			full = false
+			msg = fmt.Sprintf("%d %s not yet fixed due to overlap with applied fixes; re-running checks (pass %d)", res.numSkipped, noun, pass+1)
 		}
 		// The next pass is fully determined by the on-disk state and what it
 		// is narrowed to, so if that input was already seen, the pass will
@@ -118,17 +258,23 @@ func Fix(ctx context.Context, o *Options, quiet bool, w io.Writer) error {
 		// converge: a no-op replacement repeats the previous input and
 		// oscillating replacements repeat an older one. Stop right away
 		// rather than running out the pass bound.
+		if res.changed || res.numSkipped > 0 {
+			fixingPasses++
+		}
 		maps.Copy(state, res.written)
 		fp := rerunFingerprint(state, nextChecks, nextFiles)
-		if _, ok := seen[fp]; ok {
-			return fmt.Errorf("%d %s not fixed: fixes did not converge after %d passes", res.numSkipped, noun, pass)
-		}
+		_, repeated := seen[fp]
 		seen[fp] = struct{}{}
-		if pass >= maxFixPasses {
-			return fmt.Errorf("%d %s still not fixed after %d passes due to overlap with other fixes", res.numSkipped, noun, pass)
+		if repeated || fixingPasses >= maxFixPasses {
+			if res.numSkipped == 0 {
+				return nil, changed, fmt.Errorf("fixes did not converge after %d passes", pass)
+			} else if repeated {
+				return nil, changed, fmt.Errorf("%d %s not fixed: fixes did not converge after %d passes", res.numSkipped, noun, pass)
+			}
+			return nil, changed, fmt.Errorf("%d %s still not fixed after %d passes due to overlap with other fixes", res.numSkipped, noun, pass)
 		}
 		if !quiet {
-			fmt.Fprintf(os.Stderr, "%d %s not yet fixed due to overlap with applied fixes; re-running checks (pass %d)\n", res.numSkipped, noun, pass+1)
+			fmt.Fprintln(os.Stderr, msg)
 		}
 		o.Filter.AllowList = nextChecks
 		o.Files = nextFiles
@@ -173,21 +319,15 @@ type passResult struct {
 	// pass, keyed by absolute path. It is unused when writing to w instead of
 	// the files, since the checks are not re-run then.
 	written map[string][sha256.Size]byte
+	// changed is true if any file's contents were changed in this pass.
+	changed bool
 }
 
-// fixOnce runs the checks once and applies all non-overlapping findings. rerun
-// indicates that this is not the first pass, in which case checks that have
-// nothing left to fix are not logged, to avoid repeating the same output for
-// every pass.
-func fixOnce(ctx context.Context, o *Options, quiet, rerun bool, w io.Writer) (passResult, error) {
+// fixOnce runs the checks once, collecting findings to fix with fc, and
+// applies all non-overlapping findings.
+func fixOnce(ctx context.Context, o *Options, fc *findingCollector, w io.Writer) (passResult, error) {
 	var res passResult
-	fc := findingCollector{
-		countsByCheck:  map[string]int{},
-		quiet:          quiet,
-		rerun:          rerun,
-		findingsByFile: make(map[findingFile][]findingToFix),
-	}
-	o.Report = &fc
+	o.Report = fc
 	if err := Run(ctx, o); err != nil && !errors.Is(err, ErrCheckFailed) {
 		return res, err
 	}
@@ -222,6 +362,7 @@ func fixOnce(ctx context.Context, o *Options, quiet, rerun bool, w io.Writer) (p
 			return res, err
 		}
 		res.written[path] = fr.digest
+		res.changed = res.changed || fr.changed
 		if fr.numSkipped > 0 {
 			res.numSkipped += fr.numSkipped
 			res.skippedFiles = append(res.skippedFiles, path)
@@ -233,7 +374,7 @@ func fixOnce(ctx context.Context, o *Options, quiet, rerun bool, w io.Writer) (p
 		if fr.numFixed != 1 {
 			noun += "s"
 		}
-		if !quiet {
+		if !fc.quiet {
 			fmt.Fprintf(os.Stderr, "Fixed %d %s in %s\n", fr.numFixed, noun, f.path)
 		}
 	}
@@ -255,6 +396,9 @@ type fileFixResult struct {
 	// digest is a hash of the file contents after applying the findings. It's
 	// only set by fixFindings.
 	digest [sha256.Size]byte
+	// changed is true if applying the findings changed the file contents.
+	// It's only set by fixFindings.
+	changed bool
 }
 
 // fixFindings applies the given findings to the file at path, writing the
@@ -275,6 +419,7 @@ func fixFindings(path string, findings []findingToFix, w io.Writer) (fileFixResu
 		return res, err
 	}
 	res.digest = sha256.Sum256([]byte(content))
+	res.changed = content != string(b)
 	if w != nil {
 		if _, err := io.WriteString(w, content); err != nil {
 			return res, err
@@ -411,27 +556,47 @@ func (f *findingToFix) normalize(fileLines []string) {
 	}
 }
 
+// findingCollector is the Report used while fixing. It collects the findings
+// to fix, and forwards everything to tee, if set.
 type findingCollector struct {
 	mu             sync.Mutex
 	findingsByFile map[findingFile][]findingToFix
 	countsByCheck  map[string]int
-	quiet          bool
+	// minLevel is the minimum level of findings to fix.
+	minLevel Level
+	quiet    bool
 	// rerun is true when the checks are being re-run to apply findings that
 	// were skipped in a previous pass. Checks that have nothing to fix are
 	// not logged in that case, since they were already reported.
 	rerun bool
+	// tee receives everything reported by the checks. When set, it is
+	// responsible for showing the checks' output, so the collector doesn't
+	// log check results or print() output itself.
+	tee Report
+}
+
+func newFindingCollector(minLevel Level, quiet, rerun bool) *findingCollector {
+	return &findingCollector{
+		findingsByFile: map[findingFile][]findingToFix{},
+		countsByCheck:  map[string]int{},
+		minLevel:       minLevel,
+		quiet:          quiet,
+		rerun:          rerun,
+	}
 }
 
 var _ Report = (*findingCollector)(nil)
 
 func (c *findingCollector) EmitFinding(ctx context.Context, check string, level Level, message, root, file string, s Span, replacements []string, props map[string]string) error {
+	if c.tee != nil {
+		if err := c.tee.EmitFinding(ctx, check, level, message, root, file, s, replacements, props); err != nil {
+			return err
+		}
+	}
 	// Only findings with a single replacement will be automatically fixed.
 	// Findings with more than one replacement do not have a single fix that can
 	// be automatically chosen.
-	// TODO(olivernewman): Add level-based filtering; it should be possible to
-	// only apply fixes for findings with level=error, as others are not
-	// necessary to fix for `shac check` to pass.
-	if len(replacements) == 1 {
+	if len(replacements) == 1 && level.AtLeast(c.minLevel) {
 		c.mu.Lock()
 		defer c.mu.Unlock()
 		key := findingFile{root: root, path: filepath.FromSlash(file)}
@@ -446,14 +611,24 @@ func (c *findingCollector) EmitFinding(ctx context.Context, check string, level 
 }
 
 func (c *findingCollector) EmitCommitMessageFinding(ctx context.Context, check string, level Level, message string, commitHash string, commitMessage string, s Span, props map[string]string) error {
+	if c.tee != nil {
+		return c.tee.EmitCommitMessageFinding(ctx, check, level, message, commitHash, commitMessage, s, props)
+	}
 	return nil
 }
 
-func (c *findingCollector) EmitArtifact(context.Context, string, string, string, []byte) error {
+func (c *findingCollector) EmitArtifact(ctx context.Context, check, root, file string, content []byte) error {
+	if c.tee != nil {
+		return c.tee.EmitArtifact(ctx, check, root, file, content)
+	}
 	return nil
 }
 
 func (c *findingCollector) CheckCompleted(ctx context.Context, check string, start time.Time, d time.Duration, level Level, err error) {
+	if c.tee != nil {
+		c.tee.CheckCompleted(ctx, check, start, d, level, err)
+		return
+	}
 	c.mu.Lock()
 	count := c.countsByCheck[check]
 	c.mu.Unlock()
@@ -476,6 +651,10 @@ func (c *findingCollector) CheckCompleted(ctx context.Context, check string, sta
 }
 
 func (c *findingCollector) Print(ctx context.Context, check, file string, line int, message string) {
+	if c.tee != nil {
+		c.tee.Print(ctx, check, file, line, message)
+		return
+	}
 	c.logf("[%s:%d] %s", file, line, message)
 }
 
@@ -483,4 +662,88 @@ func (c *findingCollector) logf(s string, a ...any) {
 	if !c.quiet {
 		fmt.Fprintf(os.Stderr, s+"\n", a...)
 	}
+}
+
+// recorder is a Report that records everything reported to it so that it can
+// be replayed to another Report later.
+type recorder struct {
+	// failLevel is the minimum level of findings that causes a check to fail.
+	failLevel Level
+
+	mu     sync.Mutex
+	events []func(context.Context, Report) error
+	failed bool
+}
+
+var _ Report = (*recorder)(nil)
+
+func (r *recorder) record(f func(context.Context, Report) error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.events = append(r.events, f)
+}
+
+// replay reports everything that was recorded to report, in the original
+// order, and returns ErrCheckFailed if any check failed.
+func (r *recorder) replay(ctx context.Context, report Report) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, f := range r.events {
+		if err := f(ctx, report); err != nil {
+			return err
+		}
+	}
+	if r.failed {
+		return ErrCheckFailed
+	}
+	return nil
+}
+
+func (r *recorder) EmitFinding(ctx context.Context, check string, level Level, message, root, file string, s Span, replacements []string, props map[string]string) error {
+	r.record(func(ctx context.Context, report Report) error {
+		return report.EmitFinding(ctx, check, level, message, root, file, s, replacements, props)
+	})
+	return nil
+}
+
+func (r *recorder) EmitCommitMessageFinding(ctx context.Context, check string, level Level, message string, commitHash string, commitMessage string, s Span, props map[string]string) error {
+	r.record(func(ctx context.Context, report Report) error {
+		return report.EmitCommitMessageFinding(ctx, check, level, message, commitHash, commitMessage, s, props)
+	})
+	return nil
+}
+
+func (r *recorder) EmitArtifact(ctx context.Context, check, root, file string, content []byte) error {
+	if root != "" {
+		// The file may disappear once this returns, so read it now and replay
+		// it as content.
+		b, err := os.ReadFile(filepath.Join(root, file))
+		if err != nil {
+			return err
+		}
+		root, content = "", b
+	}
+	r.record(func(ctx context.Context, report Report) error {
+		return report.EmitArtifact(ctx, check, root, file, content)
+	})
+	return nil
+}
+
+func (r *recorder) CheckCompleted(ctx context.Context, check string, start time.Time, d time.Duration, level Level, err error) {
+	r.record(func(ctx context.Context, report Report) error {
+		report.CheckCompleted(ctx, check, start, d, level, err)
+		return nil
+	})
+	if level.AtLeast(r.failLevel) {
+		r.mu.Lock()
+		r.failed = true
+		r.mu.Unlock()
+	}
+}
+
+func (r *recorder) Print(ctx context.Context, check, file string, line int, message string) {
+	r.record(func(ctx context.Context, report Report) error {
+		report.Print(ctx, check, file, line, message)
+		return nil
+	})
 }

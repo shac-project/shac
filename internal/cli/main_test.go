@@ -116,15 +116,20 @@ func TestMainErr(t *testing.T) {
 			return []string{"fmt", "-C", root, "--only", "non_formatter"},
 				"no checks to run"
 		},
-		// Simple check that `shac fix` filters out formatters.
-		"fix with no checks to run": func(t *testing.T) ([]string, string) {
+		// `shac fix` runs formatters too, and fails if findings remain.
+		"fix with remaining findings": func(t *testing.T) ([]string, string) {
 			root := t.TempDir()
 			writeFile(t, root, "shac.star", ""+
 				"def formatter(ctx):\n"+
-				"    pass\n"+
+				"    ctx.emit.finding(level = \"error\", message = \"unfixable\")\n"+
 				"shac.register_check(shac.check(formatter, formatter = True))\n")
 			return []string{"fix", "-C", root, "--only", "formatter"},
-				"no checks to run"
+				"a check failed"
+		},
+		"invalid level": func(t *testing.T) ([]string, string) {
+			root := t.TempDir()
+			return []string{"check", "-C", root, "--fail-level", "fatal"},
+				`invalid argument "fatal" for "--fail-level" flag: invalid level value "fatal"`
 		},
 		"test with no test files": func(t *testing.T) ([]string, string) {
 			root := t.TempDir()
@@ -143,6 +148,39 @@ func TestMainErr(t *testing.T) {
 			}
 			if diff := cmp.Diff(wantErr, err.Error()); diff != "" {
 				t.Fatalf("Wrong error (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestMainFix_ExitZero(t *testing.T) {
+	t.Parallel()
+
+	data := map[string]struct {
+		check   string
+		wantErr string
+	}{
+		"remaining finding": {
+			check:   "    ctx.emit.finding(level = \"error\", message = \"unfixable\")\n",
+			wantErr: "",
+		},
+		"crash": {
+			check:   "    fail(\"oh no\")\n",
+			wantErr: "oh no",
+		},
+	}
+	for name, d := range data {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			root := t.TempDir()
+			writeFile(t, root, "shac.star", "def cb(ctx):\n"+d.check+"shac.register_check(cb)\n")
+			err := Main(t.Context(), []string{"shac", "fix", "--quiet", "--exit-zero", "-C", root})
+			if d.wantErr == "" {
+				if err != nil {
+					t.Fatalf("Main() error = %s, want nil", err)
+				}
+			} else if err == nil || !strings.Contains(err.Error(), d.wantErr) {
+				t.Fatalf("Main() error = %v, want error containing %q", err, d.wantErr)
 			}
 		})
 	}

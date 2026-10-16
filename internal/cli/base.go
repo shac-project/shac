@@ -15,8 +15,13 @@
 package cli
 
 import (
+	"bytes"
+	"context"
+	"os"
+
 	flag "github.com/spf13/pflag"
 	"go.fuchsia.dev/shac-project/shac/internal/engine"
+	"go.fuchsia.dev/shac-project/shac/internal/reporting"
 )
 
 type commandBase struct {
@@ -57,4 +62,32 @@ func (c *commandBase) options(files []string) engine.Options {
 			DenyList:  c.denyList,
 		},
 	}
+}
+
+// runWithReport calls run with options whose Report reports findings to the
+// user, and writes the findings as SARIF to jsonOutput if it's set.
+func (c *commandBase) runWithReport(ctx context.Context, files []string, jsonOutput string, run func(context.Context, *engine.Options) error) error {
+	var buf bytes.Buffer
+
+	r, err := reporting.Get(ctx, c.quiet, c.failLevel)
+	if err != nil {
+		return err
+	}
+	r.Reporters = append(r.Reporters, &reporting.SarifReport{Out: &buf})
+
+	o := c.options(files)
+	o.Report = r
+
+	err = run(ctx, &o)
+	if err2 := r.Close(); err == nil {
+		err = err2
+	}
+
+	if jsonOutput != "" {
+		if err2 := os.WriteFile(jsonOutput, buf.Bytes(), 0o600); err == nil {
+			err = err2
+		}
+	}
+
+	return err
 }

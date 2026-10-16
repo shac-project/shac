@@ -331,13 +331,27 @@ type Options struct {
 	// FailLevel is the minimum level of findings that causes a check to fail.
 	// Defaults to Error.
 	FailLevel Level
+	// FixLevel is the minimum level of findings that Fix() applies the fixes
+	// of. Defaults to Notice.
+	FixLevel Level
 
 	Stdin []byte
+
+	// noDirWarning disables the warning about directory arguments without
+	// affected files, for runs that repeat an earlier run that warned.
+	noDirWarning bool
 
 	// config is the configuration file. Defaults to shac.textproto. Only used in
 	// unit tests.
 	config string
+	// checkStarted is called with the name of each check before it runs. Only
+	// used in unit tests.
+	checkStarted func(name string)
 }
+
+// errNoChecksToRun is returned by Run() when the filter leaves no checks to
+// run.
+var errNoChecksToRun = errors.New("no checks to run")
 
 // failLevel returns the minimum level of findings that causes a check to fail.
 func (o *Options) failLevel() Level {
@@ -345,6 +359,15 @@ func (o *Options) failLevel() Level {
 		return Error
 	}
 	return o.FailLevel
+}
+
+// fixLevel returns the minimum level of findings that Fix() applies the fixes
+// of.
+func (o *Options) fixLevel() Level {
+	if o.FixLevel == Nothing {
+		return Notice
+	}
+	return o.FixLevel
 }
 
 // Run loads a main shac.star file from a root directory and runs it.
@@ -645,7 +668,7 @@ func runInner(ctx context.Context, o *Options, tmpdir string) error {
 		}
 	}
 	if totalChecks > 0 && !hasChecksAfterFiltering {
-		return errors.New("no checks to run")
+		return errNoChecksToRun
 	}
 
 	// Run all checks concurrently honoring the CPU limit.
@@ -661,6 +684,9 @@ func runInner(ctx context.Context, o *Options, tmpdir string) error {
 		args.Freeze()
 		for _, check := range s.checks {
 			eg.Go(func() error {
+				if o.checkStarted != nil {
+					o.checkStarted(check.name)
+				}
 				stateCtx := context.WithValue(egCtx, &shacStateCtxKey, s)
 				start := time.Now()
 				pi := func(th *starlark.Thread, msg string) {
@@ -707,7 +733,7 @@ func warnIfNoAffectedFilesInDirs(ctx context.Context, o *Options, scm scmCheckou
 	if o.AllFiles || len(o.Stdin) > 0 {
 		return nil
 	}
-	if fc, ok := o.Report.(*findingCollector); ok && (fc.quiet || fc.rerun) {
+	if o.noDirWarning {
 		return nil
 	}
 	var numDirs int

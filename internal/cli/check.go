@@ -15,13 +15,10 @@
 package cli
 
 import (
-	"bytes"
 	"context"
-	"os"
 
 	flag "github.com/spf13/pflag"
 	"go.fuchsia.dev/shac-project/shac/internal/engine"
-	"go.fuchsia.dev/shac-project/shac/internal/reporting"
 )
 
 type checkCmd struct {
@@ -45,27 +42,5 @@ func (c *checkCmd) SetFlags(f *flag.FlagSet) {
 }
 
 func (c *checkCmd) Execute(ctx context.Context, files []string) error {
-	var buf bytes.Buffer
-
-	r, err := reporting.Get(ctx, c.quiet, c.failLevel)
-	if err != nil {
-		return err
-	}
-	r.Reporters = append(r.Reporters, &reporting.SarifReport{Out: &buf})
-
-	o := c.options(files)
-	o.Report = r
-
-	err = engine.Run(ctx, &o)
-	if err2 := r.Close(); err == nil {
-		err = err2
-	}
-
-	if c.jsonOutput != "" {
-		if err2 := os.WriteFile(c.jsonOutput, buf.Bytes(), 0o600); err == nil {
-			err = err2
-		}
-	}
-
-	return err
+	return c.runWithReport(ctx, files, c.jsonOutput, engine.Run)
 }
