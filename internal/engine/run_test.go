@@ -4095,3 +4095,69 @@ func init() {
 	// Silence logging.
 	log.SetOutput(io.Discard)
 }
+
+func TestRun_FailLevel(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	writeFile(t, root, "file.txt", "content\n")
+	writeFile(t, root, "shac.star", ""+
+		"def warn(ctx):\n"+
+		"    ctx.emit.finding(level = \"warning\", message = \"a warning\")\n"+
+		"\n"+
+		"shac.register_check(warn)\n")
+
+	data := []struct {
+		level   Level
+		wantErr error
+	}{
+		{Nothing, nil},
+		{Error, nil},
+		{Warning, ErrCheckFailed},
+		{Notice, ErrCheckFailed},
+	}
+	for _, d := range data {
+		t.Run(string(d.level), func(t *testing.T) {
+			t.Parallel()
+			o := Options{
+				Report:    &reportEmitNoPrint{t: t},
+				Dir:       root,
+				FailLevel: d.level,
+				config:    "../config/valid.textproto",
+			}
+			if err := Run(t.Context(), &o); !errors.Is(err, d.wantErr) {
+				t.Fatalf("Run() error = %v, want %v", err, d.wantErr)
+			}
+		})
+	}
+}
+
+func TestRun_InvalidFailLevel(t *testing.T) {
+	t.Parallel()
+	o := Options{Dir: t.TempDir(), FailLevel: "fatal"}
+	err := Run(t.Context(), &o)
+	if err == nil || err.Error() != `invalid fail level "fatal"` {
+		t.Fatalf("Run() error = %v, want invalid fail level error", err)
+	}
+}
+
+func TestLevelAtLeast(t *testing.T) {
+	t.Parallel()
+	data := []struct {
+		l, min Level
+		want   bool
+	}{
+		{Error, Error, true},
+		{Error, Warning, true},
+		{Warning, Error, false},
+		{Warning, Notice, true},
+		{Notice, Warning, false},
+		{Notice, Nothing, true},
+		{Nothing, Nothing, false},
+		{Nothing, Notice, false},
+	}
+	for _, d := range data {
+		if got := d.l.AtLeast(d.min); got != d.want {
+			t.Errorf("%q.AtLeast(%q) = %t, want %t", d.l, d.min, got, d.want)
+		}
+	}
+}

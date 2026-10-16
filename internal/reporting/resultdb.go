@@ -69,6 +69,9 @@ type luci struct {
 	// by mu
 	mu         sync.Mutex
 	liveChecks map[string]*sinkpb.TestResult
+
+	// failLevel is the minimum level of findings that causes a check to fail.
+	failLevel engine.Level
 }
 
 func (l *luci) init(ctx context.Context) error {
@@ -226,7 +229,7 @@ func (l *luci) CheckCompleted(ctx context.Context, check string, start time.Time
 			backtrace := html.EscapeString(err.Error() + "\n\n" + stackerr.Backtrace())
 			r.SummaryHtml += "<pre>" + backtrace + "</pre><br>"
 		}
-	} else if level == engine.Error {
+	} else if isFailure(level, l.failLevel) {
 		r.Status = resultpb.TestStatus_FAIL
 	} else {
 		r.Status = resultpb.TestStatus_PASS

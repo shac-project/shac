@@ -151,7 +151,9 @@ shac.register_check(no_trailing_whitespace)
 `ctx.emit.finding()` emits an error message that's annotated with a filepath and
 location within the source file, as well as a severity level. `level = "error"`
 causes `shac check` to produce an exit code of 1. The other possible levels,
-`"warning"` and `"notice"`, only print the message without causing shac to fail.
+`"warning"` and `"notice"`, only print the message without causing shac to fail,
+unless `shac check` is run with `--fail-level=warning` or `--fail-level=notice`
+to lower the minimum level of findings that causes a failure.
 
 Now run `shac check` again:
 

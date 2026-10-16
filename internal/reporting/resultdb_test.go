@@ -305,3 +305,30 @@ func TestResultDBCheckCompletedException(t *testing.T) {
 		t.Errorf("expected backtrace in SummaryHtml, got %s", tr.SummaryHtml)
 	}
 }
+
+func TestLuciCheckCompleted_FailLevel(t *testing.T) {
+	t.Parallel()
+	data := []struct {
+		failLevel engine.Level
+		level     engine.Level
+		want      resultpb.TestStatus
+	}{
+		{engine.Nothing, engine.Warning, resultpb.TestStatus_PASS},
+		{engine.Nothing, engine.Error, resultpb.TestStatus_FAIL},
+		{engine.Warning, engine.Notice, resultpb.TestStatus_PASS},
+		{engine.Warning, engine.Warning, resultpb.TestStatus_FAIL},
+		{engine.Notice, engine.Notice, resultpb.TestStatus_FAIL},
+		{engine.Notice, engine.Nothing, resultpb.TestStatus_PASS},
+	}
+	for _, d := range data {
+		r := luci{
+			failLevel:  d.failLevel,
+			liveChecks: map[string]*sinkpb.TestResult{},
+			doneChecks: make(chan *sinkpb.TestResult, 1),
+		}
+		r.CheckCompleted(t.Context(), "check", time.Now(), time.Second, d.level, nil)
+		if got := (<-r.doneChecks).Status; got != d.want {
+			t.Errorf("failLevel %q, level %q: got status %s, want %s", d.failLevel, d.level, got, d.want)
+		}
+	}
+}

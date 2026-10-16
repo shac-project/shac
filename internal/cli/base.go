@@ -28,6 +28,7 @@ type commandBase struct {
 	denyList   []string
 	vars       stringMapFlag
 	quiet      bool
+	failLevel  engine.Level
 }
 
 func (c *commandBase) SetFlags(f *flag.FlagSet) {
@@ -50,6 +51,7 @@ func (c *commandBase) options(files []string) engine.Options {
 		Recurse:    !c.noRecurse,
 		Vars:       c.vars,
 		EntryPoint: c.entryPoint,
+		FailLevel:  c.failLevel,
 		Filter: engine.CheckFilter{
 			AllowList: c.allowList,
 			DenyList:  c.denyList,

@@ -40,12 +40,14 @@ func (*checkCmd) Description() string {
 func (c *checkCmd) SetFlags(f *flag.FlagSet) {
 	c.commandBase.SetFlags(f)
 	f.StringVar(&c.jsonOutput, "json-output", "", "path to write SARIF output to")
+	c.failLevel = engine.Error
+	f.Var(&c.failLevel, "fail-level", "minimum level of findings (notice, warning or error) that causes shac to fail")
 }
 
 func (c *checkCmd) Execute(ctx context.Context, files []string) error {
 	var buf bytes.Buffer
 
-	r, err := reporting.Get(ctx, c.quiet)
+	r, err := reporting.Get(ctx, c.quiet, c.failLevel)
 	if err != nil {
 		return err
 	}

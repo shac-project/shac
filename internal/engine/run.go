@@ -203,8 +203,8 @@ func (f *CheckFilter) validate(shacStates []*shacState) error {
 
 // Level is one of "notice", "warning" or "error".
 //
-// A check is only considered failed if it emits at least one finding with
-// level "error".
+// A check is only considered failed if it emits at least one finding with a
+// level at or above Options.FailLevel, which defaults to "error".
 type Level string
 
 var _ flag.Value = (*Level)(nil)
@@ -233,6 +233,26 @@ func (l *Level) Type() string {
 	return "level"
 }
 
+// AtLeast returns true if l is at least as severe as min. Nothing is not at
+// least as severe as any level, and every other level is at least as severe as
+// Nothing.
+func (l Level) AtLeast(min Level) bool {
+	return l != Nothing && l.severity() >= min.severity()
+}
+
+func (l Level) severity() int {
+	switch l {
+	case Notice:
+		return 1
+	case Warning:
+		return 2
+	case Error:
+		return 3
+	default:
+		return 0
+	}
+}
+
 func (l Level) isValid() bool {
 	switch l {
 	case Notice, Warning, Error:
@@ -251,7 +271,7 @@ func (l Level) isValid() bool {
 //     are guaranteed to be called sequentially.
 type Report interface {
 	// EmitFinding emits a finding by a check for a specific file. This is not a
-	// failure by itself, unless level "error" is used.
+	// failure by itself, unless its level is at or above Options.FailLevel.
 	EmitFinding(ctx context.Context, check string, level Level, message, root, file string, s Span, replacements []string, props map[string]string) error
 	// EmitCommitMessageFinding emits a finding related to a commit message.
 	EmitCommitMessageFinding(ctx context.Context, check string, level Level, message string, commitHash string, commitMessage string, s Span, props map[string]string) error
@@ -308,6 +328,9 @@ type Options struct {
 	Vars map[string]string
 	// EntryPoint is the main source file to run. Defaults to shac.star.
 	EntryPoint string
+	// FailLevel is the minimum level of findings that causes a check to fail.
+	// Defaults to Error.
+	FailLevel Level
 
 	Stdin []byte
 
@@ -316,8 +339,19 @@ type Options struct {
 	config string
 }
 
+// failLevel returns the minimum level of findings that causes a check to fail.
+func (o *Options) failLevel() Level {
+	if o.FailLevel == Nothing {
+		return Error
+	}
+	return o.FailLevel
+}
+
 // Run loads a main shac.star file from a root directory and runs it.
 func Run(ctx context.Context, o *Options) error {
+	if o.FailLevel != Nothing && !o.FailLevel.isValid() {
+		return fmt.Errorf("invalid fail level %q", o.FailLevel)
+	}
 	tmpdir, err := os.MkdirTemp("", "shac")
 	if err != nil {
 		return err
@@ -658,7 +692,7 @@ func runInner(ctx context.Context, o *Options, tmpdir string) error {
 	// If any check failed, return an error.
 	for _, s := range shacStates {
 		for i := range s.checks {
-			if s.checks[i].highestLevel == Error {
+			if s.checks[i].highestLevel.AtLeast(o.failLevel()) {
 				return ErrCheckFailed
 			}
 		}

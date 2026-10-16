@@ -50,13 +50,17 @@ type Report interface {
 // output, namely the completion line for each check that passed. Findings and
 // the completion lines of checks that failed or emitted warnings are always
 // reported.
-func Get(ctx context.Context, quiet bool) (*MultiReport, error) {
+//
+// failLevel is the minimum level of findings that causes a check to fail, as
+// in engine.Options.FailLevel. It defaults to engine.Error.
+func Get(ctx context.Context, quiet bool, failLevel engine.Level) (*MultiReport, error) {
 	r := &MultiReport{}
 
 	// On LUCI/Swarming. ResultDB!
 	if os.Getenv("LUCI_CONTEXT") != "" {
 		l := &luci{
 			batchWaitDuration: 20 * time.Millisecond,
+			failLevel:         failLevel,
 		}
 		if err := l.init(ctx); err != nil {
 			return nil, err
@@ -73,16 +77,17 @@ func Get(ctx context.Context, quiet bool) (*MultiReport, error) {
 	case os.Getenv("TERM") != "dumb" && isatty.IsTerminal(os.Stderr.Fd()):
 		// Active terminal. Colors! This includes VSCode's integrated terminal.
 		r.Reporters = append(r.Reporters, &synchronized{r: &interactive{
-			out:   colorable.NewColorableStdout(),
-			quiet: quiet,
+			out:       colorable.NewColorableStdout(),
+			quiet:     quiet,
+			failLevel: failLevel,
 		}})
 	case os.Getenv("VSCODE_GIT_IPC_HANDLE") != "":
 		// VSCode extension.
 		// TODO(maruel): Return SARIF.
-		r.Reporters = append(r.Reporters, &synchronized{r: &basic{out: os.Stdout, quiet: quiet}})
+		r.Reporters = append(r.Reporters, &synchronized{r: &basic{out: os.Stdout, quiet: quiet, failLevel: failLevel}})
 	default:
 		// Anything else, e.g. redirected output.
-		r.Reporters = append(r.Reporters, &synchronized{r: &basic{out: os.Stdout, quiet: quiet}})
+		r.Reporters = append(r.Reporters, &synchronized{r: &basic{out: os.Stdout, quiet: quiet, failLevel: failLevel}})
 	}
 
 	return r, nil
@@ -135,16 +140,29 @@ func (s *synchronized) Print(ctx context.Context, check, file string, line int, 
 }
 
 // isSuccess returns true if a check completed without an error and without
-// emitting any warning or error findings, i.e. there is nothing for the user
-// to act on. level is the highest level emitted by the check.
-func isSuccess(level engine.Level, err error) bool {
-	return err == nil && (level == "" || level == engine.Notice)
+// emitting any findings that failed the check or warnings, i.e. there is
+// nothing for the user to act on. level is the highest level emitted by the
+// check.
+func isSuccess(level, failLevel engine.Level, err error) bool {
+	return err == nil && !level.AtLeast(engine.Warning) && !isFailure(level, failLevel)
+}
+
+// isFailure returns true if a check that emitted findings with a highest level
+// of level failed. failLevel is the minimum level of findings that causes a
+// check to fail, and defaults to engine.Error.
+func isFailure(level, failLevel engine.Level) bool {
+	if failLevel == engine.Nothing {
+		failLevel = engine.Error
+	}
+	return level.AtLeast(failLevel)
 }
 
 type basic struct {
 	out io.Writer
 	// quiet suppresses the completion line for checks that passed.
 	quiet bool
+	// failLevel is the minimum level of findings that causes a check to fail.
+	failLevel engine.Level
 }
 
 func (b *basic) Close() error {
@@ -168,7 +186,7 @@ func (b *basic) EmitArtifact(ctx context.Context, check, root, file string, cont
 }
 
 func (b *basic) CheckCompleted(ctx context.Context, check string, start time.Time, d time.Duration, level engine.Level, err error) {
-	success := isSuccess(level, err)
+	success := isSuccess(level, b.failLevel, err)
 	if b.quiet && success {
 		return
 	}
@@ -275,6 +293,8 @@ type interactive struct {
 	out io.Writer
 	// quiet suppresses the completion line for checks that passed.
 	quiet bool
+	// failLevel is the minimum level of findings that causes a check to fail.
+	failLevel engine.Level
 }
 
 func (i *interactive) Close() error {
@@ -401,7 +421,7 @@ func (i *interactive) EmitArtifact(ctx context.Context, root, check, file string
 }
 
 func (i *interactive) CheckCompleted(ctx context.Context, check string, start time.Time, d time.Duration, level engine.Level, err error) {
-	success := isSuccess(level, err)
+	success := isSuccess(level, i.failLevel, err)
 	if i.quiet && success {
 		return
 	}

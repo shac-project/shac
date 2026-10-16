@@ -33,7 +33,7 @@ import (
 
 func TestGet(t *testing.T) {
 	for _, quiet := range []bool{false, true} {
-		r, err := Get(t.Context(), quiet)
+		r, err := Get(t.Context(), quiet, engine.Error)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -85,6 +85,24 @@ func TestBasic(t *testing.T) {
 		"- badcheck (error in 1ms): bad\n" +
 		"[src.star:12] debugmsg\n" +
 		"- mycheck [src.star:12] debugmsg\n"
+	if diff := cmp.Diff(want, buf.String()); diff != "" {
+		t.Fatalf("mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestBasic_FailLevel(t *testing.T) {
+	buf := bytes.Buffer{}
+	r := basic{out: &buf, quiet: true, failLevel: engine.Notice}
+	ctx := t.Context()
+	start := time.Now()
+	// With a notice fail level, checks that emitted notices failed, so they
+	// are reported even in quiet mode.
+	r.CheckCompleted(ctx, "noticecheck", start, time.Millisecond, engine.Notice, nil)
+	r.CheckCompleted(ctx, "othercheck", start, time.Millisecond, engine.Nothing, nil)
+	if err := r.Close(); err != nil {
+		t.Fatal(err)
+	}
+	want := "- noticecheck (notice in 1ms)\n"
 	if diff := cmp.Diff(want, buf.String()); diff != "" {
 		t.Fatalf("mismatch (-want +got):\n%s", diff)
 	}
