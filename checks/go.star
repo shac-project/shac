@@ -178,7 +178,7 @@ def _staticcheck(ctx, version = "v0.4.3"):
 
 staticcheck = shac.check(_staticcheck)
 
-def _shadow(ctx, version = "v0.48.0"):
+def _shadow(ctx, version = "v0.52.0"):
     """Runs go vet -vettool=shadow on a Go code base.
 
     Args:
