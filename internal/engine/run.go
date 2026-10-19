@@ -580,6 +580,7 @@ func runInner(ctx context.Context, o *Options, tmpdir string) error {
 		}
 		return &shacState{
 			allFiles:                  o.AllFiles,
+			files:                     o.Files,
 			allowNetwork:              doc.AllowNetwork,
 			env:                       &env,
 			filter:                    o.Filter,
@@ -900,7 +901,9 @@ type shacConfig struct {
 	writableRoot bool
 	// allFiles is whether shac was run with --all, in which case all files are
 	// considered affected.
-	allFiles   bool
+	allFiles bool
+	// files lists the positional file or directory arguments passed to shac.
+	files      []string
 	entryPoint string
 	// root is the root for the root shac.star that was executed. Native path
 	// style.

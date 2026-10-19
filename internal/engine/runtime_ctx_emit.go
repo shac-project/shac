@@ -130,14 +130,13 @@ func ctxEmitFinding(ctx context.Context, s *shacState, name string, args starlar
 //
 // `shac fmt` only fixes the files it considers affected, so the suggested
 // command must select the same set of files that the current run did.
-//
-// TODO(olivernewman): Also account for positional file arguments, which
-// likewise narrow the set of files that shac considers affected.
 func (s *shacState) fmtCommand() string {
+	args := []string{"shac", "fmt"}
 	if s.allFiles {
-		return "shac fmt --all"
+		args = append(args, "--all")
 	}
-	return "shac fmt"
+	args = append(args, s.files...)
+	return strings.Join(args, " ")
 }
 
 func ctxEmitArtifact(ctx context.Context, s *shacState, name string, args starlark.Tuple, kwargs []starlark.Tuple) error {

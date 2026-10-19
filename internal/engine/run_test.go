@@ -3034,6 +3034,7 @@ func TestRun_FormatterDefaultMessage(t *testing.T) {
 	data := []struct {
 		name     string
 		allFiles bool
+		files    []string
 		want     string
 	}{
 		{
@@ -3044,6 +3045,17 @@ func TestRun_FormatterDefaultMessage(t *testing.T) {
 			name:     "all files",
 			allFiles: true,
 			want:     "File not formatted. Run `shac fmt --all` to fix.",
+		},
+		{
+			name:  "positional files",
+			files: []string{"file.txt"},
+			want:  "File not formatted. Run `shac fmt file.txt` to fix.",
+		},
+		{
+			name:     "all files and positional files",
+			allFiles: true,
+			files:    []string{"file.txt"},
+			want:     "File not formatted. Run `shac fmt --all file.txt` to fix.",
 		},
 	}
 	for i := range data {
@@ -3061,22 +3073,26 @@ func TestRun_FormatterDefaultMessage(t *testing.T) {
 				"",
 				"shac.register_check(shac.check(cb, formatter = True))",
 			)
-			r := reportEmitNoPrint{t: t}
-			o := Options{Report: &r, Dir: root, AllFiles: data[i].allFiles, EntryPoint: "shac.star"}
-			if err := Run(t.Context(), &o); err == nil {
-				t.Fatal("expected the check to fail")
-			} else if err.Error() != "a check failed" {
-				t.Fatal(err)
+			var files []string
+			for _, f := range data[i].files {
+				files = append(files, filepath.Join(root, f))
 			}
+			r := reportEmitNoPrint{t: t}
+			o := Options{Report: &r, Dir: root, AllFiles: data[i].allFiles, Files: files, EntryPoint: "shac.star"}
 			want := []finding{
 				{
 					Check:        "cb",
 					Level:        Error,
-					Message:      data[i].want,
+					Message:      strings.ReplaceAll(data[i].want, "file.txt", filepath.Join(root, "file.txt")),
 					Root:         root,
 					File:         "file.txt",
 					Replacements: []string{"formatted\n"},
 				},
+			}
+			if err := Run(t.Context(), &o); err == nil {
+				t.Fatal("expected the check to fail")
+			} else if err.Error() != "a check failed" {
+				t.Fatal(err)
 			}
 			if diff := cmp.Diff(want, r.findings); diff != "" {
 				t.Errorf("mismatch (-want +got):\n%s", diff)
