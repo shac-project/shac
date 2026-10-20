@@ -1333,7 +1333,7 @@ Constructs a virtual file specification for testing.run(files = {...}).
 ```python
 load("//checks/no_tabs.star", "no_tabs")
 
-def test_no_tabs_only_checks_new_lines():
+def test_no_tabs_only_checks_affected_lines():
     res = testing.run(
         no_tabs,
         files = {
@@ -1341,7 +1341,7 @@ def test_no_tabs_only_checks_new_lines():
             "old.txt": testing.file("\tunchanged\n", affected = False),
             "partial.txt": testing.file(
                 "\told\n\tnew\n",
-                new_lines = [(2, "\tnew")],
+                affected_lines = [(2, "\tnew")],
             ),
         },
     )
@@ -1355,8 +1355,8 @@ def test_no_tabs_only_checks_new_lines():
 
 * **content**: (optional) File contents as a string. Defaults to "".
 * **action**: (optional) SCM action code (e.g. "A", "M", "D"). Defaults to "M".
-* **new_lines**: (optional) Sequence of (line_num, text) pairs or dict of {line_num: text} overriding meta.affected_lines(). If None, affected_lines() is computed from content.
-* **affected**: (optional) Whether the file is included in ctx.scm.affected_files(). Defaults to True. Like unmodified files in a git checkout, unaffected files that aren't deleted have an empty action and, unless new_lines is set, no lines from affected_lines(changed_only = True).
+* **affected_lines**: (optional) Sequence of (line_num, text) pairs or dict of {line_num: text} overriding meta.affected_lines(). If None, affected_lines() is computed from content. new_lines is a deprecated alias for affected_lines.
+* **affected**: (optional) Whether the file is included in ctx.scm.affected_files(). Defaults to True. Like unmodified files in a git checkout, unaffected files that aren't deleted have an empty action and, unless affected_lines is set, no lines from affected_lines(changed_only = True).
 
 ### Returns
 

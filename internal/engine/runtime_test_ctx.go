@@ -332,34 +332,47 @@ func prettyStarlarkValue(v starlark.Value, indent int) string {
 func testingFile(ctx context.Context, s *shacState, name string, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	var argcontent starlark.String
 	var argaction starlark.String = "M"
-	var argnewLines starlark.Value = starlark.None
+	var argaffectedLines starlark.Value = starlark.None
 	var argaffected starlark.Bool = true
+	var argnewLines starlark.Value = starlark.None
+	if len(args) > 4 {
+		return nil, fmt.Errorf("got %d positional arguments, want at most 4", len(args))
+	}
 	if err := starlark.UnpackArgs(name, args, kwargs,
 		"content?", &argcontent,
 		"action?", &argaction,
-		"new_lines??", &argnewLines,
+		"affected_lines??", &argaffectedLines,
 		"affected?", &argaffected,
+		// new_lines is a deprecated alias for affected_lines.
+		"new_lines??", &argnewLines,
 	); err != nil {
 		return nil, err
 	}
 	if argaction == "" {
 		return nil, errors.New("for parameter \"action\": must not be empty")
 	}
-	parsedLines, err := parseCustomNewLines(argnewLines)
+	linesParam, linesVal := "affected_lines", argaffectedLines
+	if argnewLines != starlark.None {
+		if argaffectedLines != starlark.None {
+			return nil, errors.New("affected_lines and new_lines are mutually exclusive")
+		}
+		linesParam, linesVal = "new_lines", argnewLines
+	}
+	parsedLines, err := parseCustomAffectedLines(linesParam, linesVal)
 	if err != nil {
 		return nil, err
 	}
 	res := toValue("file_spec", starlark.StringDict{
-		"action":    argaction,
-		"affected":  argaffected,
-		"content":   argcontent,
-		"new_lines": parsedLines,
+		"action":         argaction,
+		"affected":       argaffected,
+		"content":        argcontent,
+		"affected_lines": parsedLines,
 	})
 	res.Freeze()
 	return res, nil
 }
 
-func parseCustomNewLines(v starlark.Value) (starlark.Value, error) {
+func parseCustomAffectedLines(param string, v starlark.Value) (starlark.Value, error) {
 	if v == nil || v == starlark.None {
 		return starlark.None, nil
 	}
@@ -367,7 +380,7 @@ func parseCustomNewLines(v starlark.Value) (starlark.Value, error) {
 	case starlark.Mapping:
 		it, ok := linesVal.(starlark.IterableMapping)
 		if !ok {
-			return nil, errors.New("for parameter \"new_lines\": mapping must be iterable")
+			return nil, fmt.Errorf("for parameter %q: mapping must be iterable", param)
 		}
 		type linePair struct {
 			num  int
@@ -375,7 +388,7 @@ func parseCustomNewLines(v starlark.Value) (starlark.Value, error) {
 		}
 		var pairs []linePair
 		for _, kv := range it.Items() {
-			lineNum, lineStr, err := parseLinePair(kv[0], kv[1])
+			lineNum, lineStr, err := parseLinePair(param, kv[0], kv[1])
 			if err != nil {
 				return nil, err
 			}
@@ -395,14 +408,14 @@ func parseCustomNewLines(v starlark.Value) (starlark.Value, error) {
 		for iter.Next(&elem) {
 			seq, ok := elem.(starlark.Sequence)
 			if !ok || seq.Len() != 2 {
-				return nil, errors.New("for parameter \"new_lines\": sequence elements must be (line_number, text) pairs")
+				return nil, fmt.Errorf("for parameter %q: sequence elements must be (line_number, text) pairs", param)
 			}
 			subIter := seq.Iterate()
 			var first, second starlark.Value
 			subIter.Next(&first)
 			subIter.Next(&second)
 			subIter.Done()
-			lineNum, lineStr, err := parseLinePair(first, second)
+			lineNum, lineStr, err := parseLinePair(param, first, second)
 			if err != nil {
 				return nil, err
 			}
@@ -410,24 +423,24 @@ func parseCustomNewLines(v starlark.Value) (starlark.Value, error) {
 		}
 		return out, nil
 	default:
-		return nil, fmt.Errorf("for parameter \"new_lines\": got %s, want sequence of (int, str) or dict of {int: str}", v.Type())
+		return nil, fmt.Errorf("for parameter %q: got %s, want sequence of (int, str) or dict of {int: str}", param, v.Type())
 	}
 }
 
-// parseLinePair validates a single (line_number, text) entry of the new_lines
+// parseLinePair validates a single (line_number, text) entry of the affected_lines
 // parameter of testing.file().
-func parseLinePair(numVal, textVal starlark.Value) (int, starlark.String, error) {
+func parseLinePair(param string, numVal, textVal starlark.Value) (int, starlark.String, error) {
 	numInt, ok := numVal.(starlark.Int)
 	if !ok {
-		return 0, "", fmt.Errorf("for parameter \"new_lines\": line number must be int, got %s", numVal.Type())
+		return 0, "", fmt.Errorf("for parameter %q: line number must be int, got %s", param, numVal.Type())
 	}
 	lineNum := intToInt(numInt)
 	if lineNum <= 0 {
-		return 0, "", fmt.Errorf("for parameter \"new_lines\": line numbers are 1-based, got %s", numVal.String())
+		return 0, "", fmt.Errorf("for parameter %q: line numbers are 1-based, got %s", param, numVal.String())
 	}
 	lineStr, ok := textVal.(starlark.String)
 	if !ok {
-		return 0, "", fmt.Errorf("for parameter \"new_lines\": line content must be str, got %s", textVal.Type())
+		return 0, "", fmt.Errorf("for parameter %q: line content must be str, got %s", param, textVal.Type())
 	}
 	return lineNum, lineStr, nil
 }
@@ -1335,7 +1348,7 @@ func applyTestFixes(files []*virtualFile, rep *testReport, rerun func([]*virtual
 
 		nextFiles := make([]*virtualFile, 0, len(files))
 		for _, vf := range files {
-			// Custom new_lines describe the original contents, so let
+			// Custom affected_lines describe the original contents, so let
 			// re-runs compute them from the fixed contents instead.
 			nextFiles = append(nextFiles, newVirtualFile(vf.path, vf.a, contents[vf.path], vf.affected))
 		}
@@ -1433,11 +1446,11 @@ func parseVirtualFiles(filesDict *starlark.Dict, subdir string) ([]*virtualFile,
 			actionVal, _ := v.Attr("action")
 			affectedVal, _ := v.Attr("affected")
 			contentVal, _ := v.Attr("content")
-			newLinesVal, _ := v.Attr("new_lines")
+			affectedLinesVal, _ := v.Attr("affected_lines")
 			vf.a = string(actionVal.(starlark.String))
 			vf.affected = bool(affectedVal.(starlark.Bool))
 			vf.content = string(contentVal.(starlark.String))
-			vf.customLines = newLinesVal
+			vf.customLines = affectedLinesVal
 			// Match real SCMs, where files that weren't modified relative
 			// to upstream have no action (and therefore no new lines).
 			// Unaffected deleted files keep their action so they stay

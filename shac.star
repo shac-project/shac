@@ -59,7 +59,7 @@ def new_todos(ctx):
       ctx: A ctx instance.
     """
     for path, meta in ctx.scm.affected_files().items():
-        for num, line in meta.new_lines():
+        for num, line in meta.affected_lines():
             m = ctx.re.match("TODO\\(([^)]+)\\).*", line)
             if not m:
                 continue

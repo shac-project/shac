@@ -94,7 +94,7 @@ def test_new_todos():
         files = {
             "main.go": testing.file(
                 content = "// not a todo\n// TO" + "DO(alice): valid\n// TO" + "DO(123): invalid\n",
-                new_lines = [
+                affected_lines = [
                     (2, "// TO" + "DO(alice): valid"),
                     (3, "// TO" + "DO(123): invalid"),
                 ],

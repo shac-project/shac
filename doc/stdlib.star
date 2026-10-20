@@ -1285,14 +1285,14 @@ def _testing_exec_result(retcode = 0, stdout = "", stderr = ""):
     """
     pass
 
-def _testing_file(content = "", action = "M", new_lines = None, affected = True):
+def _testing_file(content = "", action = "M", affected_lines = None, affected = True):
     """Constructs a virtual file specification for testing.run(files = {...}).
 
     Example:
       ```python
       load("//checks/no_tabs.star", "no_tabs")
 
-      def test_no_tabs_only_checks_new_lines():
+      def test_no_tabs_only_checks_affected_lines():
           res = testing.run(
               no_tabs,
               files = {
@@ -1300,7 +1300,7 @@ def _testing_file(content = "", action = "M", new_lines = None, affected = True)
                   "old.txt": testing.file("\\tunchanged\\n", affected = False),
                   "partial.txt": testing.file(
                       "\\told\\n\\tnew\\n",
-                      new_lines = [(2, "\\tnew")],
+                      affected_lines = [(2, "\\tnew")],
                   ),
               },
           )
@@ -1313,13 +1313,14 @@ def _testing_file(content = "", action = "M", new_lines = None, affected = True)
     Args:
       content: (optional) File contents as a string. Defaults to "".
       action: (optional) SCM action code (e.g. "A", "M", "D"). Defaults to "M".
-      new_lines: (optional) Sequence of (line_num, text) pairs or dict of
+      affected_lines: (optional) Sequence of (line_num, text) pairs or dict of
         {line_num: text} overriding meta.affected_lines(). If None,
-        affected_lines() is computed from content.
+        affected_lines() is computed from content. new_lines is a deprecated
+        alias for affected_lines.
       affected: (optional) Whether the file is included in
         ctx.scm.affected_files(). Defaults to True. Like unmodified files in a
         git checkout, unaffected files that aren't deleted have an empty action
-        and, unless new_lines is set, no lines from
+        and, unless affected_lines is set, no lines from
         affected_lines(changed_only = True).
 
     Returns:

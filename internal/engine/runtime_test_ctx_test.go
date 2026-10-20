@@ -580,6 +580,13 @@ func TestRunTests_Failures(t *testing.T) {
 			wantErr: "testing.write_file: can only be called during testing.run()",
 		},
 		{
+			name: "testing.file both affected_lines and new_lines",
+			content: "" +
+				"def test_fail():\n" +
+				"    testing.file(affected_lines = [], new_lines = [])\n",
+			wantErr: "testing.file: affected_lines and new_lines are mutually exclusive",
+		},
+		{
 			name: "out of bounds replacement span",
 			content: "" +
 				"def _cb(ctx):\n" +
