@@ -3423,8 +3423,10 @@ func TestRun_CancelStopsStarlark(t *testing.T) {
 }
 
 // runWithDeadline returns f's result, failing the test if f doesn't return
-// promptly. This keeps a regression that stops Starlark code from being
-// canceled from hanging until the global `go test` timeout.
+// within a minute. This keeps a regression that stops Starlark code from being
+// canceled from hanging until the global `go test` timeout. The limit is
+// generous because starting shac alone can take several seconds on a loaded
+// machine.
 func runWithDeadline(t *testing.T, f func() error) error {
 	t.Helper()
 	errs := make(chan error, 1)
@@ -3434,7 +3436,7 @@ func runWithDeadline(t *testing.T, f func() error) error {
 	select {
 	case err := <-errs:
 		return err
-	case <-time.After(5 * time.Second):
+	case <-time.After(time.Minute):
 		t.Fatal("timed out waiting for Starlark code to be canceled")
 		return nil
 	}
