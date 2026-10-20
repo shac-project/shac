@@ -55,14 +55,14 @@ func TestInMemoryFile(t *testing.T) {
 		}
 	})
 
-	t.Run("newLines", func(t *testing.T) {
-		got, err := s.newLines(ctx, tf)
+	t.Run("affectedLines", func(t *testing.T) {
+		got, err := s.affectedLines(ctx, tf, false)
 		if err != nil {
 			t.Fatal(err)
 		}
 		want := `((1, "line1"), (2, "line2"), (3, "line3"))`
 		if got.String() != want {
-			t.Errorf("newLines() = %s, want %s", got.String(), want)
+			t.Errorf("affectedLines() = %s, want %s", got.String(), want)
 		}
 	})
 
@@ -71,13 +71,13 @@ func TestInMemoryFile(t *testing.T) {
 			data:       []byte("binary\x00data"),
 			targetFile: tf,
 		}
-		got, err := sBinary.newLines(ctx, tf)
+		got, err := sBinary.affectedLines(ctx, tf, false)
 		if err != nil {
 			t.Fatal(err)
 		}
 		want := `()`
 		if got.String() != want {
-			t.Errorf("newLines() = %s, want %s", got.String(), want)
+			t.Errorf("affectedLines() = %s, want %s", got.String(), want)
 		}
 	})
 }

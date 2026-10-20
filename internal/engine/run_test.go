@@ -624,7 +624,7 @@ shac.register_check(cb)
 			want: "[//shac.star:7] \n" +
 				"subdir/modified.txt: M\n" +
 				"subdir/unmodified.txt: \n" +
-				"subdir/untracked.txt: \n\n",
+				"subdir/untracked.txt: A\n\n",
 		},
 	}
 
@@ -1441,6 +1441,106 @@ func TestRun_SCM_Git_NoUpstream_Pristine(t *testing.T) {
 	}
 }
 
+func TestRun_SCM_Git_AffectedLines_ChangedOnly(t *testing.T) {
+	t.Parallel()
+	// Whole-file affected lines include a trailing empty line when the file
+	// ends with a newline.
+	const check = `
+def cb(ctx):
+    for path, meta in ctx.scm.affected_files(glob = "*.txt").items():
+        lines = [n for n, _ in meta.affected_lines()]
+        changed_only = [n for n, _ in meta.affected_lines(changed_only = True)]
+        if meta.new_lines() != meta.affected_lines():
+            fail("new_lines() should be an alias for affected_lines()")
+        print("%s %r: %s %s" % (path, meta.action, lines, changed_only))
+
+shac.register_check(cb)
+`
+	data := []struct {
+		name      string
+		all       bool
+		rename    bool
+		replaceA  bool
+		unchanged bool
+		files     []string
+		want      string
+	}{
+		{
+			// Only lines that changed in a renamed file are affected.
+			name:   "renamed file",
+			all:    true,
+			rename: true,
+			want: "[//changed_only.star:8] 0.txt \"A\": [1, 2] [1, 2]\n" +
+				"[//changed_only.star:8] b.txt \"R\": [1, 2, 3, 4] [2]\n" +
+				"[//changed_only.star:8] z.txt \"\": [1] []\n",
+		},
+		{
+			// Renaming a file and writing a new file at the old path should
+			// still only report the renamed file's own changes.
+			name:     "renamed file with replacement at source",
+			rename:   true,
+			replaceA: true,
+			want: "[//changed_only.star:8] 0.txt \"A\": [1, 2] [1, 2]\n" +
+				"[//changed_only.star:8] a.txt \"M\": [1] [1]\n" +
+				"[//changed_only.star:8] b.txt \"C\": [2] [2]\n",
+		},
+		{
+			name:      "unchanged renamed file",
+			rename:    true,
+			unchanged: true,
+			want: "[//changed_only.star:8] 0.txt \"A\": [1, 2] [1, 2]\n" +
+				"[//changed_only.star:8] b.txt \"R\": [] []\n",
+		},
+		{
+			name: "default",
+			want: "[//changed_only.star:8] 0.txt \"A\": [1, 2] [1, 2]\n" +
+				"[//changed_only.star:8] a.txt \"M\": [2] [2]\n",
+		},
+		{
+			// Only changed_only ignores unchanged lines with --all.
+			name: "all",
+			all:  true,
+			want: "[//changed_only.star:8] 0.txt \"A\": [1, 2] [1, 2]\n" +
+				"[//changed_only.star:8] a.txt \"M\": [1, 2, 3, 4] [2]\n" +
+				"[//changed_only.star:8] z.txt \"\": [1] []\n",
+		},
+		{
+			// Unmodified files passed explicitly have no changed_only lines.
+			name:  "explicit unmodified file",
+			files: []string{"z.txt"},
+			want:  "[//changed_only.star:8] z.txt \"\": [1] []\n",
+		},
+	}
+	for i := range data {
+		t.Run(data[i].name, func(t *testing.T) {
+			t.Parallel()
+			root := makeGit(t)
+			writeFile(t, root, "changed_only.star", check)
+			runGit(t, root, "add", "changed_only.star")
+			runGit(t, root, "commit", "-m", "Third commit")
+			changed := "a.txt"
+			if data[i].rename {
+				changed = "b.txt"
+				runGit(t, root, "mv", "a.txt", changed)
+			}
+			if !data[i].unchanged {
+				writeFile(t, root, changed, "First file\nIt changed\na lot of lines.\n")
+			}
+			if data[i].replaceA {
+				writeFile(t, root, "a.txt", "Replacement\n")
+				runGit(t, root, "add", "a.txt", changed)
+			}
+			// Untracked files are entirely new.
+			writeFile(t, root, "0.txt", "Untracked file\n")
+			var files []string
+			for _, f := range data[i].files {
+				files = append(files, filepath.Join(root, f))
+			}
+			testStarlarkPrint(t, root, "changed_only.star", data[i].all, false, data[i].want, files...)
+		})
+	}
+}
+
 func TestRun_SCM_Git_NoUpstream_Staged(t *testing.T) {
 	// No upstream branch set, staged changes.
 	t.Parallel()
@@ -1553,11 +1653,11 @@ func TestRun_SCM_Git_Untracked(t *testing.T) {
 		{
 			"ctx-scm-all_files.star",
 			"[//shac.star:19] \n" +
-				".gitignore: \n" +
+				".gitignore: A\n" +
 				"a.txt: \n" +
-				"shac.star: \n" +
+				"shac.star: A\n" +
 				"staged.txt: A\n" +
-				"untracked.txt: \n" +
+				"untracked.txt: A\n" +
 				"z.txt: \n" +
 				"\n",
 		},

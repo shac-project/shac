@@ -231,7 +231,7 @@ A finding associated with a specific line within a file:
 ```python
 def cb(ctx):
     for path, meta in ctx.scm.affected_files().items():
-        for num, line in meta.new_lines():
+        for num, line in meta.affected_lines():
             ctx.emit.finding(
                 level="error",
                 message="This line is superfluous",
@@ -250,7 +250,7 @@ A finding associated with a line and column within a file:
 ```python
 def cb(ctx):
     for path, meta in ctx.scm.affected_files().items():
-        for num, line in meta.new_lines():
+        for num, line in meta.affected_lines():
             idx = str.find("bad_word")
             if idx < 0:
                 continue
@@ -586,8 +586,10 @@ currently modified.
 If the current directory is not controlled by a SCM, the result is equivalent
 to ctx.scm.all_files().
 
-If shac is run with the --all options, all files are considered "added" to do
-a full run on all files.
+If shac is run with the --all option, all files are returned, the same as
+ctx.scm.all_files(), and affected_lines() returns every line of every
+file. Use affected_lines(changed_only = True) to get only the lines that
+were changed relative to upstream.
 
 ### Example
 
@@ -595,7 +597,7 @@ a full run on all files.
 def new_todos(ctx):
     # Prints only the TODO that were added compared to upstream.
     for path, meta in ctx.scm.affected_files().items():
-        for num, line in meta.new_lines():
+        for num, line in meta.affected_lines():
             m = ctx.re.match("TODO\(([^)]+)\).*", line)
             print(path + "(" + str(num) + "): " + m.groups[0])
 
@@ -610,25 +612,45 @@ shac.register_check(new_todos)
 
 ### Returns
 
-A map of {path: struct()} where the struct has a string field action and a
-function new_lines().
+A map of {path: struct()} where the struct has a string field `action`
+and a function `affected_lines(changed_only = False)`.
 
-The action field's value is a single letter corresponding to the
+The `action` field's value is a single letter corresponding to the
 `--diff-filter` representation of the action per
 https://git-scm.com/docs/git-diff#Documentation/git-diff.txt---diff-filterACDMRTUXB82308203
+Untracked files have action "A". In a git checkout, files that weren't
+modified relative to upstream have an empty action, e.g. unmodified
+files returned with --all or passed explicitly on the command line.
+
+`affected_lines()` returns a tuple of (line_number, line) tuples for the
+lines that checks should consider. That's every line of the file if shac
+is run with --all or the file wasn't modified relative to upstream (e.g.
+it was passed explicitly on the command line), and otherwise the lines
+added or modified relative to upstream.
+
+If `changed_only` is True, `affected_lines()` only returns lines added
+or modified relative to upstream, even with --all, so unmodified files
+have no lines. Deleted lines are never included. Renamed and copied
+files are compared against the file they were renamed or copied from,
+so only the lines that changed are included. `changed_only` has no
+effect outside of a git checkout or with --stdin, where every line is
+considered changed.
+
+new_lines() is a deprecated alias for affected_lines().
 
 ## ctx.scm.all_files
 
 Returns all files found in the current workspace.
 
-All files are considered "added" or "deleted".
+Unlike ctx.scm.affected_files(), this includes files that weren't modified
+relative to upstream.
 
 ### Example
 
 ```python
 def all_todos(ctx):
     for path, meta in ctx.scm.all_files().items():
-        for num, line in meta.new_lines():
+        for num, line in meta.affected_lines():
             m = ctx.re.match("TODO\(([^)]+)\).*", line)
             print(path + "(" + str(num) + "): " + m.groups[0])
 
@@ -643,15 +665,17 @@ shac.register_check(all_todos)
 
 ### Returns
 
-A map of {path: struct()} where the struct has a string field action and a
-function new_lines().
+A map of {path: struct()} where the struct has a string field `action`
+and a function `affected_lines(changed_only = False)`.
 
-The action field's value is a single letter corresponding to the
+The `action` field's value is a single letter corresponding to the
 `--diff-filter` representation of the action per
 https://git-scm.com/docs/git-diff#Documentation/git-diff.txt---diff-filterACDMRTUXB82308203
+Untracked files have action "A". In a git checkout, files that weren't
+modified relative to upstream have an empty action, e.g. unmodified
+files returned with --all or passed explicitly on the command line.
 
-If a file was not modified relative to the upstream commit, the action
-field will be an empty string.
+See ctx.scm.affected_files() for details about `affected_lines()`.
 
 ## ctx.scm.commits
 
@@ -1331,8 +1355,8 @@ def test_no_tabs_only_checks_new_lines():
 
 * **content**: (optional) File contents as a string. Defaults to "".
 * **action**: (optional) SCM action code (e.g. "A", "M", "D"). Defaults to "M".
-* **new_lines**: (optional) Sequence of (line_num, text) pairs or dict of {line_num: text} overriding meta.new_lines(). If None, new_lines() is computed from content.
-* **affected**: (optional) Whether the file is included in ctx.scm.affected_files(). Defaults to True.
+* **new_lines**: (optional) Sequence of (line_num, text) pairs or dict of {line_num: text} overriding meta.affected_lines(). If None, affected_lines() is computed from content.
+* **affected**: (optional) Whether the file is included in ctx.scm.affected_files(). Defaults to True. Like unmodified files in a git checkout, unaffected files that aren't deleted have an empty action and, unless new_lines is set, no lines from affected_lines(changed_only = True).
 
 ### Returns
 

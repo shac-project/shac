@@ -79,12 +79,17 @@ type fileImpl struct {
 	path string
 	// action is one of "A", "M", etc.
 	a string
+	// src is the path the file was renamed or copied from, POSIX style, if
+	// the action is "R" or "C".
+	src string
 
 	// Mutable. Lazy loaded.
-	mu       sync.Mutex
-	metadata starlark.Value
-	newLines starlark.Value
-	err      error
+	mu               sync.Mutex
+	metadata         starlark.Value
+	lines            starlark.Value
+	linesErr         error
+	changedOnlyLines starlark.Value
+	changedOnlyErr   error
 }
 
 func (f *fileImpl) rootedpath() string {
@@ -101,23 +106,31 @@ func (f *fileImpl) action() string {
 
 // getMetadata lazy loads the metadata and caches it.
 //
-// It also lazy load the new lines and caches them.
+// It also lazy load the affected lines and caches them.
 func (f *fileImpl) getMetadata() starlark.Value {
 	f.mu.Lock()
 	if f.metadata == nil {
 		// Make sure to update //doc/stdlib.star whenever this function is modified.
 		f.metadata = toValue("file", starlark.StringDict{
 			"action": starlark.String(f.a),
+			"affected_lines": newBuiltin("affected_lines", func(ctx context.Context, s *shacState, name string, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+				// Require changed_only to be passed by keyword, since a bare
+				// boolean is unreadable at call sites.
+				if len(args) > 0 {
+					return nil, fmt.Errorf("%s: unexpected positional arguments", name)
+				}
+				var changedOnly starlark.Bool
+				if err := starlark.UnpackArgs(name, args, kwargs, "changed_only?", &changedOnly); err != nil {
+					return nil, err
+				}
+				return f.affectedLines(ctx, s, bool(changedOnly))
+			}),
+			// new_lines is a deprecated alias for affected_lines.
 			"new_lines": newBuiltin("new_lines", func(ctx context.Context, s *shacState, name string, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 				if err := starlark.UnpackArgs(name, args, kwargs); err != nil {
 					return nil, err
 				}
-				f.mu.Lock()
-				if f.newLines == nil && f.err == nil {
-					f.newLines, f.err = s.scm.newLines(ctx, f)
-				}
-				f.mu.Unlock()
-				return f.newLines, f.err
+				return f.affectedLines(ctx, s, false)
 			}),
 		})
 		// Freeze the metadata immediately after creation while holding the
@@ -130,6 +143,19 @@ func (f *fileImpl) getMetadata() starlark.Value {
 	m := f.metadata
 	f.mu.Unlock()
 	return m
+}
+
+func (f *fileImpl) affectedLines(ctx context.Context, s *shacState, changedOnly bool) (starlark.Value, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	lines, err := &f.lines, &f.linesErr
+	if changedOnly {
+		lines, err = &f.changedOnlyLines, &f.changedOnlyErr
+	}
+	if *lines == nil && *err == nil {
+		*lines, *err = s.scm.affectedLines(ctx, f, changedOnly)
+	}
+	return *lines, *err
 }
 
 // fileSubdirImpl is one tracked file reported as a subdirectory.
@@ -160,9 +186,10 @@ type scmCheckout interface {
 	// should always return all files even when a specific file set is provided.
 	allFiles(ctx context.Context, filter fileFilter) ([]file, error)
 
-	// newLines returns a Starlark tuple of tuples representing the lines in the
-	// file that are considered new/modified.
-	newLines(ctx context.Context, f file) (starlark.Value, error)
+	// affectedLines returns a Starlark tuple of tuples representing the lines
+	// in the file that checks should consider. If changedOnly is true, only lines
+	// added or modified relative to upstream are returned, even with --all.
+	affectedLines(ctx context.Context, f file, changedOnly bool) (starlark.Value, error)
 	commits(ctx context.Context) ([]scmCommit, error)
 }
 
@@ -186,8 +213,8 @@ func (f *filteredSCM) allFiles(ctx context.Context, filter fileFilter) ([]file, 
 	return f.filter(files), err
 }
 
-func (f *filteredSCM) newLines(ctx context.Context, fi file) (starlark.Value, error) {
-	return f.scm.newLines(ctx, fi)
+func (f *filteredSCM) affectedLines(ctx context.Context, fi file, changedOnly bool) (starlark.Value, error) {
+	return f.scm.affectedLines(ctx, fi, changedOnly)
 }
 
 func (f *filteredSCM) commits(ctx context.Context) ([]scmCommit, error) {
@@ -312,7 +339,7 @@ func (s *inMemoryFile) shacFileDirs(ctx context.Context, basename string) ([]str
 	return nil, nil
 }
 
-func (s *inMemoryFile) newLines(ctx context.Context, f file) (starlark.Value, error) {
+func (s *inMemoryFile) affectedLines(ctx context.Context, f file, changedOnly bool) (starlark.Value, error) {
 	if f.rootedpath() != s.targetFile.rootedpath() {
 		return nil, fmt.Errorf("file %q is not managed", f.rootedpath())
 	}
@@ -379,8 +406,8 @@ func (s *specifiedFilesOnly) allFiles(ctx context.Context, filter fileFilter) ([
 	return s.addExplicitFiles(all), nil
 }
 
-func (s *specifiedFilesOnly) newLines(ctx context.Context, f file) (starlark.Value, error) {
-	return s.base.newLines(ctx, f)
+func (s *specifiedFilesOnly) affectedLines(ctx context.Context, f file, changedOnly bool) (starlark.Value, error) {
+	return s.base.affectedLines(ctx, f, changedOnly)
 }
 
 func (s *specifiedFilesOnly) commits(ctx context.Context) ([]scmCommit, error) {
@@ -482,8 +509,8 @@ func (s *subdirSCM) filterFiles(files []file) []file {
 	return out
 }
 
-func (s *subdirSCM) newLines(ctx context.Context, f file) (starlark.Value, error) {
-	return s.s.newLines(ctx, f)
+func (s *subdirSCM) affectedLines(ctx context.Context, f file, changedOnly bool) (starlark.Value, error) {
+	return s.s.affectedLines(ctx, f, changedOnly)
 }
 
 func (s *subdirSCM) commits(ctx context.Context) ([]scmCommit, error) {
@@ -576,8 +603,8 @@ func (c *cachingSCM) allFiles(ctx context.Context, filter fileFilter) ([]file, e
 	return c.all[filter], err
 }
 
-func (c *cachingSCM) newLines(ctx context.Context, fi file) (starlark.Value, error) {
-	return c.scm.newLines(ctx, fi)
+func (c *cachingSCM) affectedLines(ctx context.Context, fi file, changedOnly bool) (starlark.Value, error) {
+	return c.scm.affectedLines(ctx, fi, changedOnly)
 }
 
 func (c *cachingSCM) commits(ctx context.Context) ([]scmCommit, error) {
@@ -756,7 +783,7 @@ func (g *gitCheckout) affectedTrackedFiles(ctx context.Context, filter fileFilte
 	var modified []file
 	// Each line has a variable number of NUL character, so process one at a time.
 	for o := g.run(ctx, "diff", "--raw", "-z", "-C", g.upstream.hash); len(o) != 0; {
-		var action, path string
+		var action, path, srcPath string
 		var dstMode string
 		var srcMode string
 		if i := strings.IndexByte(o, 0); i != -1 {
@@ -778,6 +805,7 @@ func (g *gitCheckout) affectedTrackedFiles(ctx context.Context, filter fileFilte
 
 				if action == "C" || action == "R" {
 					if i = strings.IndexByte(o, 0); i != -1 {
+						srcPath = path
 						path = o[:i]
 						o = o[i+1:]
 					} else {
@@ -811,7 +839,7 @@ func (g *gitCheckout) affectedTrackedFiles(ctx context.Context, filter fileFilte
 			break
 		}
 		if inc {
-			modified = append(modified, &fileImpl{a: action, path: filepath.ToSlash(path)})
+			modified = append(modified, &fileImpl{a: action, path: filepath.ToSlash(path), src: filepath.ToSlash(srcPath)})
 		}
 	}
 	return modified
@@ -832,15 +860,15 @@ func (g *gitCheckout) allFiles(ctx context.Context, filter fileFilter) ([]file, 
 		return nil, g.err
 	}
 	// Always include deleted files here so they are added to
-	// affectedFileActions. This allows allFiles to correctly filter out
+	// affectedByPath. This allows allFiles to correctly filter out
 	// deleted tracked files without needing to call os.Stat later.
 	affected := g.affectedTrackedFiles(ctx, fileFilter{includeDeleted: true, includeSymlinks: filter.includeSymlinks})
 	if g.err != nil {
 		return nil, g.err
 	}
-	affectedFileActions := make(map[string]string, len(affected))
+	affectedByPath := make(map[string]*fileImpl, len(affected))
 	for _, f := range affected {
-		affectedFileActions[f.rootedpath()] = f.action()
+		affectedByPath[f.rootedpath()] = f.(*fileImpl)
 	}
 	items := strings.Split(o[:len(o)-1], "\x00")
 	all := make([]file, 0, len(items))
@@ -850,13 +878,16 @@ func (g *gitCheckout) allFiles(ctx context.Context, filter fileFilter) ([]file, 
 			parts := strings.Fields(meta)
 			gitMode := parts[0]
 			p := filepath.ToSlash(path)
-			action := affectedFileActions[p]
+			var action, src string
+			if af := affectedByPath[p]; af != nil {
+				action, src = af.a, af.src
+			}
 			inc, err := g.shouldIncludeFile(filter, path, action, gitMode)
 			if err != nil {
 				return nil, err
 			}
 			if inc {
-				all = append(all, &fileImpl{a: action, path: p})
+				all = append(all, &fileImpl{a: action, path: p, src: src})
 			}
 		} else {
 			// Untracked file.
@@ -877,8 +908,10 @@ func (g *gitCheckout) allFiles(ctx context.Context, filter fileFilter) ([]file, 
 				gitMode = gitModeSymlink
 			}
 			p := filepath.ToSlash(path)
-			action := affectedFileActions[p]
-
+			// Untracked files don't show up in `git diff`, but they're new
+			// relative to upstream, so report them the same way as
+			// affectedFiles does.
+			action := "A"
 			inc, err := g.shouldIncludeFile(filter, path, action, gitMode)
 			if err != nil {
 				return nil, err
@@ -892,26 +925,44 @@ func (g *gitCheckout) allFiles(ctx context.Context, filter fileFilter) ([]file, 
 	return all, g.err
 }
 
-func (g *gitCheckout) newLines(ctx context.Context, f file) (starlark.Value, error) {
-	if g.returnAll {
-		// Include all lines when processing all files independent if the file
-		// was modified or not.
-		v, err := newLinesWhole(g.checkoutRoot, f.rootedpath())
-		if err != nil {
-			return nil, err
-		}
-		return v, nil
-	}
-	// Return an empty tuple for a deleted file's changed lines.
-	if f.action() == "D" {
+func (g *gitCheckout) affectedLines(ctx context.Context, f file, changedOnly bool) (starlark.Value, error) {
+	a := f.action()
+	if a == "D" {
 		return make(starlark.Tuple, 0), nil
 	}
-	o := g.run(ctx, "diff", "--no-prefix", "-C", "-U0", "--no-ext-diff", "--irreversible-delete", g.upstream.hash, "--", f.rootedpath())
+	// Files with no action weren't modified relative to upstream, e.g.
+	// unmodified files returned by all_files() or with --all, or unmodified or
+	// git-ignored files passed explicitly on the command line. Checks should
+	// still consider all of their lines unless changedOnly is set.
+	if a == "" {
+		if changedOnly {
+			return make(starlark.Tuple, 0), nil
+		}
+		return newLinesWhole(g.checkoutRoot, f.rootedpath())
+	}
+	// With --all, checks should consider every line of modified files too.
+	if g.returnAll && !changedOnly {
+		return newLinesWhole(g.checkoutRoot, f.rootedpath())
+	}
+	ref := g.upstream.hash
+	if fi, ok := f.(*fileImpl); ok && fi.src != "" {
+		// Compare against the source blob in upstream so git only diffs the
+		// renamed or copied file, even if the source path was also modified or
+		// replaced.
+		ref += ":" + fi.src
+	}
+	o := g.run(ctx, "diff", "--no-prefix", "-C", "-U0", "--no-ext-diff", "--irreversible-delete", ref, "--", f.rootedpath())
 	if o == "" {
 		if g.err != nil {
 			return nil, g.err
 		}
-		// TODO(maruel): This is not normal. For now fallback to the whole file.
+		if a == "R" || a == "C" {
+			// A rename or copy with no content changes produces an empty diff.
+			return make(starlark.Tuple, 0), nil
+		}
+		// `git diff` prints nothing for untracked files, which are entirely
+		// new. Fall back to the whole file for any other unexpected empty
+		// diff as well.
 		v, err := newLinesWhole(g.checkoutRoot, f.rootedpath())
 		if err != nil {
 			return nil, err
@@ -1047,7 +1098,7 @@ func (r *rawTree) allFiles(ctx context.Context, filter fileFilter) ([]file, erro
 	return res, err
 }
 
-func (r *rawTree) newLines(ctx context.Context, f file) (starlark.Value, error) {
+func (r *rawTree) affectedLines(ctx context.Context, f file, changedOnly bool) (starlark.Value, error) {
 	return newLinesWhole(r.root, f.rootedpath())
 }
 

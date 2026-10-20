@@ -794,7 +794,7 @@ func (v *virtualSCM) allFiles(ctx context.Context, filter fileFilter) ([]file, e
 	return res, nil
 }
 
-func (v *virtualSCM) newLines(ctx context.Context, fi file) (starlark.Value, error) {
+func (v *virtualSCM) affectedLines(ctx context.Context, fi file, changedOnly bool) (starlark.Value, error) {
 	// fileImpl.getMetadata passes the embedded *fileImpl rather than the
 	// *virtualFile, so look the file up by path.
 	idx := slices.IndexFunc(v.files, func(f *virtualFile) bool { return f.path == fi.rootedpath() })
@@ -805,7 +805,7 @@ func (v *virtualSCM) newLines(ctx context.Context, fi file) (starlark.Value, err
 	if vf.customLines != nil && vf.customLines != starlark.None {
 		return vf.customLines, nil
 	}
-	if vf.a == "D" {
+	if vf.a == "D" || (vf.a == "" && changedOnly) {
 		return make(starlark.Tuple, 0), nil
 	}
 	return newLinesWholeBytes([]byte(vf.content))
@@ -1438,6 +1438,13 @@ func parseVirtualFiles(filesDict *starlark.Dict, subdir string) ([]*virtualFile,
 			vf.affected = bool(affectedVal.(starlark.Bool))
 			vf.content = string(contentVal.(starlark.String))
 			vf.customLines = newLinesVal
+			// Match real SCMs, where files that weren't modified relative
+			// to upstream have no action (and therefore no new lines).
+			// Unaffected deleted files keep their action so they stay
+			// excluded from all_files() by default.
+			if !vf.affected && vf.a != "D" {
+				vf.a = ""
+			}
 		default:
 			return nil, nil, fmt.Errorf("for parameter \"files\": value for %q must be str or testing.file(), got %s", rel, kv[1].Type())
 		}
