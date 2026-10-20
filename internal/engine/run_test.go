@@ -1456,89 +1456,97 @@ def cb(ctx):
 
 shac.register_check(cb)
 `
+	initRepo := func(t *testing.T) string {
+		t.Helper()
+		root := makeGit(t)
+		writeFile(t, root, "changed_only.star", check)
+		runGit(t, root, "add", "changed_only.star")
+		runGit(t, root, "commit", "-m", "Third commit")
+		// Untracked files are entirely new.
+		writeFile(t, root, "0.txt", "Untracked file\n")
+		return root
+	}
+
 	data := []struct {
-		name      string
-		all       bool
-		rename    bool
-		replaceA  bool
-		unchanged bool
-		files     []string
-		want      string
+		name  string
+		all   bool
+		files []string
+		want  string
 	}{
 		{
-			// Only lines that changed in a renamed file are affected.
-			name:   "renamed file",
-			all:    true,
-			rename: true,
-			want: "[//changed_only.star:8] 0.txt \"A\": [1, 2] [1, 2]\n" +
-				"[//changed_only.star:8] b.txt \"R\": [1, 2, 3, 4] [2]\n" +
-				"[//changed_only.star:8] z.txt \"\": [1] []\n",
-		},
-		{
-			// Renaming a file and writing a new file at the old path should
-			// still only report the renamed file's own changes.
-			name:     "renamed file with replacement at source",
-			rename:   true,
-			replaceA: true,
-			want: "[//changed_only.star:8] 0.txt \"A\": [1, 2] [1, 2]\n" +
-				"[//changed_only.star:8] a.txt \"M\": [1] [1]\n" +
-				"[//changed_only.star:8] b.txt \"C\": [2] [2]\n",
-		},
-		{
-			name:      "unchanged renamed file",
-			rename:    true,
-			unchanged: true,
-			want: "[//changed_only.star:8] 0.txt \"A\": [1, 2] [1, 2]\n" +
-				"[//changed_only.star:8] b.txt \"R\": [] []\n",
-		},
-		{
 			name: "default",
-			want: "[//changed_only.star:8] 0.txt \"A\": [1, 2] [1, 2]\n" +
-				"[//changed_only.star:8] a.txt \"M\": [2] [2]\n",
+			want: `[//changed_only.star:8] 0.txt "A": [1, 2] [1, 2]
+[//changed_only.star:8] a.txt "M": [2] [2]
+`,
 		},
 		{
 			// Only changed_only ignores unchanged lines with --all.
 			name: "all",
 			all:  true,
-			want: "[//changed_only.star:8] 0.txt \"A\": [1, 2] [1, 2]\n" +
-				"[//changed_only.star:8] a.txt \"M\": [1, 2, 3, 4] [2]\n" +
-				"[//changed_only.star:8] z.txt \"\": [1] []\n",
+			want: `[//changed_only.star:8] 0.txt "A": [1, 2] [1, 2]
+[//changed_only.star:8] a.txt "M": [1, 2, 3, 4] [2]
+[//changed_only.star:8] z.txt "": [1] []
+`,
 		},
 		{
 			// Unmodified files passed explicitly have no changed_only lines.
-			name:  "explicit unmodified file",
+			name:  "explicit_unmodified_file",
 			files: []string{"z.txt"},
-			want:  "[//changed_only.star:8] z.txt \"\": [1] []\n",
+			want: `[//changed_only.star:8] z.txt "": [1] []
+`,
 		},
 	}
-	for i := range data {
-		t.Run(data[i].name, func(t *testing.T) {
+	for _, tc := range data {
+		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			root := makeGit(t)
-			writeFile(t, root, "changed_only.star", check)
-			runGit(t, root, "add", "changed_only.star")
-			runGit(t, root, "commit", "-m", "Third commit")
-			changed := "a.txt"
-			if data[i].rename {
-				changed = "b.txt"
-				runGit(t, root, "mv", "a.txt", changed)
-			}
-			if !data[i].unchanged {
-				writeFile(t, root, changed, "First file\nIt changed\na lot of lines.\n")
-			}
-			if data[i].replaceA {
-				writeFile(t, root, "a.txt", "Replacement\n")
-				runGit(t, root, "add", "a.txt", changed)
-			}
-			// Untracked files are entirely new.
-			writeFile(t, root, "0.txt", "Untracked file\n")
+			root := initRepo(t)
+			writeFile(t, root, "a.txt", "First file\nIt changed\na lot of lines.\n")
 			var files []string
-			for _, f := range data[i].files {
+			for _, f := range tc.files {
 				files = append(files, filepath.Join(root, f))
 			}
-			testStarlarkPrint(t, root, "changed_only.star", data[i].all, false, data[i].want, files...)
+			testStarlarkPrint(t, root, "changed_only.star", tc.all, false, tc.want, files...)
 		})
 	}
+
+	// Only lines that changed in a renamed file are affected.
+	t.Run("renamed_file", func(t *testing.T) {
+		t.Parallel()
+		root := initRepo(t)
+		runGit(t, root, "mv", "a.txt", "b.txt")
+		writeFile(t, root, "b.txt", "First file\nIt changed\na lot of lines.\n")
+		want := `[//changed_only.star:8] 0.txt "A": [1, 2] [1, 2]
+[//changed_only.star:8] b.txt "R": [1, 2, 3, 4] [2]
+[//changed_only.star:8] z.txt "": [1] []
+`
+		testStarlarkPrint(t, root, "changed_only.star", true, false, want)
+	})
+
+	// Renaming a file and writing a new file at the old path should still only
+	// report the renamed file's own changes.
+	t.Run("renamed_file_with_replacement_at_source", func(t *testing.T) {
+		t.Parallel()
+		root := initRepo(t)
+		runGit(t, root, "mv", "a.txt", "b.txt")
+		writeFile(t, root, "b.txt", "First file\nIt changed\na lot of lines.\n")
+		writeFile(t, root, "a.txt", "Replacement\n")
+		runGit(t, root, "add", "a.txt", "b.txt")
+		want := `[//changed_only.star:8] 0.txt "A": [1, 2] [1, 2]
+[//changed_only.star:8] a.txt "M": [1] [1]
+[//changed_only.star:8] b.txt "C": [2] [2]
+`
+		testStarlarkPrint(t, root, "changed_only.star", false, false, want)
+	})
+
+	t.Run("unchanged_renamed_file", func(t *testing.T) {
+		t.Parallel()
+		root := initRepo(t)
+		runGit(t, root, "mv", "a.txt", "b.txt")
+		want := `[//changed_only.star:8] 0.txt "A": [1, 2] [1, 2]
+[//changed_only.star:8] b.txt "R": [] []
+`
+		testStarlarkPrint(t, root, "changed_only.star", false, false, want)
+	})
 }
 
 func TestRun_SCM_Git_NoUpstream_Staged(t *testing.T) {

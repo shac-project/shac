@@ -926,15 +926,15 @@ func (g *gitCheckout) allFiles(ctx context.Context, filter fileFilter) ([]file, 
 }
 
 func (g *gitCheckout) affectedLines(ctx context.Context, f file, changedOnly bool) (starlark.Value, error) {
-	a := f.action()
-	if a == "D" {
+	action := f.action()
+	if action == "D" {
 		return make(starlark.Tuple, 0), nil
 	}
 	// Files with no action weren't modified relative to upstream, e.g.
 	// unmodified files returned by all_files() or with --all, or unmodified or
 	// git-ignored files passed explicitly on the command line. Checks should
 	// still consider all of their lines unless changedOnly is set.
-	if a == "" {
+	if action == "" {
 		if changedOnly {
 			return make(starlark.Tuple, 0), nil
 		}
@@ -956,7 +956,7 @@ func (g *gitCheckout) affectedLines(ctx context.Context, f file, changedOnly boo
 		if g.err != nil {
 			return nil, g.err
 		}
-		if a == "R" || a == "C" {
+		if action == "R" || action == "C" {
 			// A rename or copy with no content changes produces an empty diff.
 			return make(starlark.Tuple, 0), nil
 		}
