@@ -90,7 +90,7 @@ func TestRunTests_Success(t *testing.T) {
 		"    v = ctx.vars.get('custom_var')\n"+
 		"    for path, meta in ctx.scm.affected_files().items():\n"+
 		"        content = str(ctx.io.read_file(path))\n"+
-		"        for num, line in meta.new_lines():\n"+
+		"        for num, line in meta.affected_lines():\n"+
 		"            if 'BAD' in line:\n"+
 		"                ctx.emit.finding(\n"+
 		"                    level = 'error',\n"+
@@ -223,7 +223,54 @@ func TestRunTests_Success(t *testing.T) {
 		"            ),\n"+
 		"        ],\n"+
 		"    )\n"+
-		"    asserts.eq(res.files['f.txt'], 'updated_by_tool')\n")
+		"    asserts.eq(res.files['f.txt'], 'updated_by_tool')\n"+
+		"\n"+
+		"def test_custom_affected_lines_and_changed_only():\n"+
+		"    def _lines_check(ctx):\n"+
+		"        for path, meta in ctx.scm.affected_files().items():\n"+
+		"            ctx.emit.finding(\n"+
+		"                level = 'notice',\n"+
+		"                filepath = path,\n"+
+		"                message = '%r:%s:%s' % (\n"+
+		"                    meta.action,\n"+
+		"                    list(meta.affected_lines()),\n"+
+		"                    list(meta.affected_lines(changed_only = True)),\n"+
+		"                ),\n"+
+		"            )\n"+
+		"        unmodified = ctx.scm.all_files()['unaffected.txt']\n"+
+		"        asserts.eq(unmodified.action, '')\n"+
+		"        asserts.eq(unmodified.affected_lines(), ((1, 'u1'),))\n"+
+		"        asserts.eq(unmodified.affected_lines(changed_only = True), ())\n"+
+		"\n"+
+		"    res = testing.run(\n"+
+		"        _lines_check,\n"+
+		"        files = {\n"+
+		"            'seq.txt': testing.file(\n"+
+		"                content = 's1\\ns2\\n',\n"+
+		"                affected_lines = [(2, 's2')],\n"+
+		"            ),\n"+
+		"            'dict.txt': testing.file(\n"+
+		"                content = 'd1\\nd2\\nd3\\n',\n"+
+		"                affected_lines = {3: 'd3', 1: 'd1'},\n"+
+		"            ),\n"+
+		"            'unmodified_affected.txt': testing.file(\n"+
+		"                content = 'a1\\n',\n"+
+		"                action = '',\n"+
+		"            ),\n"+
+		"            'unaffected.txt': testing.file(\n"+
+		"                content = 'u1',\n"+
+		"                affected = False,\n"+
+		"            ),\n"+
+		"        },\n"+
+		"    )\n"+
+		"    asserts.eq(\n"+
+		"        [(f.filepath, f.message) for f in res.findings],\n"+
+		"        [\n"+
+		"            ('dict.txt', '\"M\":[(1, \"d1\"), (3, \"d3\")]:[(1, \"d1\"), (3, \"d3\")]'),\n"+
+		"            ('seq.txt', '\"M\":[(2, \"s2\")]:[(2, \"s2\")]'),\n"+
+		"            ('unmodified_affected.txt', '\"\":[(1, \"a1\"), (2, \"\")]:[]'),\n"+
+		"        ],\n"+
+		"    )\n")
 
 	rep := &capturingTestReporter{}
 	err := RunTests(t.Context(), &Options{
@@ -236,6 +283,7 @@ func TestRunTests_Success(t *testing.T) {
 	want := []testResultRecord{
 		{name: "test_assertions"},
 		{name: "test_check_and_fixes"},
+		{name: "test_custom_affected_lines_and_changed_only"},
 		{name: "test_exec_mock_and_write_file", prints: []string{
 			"[//checks_test.star:68] from check",
 			"[//checks_test.star:85] from handler",
@@ -580,11 +628,39 @@ func TestRunTests_Failures(t *testing.T) {
 			wantErr: "testing.write_file: can only be called during testing.run()",
 		},
 		{
-			name: "testing.file both affected_lines and new_lines",
+			name: "testing.file invalid affected_lines type",
 			content: "" +
 				"def test_fail():\n" +
-				"    testing.file(affected_lines = [], new_lines = [])\n",
-			wantErr: "testing.file: affected_lines and new_lines are mutually exclusive",
+				"    testing.file(affected_lines = 123)\n",
+			wantErr: "testing.file: for parameter \"affected_lines\": got int, want sequence of (int, str) or dict of {int: str}",
+		},
+		{
+			name: "testing.file affected_lines sequence element not pair",
+			content: "" +
+				"def test_fail():\n" +
+				"    testing.file(affected_lines = [(1,)])\n",
+			wantErr: "testing.file: for parameter \"affected_lines\": sequence elements must be (line_number, text) pairs",
+		},
+		{
+			name: "testing.file affected_lines non-int line number",
+			content: "" +
+				"def test_fail():\n" +
+				"    testing.file(affected_lines = [('1', 'a')])\n",
+			wantErr: "testing.file: for parameter \"affected_lines\": line number must be int, got string",
+		},
+		{
+			name: "testing.file affected_lines non-positive line number",
+			content: "" +
+				"def test_fail():\n" +
+				"    testing.file(affected_lines = [(0, 'a')])\n",
+			wantErr: "testing.file: for parameter \"affected_lines\": line numbers are 1-based, got 0",
+		},
+		{
+			name: "testing.file affected_lines non-str line content",
+			content: "" +
+				"def test_fail():\n" +
+				"    testing.file(affected_lines = {1: 2})\n",
+			wantErr: "testing.file: for parameter \"affected_lines\": line content must be str, got int",
 		},
 		{
 			name: "out of bounds replacement span",
@@ -840,7 +916,7 @@ func TestRunTests_MultiPassFixes(t *testing.T) {
 		"def _quotes(ctx):\n"+
 		"    print('pass')\n"+
 		"    for path, meta in ctx.scm.affected_files().items():\n"+
-		"        for num, line in meta.new_lines():\n"+
+		"        for num, line in meta.affected_lines():\n"+
 		"            for i, c in enumerate(line.elems()):\n"+
 		"                if c == '\"':\n"+
 		"                    ctx.emit.finding(\n"+
@@ -855,7 +931,7 @@ func TestRunTests_MultiPassFixes(t *testing.T) {
 		"\n"+
 		"def _noop_twice(ctx):\n"+
 		"    for path, meta in ctx.scm.affected_files().items():\n"+
-		"        for num, line in meta.new_lines():\n"+
+		"        for num, line in meta.affected_lines():\n"+
 		"            for _ in range(2):\n"+
 		"                ctx.emit.finding(\n"+
 		"                    level = 'error',\n"+

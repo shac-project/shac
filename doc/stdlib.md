@@ -636,8 +636,6 @@ so only the lines that changed are included. `changed_only` has no
 effect outside of a git checkout or with --stdin, where every line is
 considered changed.
 
-new_lines() is a deprecated alias for affected_lines().
-
 ## ctx.scm.all_files
 
 Returns all files found in the current workspace.
@@ -1354,8 +1352,8 @@ def test_no_tabs_only_checks_affected_lines():
 ### Arguments
 
 * **content**: (optional) File contents as a string. Defaults to "".
-* **action**: (optional) SCM action code (e.g. "A", "M", "D"). Defaults to "M".
-* **affected_lines**: (optional) Sequence of (line_num, text) pairs or dict of {line_num: text} overriding meta.affected_lines(). If None, affected_lines() is computed from content. new_lines is a deprecated alias for affected_lines.
+* **action**: (optional) SCM action code (e.g. "A", "M", "D", or "" for an unmodified file included via --all or explicit file arguments). Defaults to "M".
+* **affected_lines**: (optional) Sequence of (line_num, text) pairs or dict of {line_num: text} overriding meta.affected_lines(). If None, affected_lines() is computed from content.
 * **affected**: (optional) Whether the file is included in ctx.scm.affected_files(). Defaults to True. Like unmodified files in a git checkout, unaffected files that aren't deleted have an empty action and, unless affected_lines is set, no lines from affected_lines(changed_only = True).
 
 ### Returns

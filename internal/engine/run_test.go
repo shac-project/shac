@@ -400,9 +400,9 @@ func TestRun_SpecificFiles(t *testing.T) {
 			name:         "all files",
 			starlarkFile: "ctx-scm-all_files.star",
 			want: "[//ctx-scm-all_files.star:19] \n" +
+				"ctx-scm-affected_files-affected_lines.star: \n" +
 				"ctx-scm-affected_files-glob.star: \n" +
 				"ctx-scm-affected_files-include_deleted.star: \n" +
-				"ctx-scm-affected_files-new_lines.star: \n" +
 				"ctx-scm-affected_files.star: \n" +
 				"ctx-scm-all_files-all_negative_glob.star: \n" +
 				"ctx-scm-all_files-glob.star: \n" +
@@ -1084,8 +1084,8 @@ func TestRun_Ignore(t *testing.T) {
 				"\n",
 		},
 		{
-			"ctx-scm-affected_files-new_lines.star",
-			"[//ctx-scm-affected_files-new_lines.star:33] file_in_root.txt\n" +
+			"ctx-scm-affected_files-affected_lines.star",
+			"[//ctx-scm-affected_files-affected_lines.star:33] file_in_root.txt\n" +
 				"1: foo\n",
 		},
 		{
@@ -1328,11 +1328,11 @@ func TestRun_SCM_Raw(t *testing.T) {
 			"\n"
 		testStarlarkPrint(t, root, "ctx-scm-affected_files.star", false, false, want)
 	})
-	t.Run("affected-new_lines", func(t *testing.T) {
+	t.Run("affected-affected_lines", func(t *testing.T) {
 		t.Parallel()
-		want := "[//ctx-scm-affected_files-new_lines.star:33] a.txt\n" +
+		want := "[//ctx-scm-affected_files-affected_lines.star:33] a.txt\n" +
 			"1: First file\n"
-		testStarlarkPrint(t, root, "ctx-scm-affected_files-new_lines.star", false, false, want)
+		testStarlarkPrint(t, root, "ctx-scm-affected_files-affected_lines.star", false, false, want)
 	})
 	t.Run("all", func(t *testing.T) {
 		t.Parallel()
@@ -1380,9 +1380,9 @@ func TestRun_SCM_Raw(t *testing.T) {
 }
 
 func scmStarlarkFiles(action string) string {
-	return "ctx-scm-affected_files-glob.star: " + action + "\n" +
+	return "ctx-scm-affected_files-affected_lines.star: " + action + "\n" +
+		"ctx-scm-affected_files-glob.star: " + action + "\n" +
 		"ctx-scm-affected_files-include_deleted.star: " + action + "\n" +
-		"ctx-scm-affected_files-new_lines.star: " + action + "\n" +
 		"ctx-scm-affected_files.star: " + action + "\n" +
 		"ctx-scm-all_files-all_negative_glob.star: " + action + "\n" +
 		"ctx-scm-all_files-glob.star: " + action + "\n" +
@@ -1450,8 +1450,6 @@ def cb(ctx):
     for path, meta in ctx.scm.affected_files(glob = "*.txt").items():
         lines = [n for n, _ in meta.affected_lines()]
         changed_only = [n for n, _ in meta.affected_lines(changed_only = True)]
-        if meta.new_lines() != meta.affected_lines():
-            fail("new_lines() should be an alias for affected_lines()")
         print("%s %r: %s %s" % (path, meta.action, lines, changed_only))
 
 shac.register_check(cb)
@@ -1475,24 +1473,24 @@ shac.register_check(cb)
 	}{
 		{
 			name: "default",
-			want: `[//changed_only.star:8] 0.txt "A": [1, 2] [1, 2]
-[//changed_only.star:8] a.txt "M": [2] [2]
+			want: `[//changed_only.star:6] 0.txt "A": [1, 2] [1, 2]
+[//changed_only.star:6] a.txt "M": [2] [2]
 `,
 		},
 		{
 			// Only changed_only ignores unchanged lines with --all.
 			name: "all",
 			all:  true,
-			want: `[//changed_only.star:8] 0.txt "A": [1, 2] [1, 2]
-[//changed_only.star:8] a.txt "M": [1, 2, 3, 4] [2]
-[//changed_only.star:8] z.txt "": [1] []
+			want: `[//changed_only.star:6] 0.txt "A": [1, 2] [1, 2]
+[//changed_only.star:6] a.txt "M": [1, 2, 3, 4] [2]
+[//changed_only.star:6] z.txt "": [1] []
 `,
 		},
 		{
 			// Unmodified files passed explicitly have no changed_only lines.
 			name:  "explicit_unmodified_file",
 			files: []string{"z.txt"},
-			want: `[//changed_only.star:8] z.txt "": [1] []
+			want: `[//changed_only.star:6] z.txt "": [1] []
 `,
 		},
 	}
@@ -1515,9 +1513,9 @@ shac.register_check(cb)
 		root := initRepo(t)
 		runGit(t, root, "mv", "a.txt", "b.txt")
 		writeFile(t, root, "b.txt", "First file\nIt changed\na lot of lines.\n")
-		want := `[//changed_only.star:8] 0.txt "A": [1, 2] [1, 2]
-[//changed_only.star:8] b.txt "R": [1, 2, 3, 4] [2]
-[//changed_only.star:8] z.txt "": [1] []
+		want := `[//changed_only.star:6] 0.txt "A": [1, 2] [1, 2]
+[//changed_only.star:6] b.txt "R": [1, 2, 3, 4] [2]
+[//changed_only.star:6] z.txt "": [1] []
 `
 		testStarlarkPrint(t, root, "changed_only.star", true, false, want)
 	})
@@ -1531,9 +1529,9 @@ shac.register_check(cb)
 		writeFile(t, root, "b.txt", "First file\nIt changed\na lot of lines.\n")
 		writeFile(t, root, "a.txt", "Replacement\n")
 		runGit(t, root, "add", "a.txt", "b.txt")
-		want := `[//changed_only.star:8] 0.txt "A": [1, 2] [1, 2]
-[//changed_only.star:8] a.txt "M": [1] [1]
-[//changed_only.star:8] b.txt "C": [2] [2]
+		want := `[//changed_only.star:6] 0.txt "A": [1, 2] [1, 2]
+[//changed_only.star:6] a.txt "M": [1] [1]
+[//changed_only.star:6] b.txt "C": [2] [2]
 `
 		testStarlarkPrint(t, root, "changed_only.star", false, false, want)
 	})
@@ -1542,8 +1540,8 @@ shac.register_check(cb)
 		t.Parallel()
 		root := initRepo(t)
 		runGit(t, root, "mv", "a.txt", "b.txt")
-		want := `[//changed_only.star:8] 0.txt "A": [1, 2] [1, 2]
-[//changed_only.star:8] b.txt "R": [] []
+		want := `[//changed_only.star:6] 0.txt "A": [1, 2] [1, 2]
+[//changed_only.star:6] b.txt "R": [] []
 `
 		testStarlarkPrint(t, root, "changed_only.star", false, false, want)
 	})
@@ -1569,16 +1567,16 @@ func TestRun_SCM_Git_NoUpstream_Staged(t *testing.T) {
 				"\n",
 		},
 		{
-			"ctx-scm-affected_files-new_lines.star",
+			"ctx-scm-affected_files-affected_lines.star",
 			false,
 			// This file just happens to be the first one alphabetically.
-			"[//ctx-scm-affected_files-new_lines.star:33] ctx-scm-affected_files-glob.star\n" +
-				"1: # Copyright 2026 The Shac Authors\n",
+			"[//ctx-scm-affected_files-affected_lines.star:33] ctx-scm-affected_files-affected_lines.star\n" +
+				"1: # Copyright 2023 The Shac Authors\n",
 		},
 		{
-			"ctx-scm-affected_files-new_lines.star",
+			"ctx-scm-affected_files-affected_lines.star",
 			true,
-			"[//ctx-scm-affected_files-new_lines.star:33] a.txt\n" +
+			"[//ctx-scm-affected_files-affected_lines.star:33] a.txt\n" +
 				"1: First file\n",
 		},
 		{
@@ -1942,16 +1940,16 @@ func TestRun_SCM_Git_Binary_File(t *testing.T) {
 				"\n",
 		},
 		{
-			"ctx-scm-affected_files-new_lines.star",
+			"ctx-scm-affected_files-affected_lines.star",
 			false,
 			// Only a binary file is touched, no lines should be considered
 			// affected.
-			"[//ctx-scm-affected_files-new_lines.star:35] no new lines\n",
+			"[//ctx-scm-affected_files-affected_lines.star:35] no affected lines\n",
 		},
 		{
-			"ctx-scm-affected_files-new_lines.star",
+			"ctx-scm-affected_files-affected_lines.star",
 			true,
-			"[//ctx-scm-affected_files-new_lines.star:35] no new lines\n",
+			"[//ctx-scm-affected_files-affected_lines.star:35] no affected lines\n",
 		},
 	}
 
@@ -2020,7 +2018,7 @@ func TestRun_SCM_Git_Recursive(t *testing.T) {
 		"  name = \"root\"",
 		"  for p, m in ctx.scm.affected_files().items():",
 		"    if p.endswith(\".txt\"):",
-		"      print(name + \": \" + p + \"=\" + m.new_lines()[0][1])",
+		"      print(name + \": \" + p + \"=\" + m.affected_lines()[0][1])",
 		"      ctx.emit.finding(level=\"notice\", message=name, filepath=p)",
 		"    else:",
 		"      print(name + \": \" + p)",
@@ -2030,7 +2028,7 @@ func TestRun_SCM_Git_Recursive(t *testing.T) {
 		"  name = \"a\"",
 		"  for p, m in ctx.scm.affected_files().items():",
 		"    if p.endswith(\".txt\"):",
-		"      print(name + \": \" + p + \"=\" + m.new_lines()[0][1])",
+		"      print(name + \": \" + p + \"=\" + m.affected_lines()[0][1])",
 		"      ctx.emit.finding(level=\"notice\", message=name, filepath=p)",
 		"    else:",
 		"      print(name + \": \" + p)",
@@ -2041,7 +2039,7 @@ func TestRun_SCM_Git_Recursive(t *testing.T) {
 		"  name = \"b\"",
 		"  for p, m in ctx.scm.affected_files().items():",
 		"    if p.endswith(\".txt\"):",
-		"      print(name + \": \" + p + \"=\" + m.new_lines()[0][1])",
+		"      print(name + \": \" + p + \"=\" + m.affected_lines()[0][1])",
 		"      ctx.emit.finding(level=\"notice\", message=name, filepath=p)",
 		"    else:",
 		"      print(name + \": \" + p)",
@@ -2205,7 +2203,7 @@ func TestRun_SCM_Git_Recursive_Shared(t *testing.T) {
 		"def cb(ctx):",
 		"  for p, m in ctx.scm.affected_files().items():",
 		"    if p.endswith(\".txt\"):",
-		"      print(p + \"=\" + m.new_lines()[0][1])",
+		"      print(p + \"=\" + m.affected_lines()[0][1])",
 		"      ctx.emit.finding(level=\"notice\", message=\"internal\", filepath=p)",
 		"    else:",
 		"      print(p)")

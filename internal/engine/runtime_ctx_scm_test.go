@@ -66,7 +66,7 @@ func TestInMemoryFile(t *testing.T) {
 		}
 	})
 
-	t.Run("newLinesBinary", func(t *testing.T) {
+	t.Run("affectedLinesBinary", func(t *testing.T) {
 		sBinary := &inMemoryFile{
 			data:       []byte("binary\x00data"),
 			targetFile: tf,

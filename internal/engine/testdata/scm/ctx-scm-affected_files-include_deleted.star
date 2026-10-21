@@ -19,7 +19,7 @@ def cb(ctx):
             path,
             meta.action,
             # Only print at most the first line.
-            meta.new_lines()[:1],
+            meta.affected_lines()[:1],
         )
 
     # Now try with `include_deleted = False` to make sure the output is different
@@ -30,7 +30,7 @@ def cb(ctx):
             path,
             meta.action,
             # Only print at most the first line.
-            meta.new_lines()[:1],
+            meta.affected_lines()[:1],
         )
     print(out)
 

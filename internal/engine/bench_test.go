@@ -140,32 +140,32 @@ func BenchmarkCtxOsExec100(b *testing.B) {
 	benchStarlarkPrint(b, root, "ctx-os-exec100.star", true, want)
 }
 
-func BenchmarkCtxScmNewLines_Git(b *testing.B) {
+func BenchmarkCtxScmAffectedLines_Git(b *testing.B) {
 	root := makeGit(b)
 	copyBenchSCM(b, root)
 	runGit(b, root, "add", "ctx-scm-*.star")
-	want := "[//ctx-scm-affected_files-new_lines.star:24] ctx-scm-affected_files-new_lines.star\n" +
+	want := "[//ctx-scm-affected_files-affected_lines.star:24] ctx-scm-affected_files-affected_lines.star\n" +
 		"1: # Copyright 2023 The Shac Authors\n"
-	benchStarlarkPrint(b, root, "ctx-scm-affected_files-new_lines.star", false, want)
+	benchStarlarkPrint(b, root, "ctx-scm-affected_files-affected_lines.star", false, want)
 }
 
-func BenchmarkCtxScmNewLines100_Git(b *testing.B) {
+func BenchmarkCtxScmAffectedLines100_Git(b *testing.B) {
 	root := makeGit(b)
 	copyBenchSCM(b, root)
 	runGit(b, root, "add", "ctx-scm-*.star")
-	want := "[//ctx-scm-affected_files-new_lines100.star:24] ctx-scm-affected_files-new_lines.star\n" +
+	want := "[//ctx-scm-affected_files-affected_lines100.star:24] ctx-scm-affected_files-affected_lines.star\n" +
 		"1: # Copyright 2023 The Shac Authors\n"
 	want = strings.Repeat(want, 100)
-	benchStarlarkPrint(b, root, "ctx-scm-affected_files-new_lines100.star", false, want)
+	benchStarlarkPrint(b, root, "ctx-scm-affected_files-affected_lines100.star", false, want)
 }
 
-func BenchmarkCtxScmNewLines_Raw(b *testing.B) {
+func BenchmarkCtxScmAffectedLines_Raw(b *testing.B) {
 	root := b.TempDir()
 	writeFile(b, root, "a.txt", "First file")
 	copyBenchSCM(b, root)
-	want := "[//ctx-scm-affected_files-new_lines.star:24] a.txt\n" +
+	want := "[//ctx-scm-affected_files-affected_lines.star:24] a.txt\n" +
 		"1: First file\n"
-	benchStarlarkPrint(b, root, "ctx-scm-affected_files-new_lines.star", false, want)
+	benchStarlarkPrint(b, root, "ctx-scm-affected_files-affected_lines.star", false, want)
 }
 
 // TODO(maruel): Add large synthetic benchmark.

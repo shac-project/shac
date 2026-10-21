@@ -17,10 +17,10 @@ def cb(ctx):
 
     # Only print the first file, but still load the data for the other files.
     for i, (path, metadata) in enumerate(ctx.scm.affected_files().items()):
-        new_lines = metadata.new_lines()
+        affected_lines = metadata.affected_lines()
         if not i:
             # Only print the first line.
-            num, line = new_lines[0]
+            num, line = affected_lines[0]
             print(path + "\n" + str(num) + ": " + line)
 
 shac.register_check(cb)

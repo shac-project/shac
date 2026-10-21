@@ -125,13 +125,6 @@ func (f *fileImpl) getMetadata() starlark.Value {
 				}
 				return f.affectedLines(ctx, s, bool(changedOnly))
 			}),
-			// new_lines is a deprecated alias for affected_lines.
-			"new_lines": newBuiltin("new_lines", func(ctx context.Context, s *shacState, name string, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
-				if err := starlark.UnpackArgs(name, args, kwargs); err != nil {
-					return nil, err
-				}
-				return f.affectedLines(ctx, s, false)
-			}),
 		})
 		// Freeze the metadata immediately after creation while holding the
 		// lock. This prevents data races later when builtinWrapper calls
@@ -343,7 +336,7 @@ func (s *inMemoryFile) affectedLines(ctx context.Context, f file, changedOnly bo
 	if f.rootedpath() != s.targetFile.rootedpath() {
 		return nil, fmt.Errorf("file %q is not managed", f.rootedpath())
 	}
-	return newLinesWholeBytes(s.data)
+	return affectedLinesWholeBytes(s.data)
 }
 
 func (s *inMemoryFile) commits(ctx context.Context) ([]scmCommit, error) {
@@ -938,11 +931,11 @@ func (g *gitCheckout) affectedLines(ctx context.Context, f file, changedOnly boo
 		if changedOnly {
 			return make(starlark.Tuple, 0), nil
 		}
-		return newLinesWhole(g.checkoutRoot, f.rootedpath())
+		return affectedLinesWhole(g.checkoutRoot, f.rootedpath())
 	}
 	// With --all, checks should consider every line of modified files too.
 	if g.returnAll && !changedOnly {
-		return newLinesWhole(g.checkoutRoot, f.rootedpath())
+		return affectedLinesWhole(g.checkoutRoot, f.rootedpath())
 	}
 	ref := g.upstream.hash
 	if fi, ok := f.(*fileImpl); ok && fi.src != "" {
@@ -963,7 +956,7 @@ func (g *gitCheckout) affectedLines(ctx context.Context, f file, changedOnly boo
 		// `git diff` prints nothing for untracked files, which are entirely
 		// new. Fall back to the whole file for any other unexpected empty
 		// diff as well.
-		v, err := newLinesWhole(g.checkoutRoot, f.rootedpath())
+		v, err := affectedLinesWhole(g.checkoutRoot, f.rootedpath())
 		if err != nil {
 			return nil, err
 		}
@@ -977,7 +970,7 @@ func (g *gitCheckout) affectedLines(ctx context.Context, f file, changedOnly boo
 		} else {
 			// Reached the end of the diff header without finding any
 			// changed lines. This is probably because the file is binary,
-			// so there's no meaning of "new lines" for it anyway.
+			// so there's no meaning of "affected lines" for it anyway.
 			return make(starlark.Tuple, 0), nil
 		}
 		if done {
@@ -1099,7 +1092,7 @@ func (r *rawTree) allFiles(ctx context.Context, filter fileFilter) ([]file, erro
 }
 
 func (r *rawTree) affectedLines(ctx context.Context, f file, changedOnly bool) (starlark.Value, error) {
-	return newLinesWhole(r.root, f.rootedpath())
+	return affectedLinesWhole(r.root, f.rootedpath())
 }
 
 func (r *rawTree) commits(ctx context.Context) ([]scmCommit, error) {
@@ -1229,18 +1222,18 @@ func ctxScmFilesReturnValue(files []file) starlark.Value {
 	return out
 }
 
-// newLinesWhole returns the whole file as new lines.
+// affectedLinesWhole returns the whole file as affected lines.
 //
 // Make sure to update //doc/stdlib.star whenever this function is modified.
-func newLinesWhole(root, path string) (starlark.Value, error) {
+func affectedLinesWhole(root, path string) (starlark.Value, error) {
 	b, err := os.ReadFile(filepath.Join(root, path))
 	if err != nil {
 		return nil, err
 	}
-	return newLinesWholeBytes(b)
+	return affectedLinesWholeBytes(b)
 }
 
-func newLinesWholeBytes(b []byte) (starlark.Value, error) {
+func affectedLinesWholeBytes(b []byte) (starlark.Value, error) {
 	// If the file contains a null byte we'll assume it's binary and not try to
 	// parse its lines.
 	if bytes.IndexByte(b, 0) != -1 {
