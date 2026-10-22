@@ -284,6 +284,41 @@ func TestRun_Fail(t *testing.T) {
 			}(),
 			"no checks to run",
 		},
+		{
+			"unmatched allowlist glob",
+			func() Options {
+				root := t.TempDir()
+				writeFile(t, root, "shac.star",
+					"def cb(ctx):",
+					"    pass",
+					"shac.register_check(cb)")
+				return Options{
+					Dir: root,
+					Filter: CheckFilter{
+						AllowList: []string{"does-not-exist*"},
+					},
+				}
+			}(),
+			"no checks match: does-not-exist*",
+		},
+		{
+			"all allowlisted checks excluded by denylist",
+			func() Options {
+				root := t.TempDir()
+				writeFile(t, root, "shac.star",
+					"def cb(ctx):",
+					"    pass",
+					"shac.register_check(cb)")
+				return Options{
+					Dir: root,
+					Filter: CheckFilter{
+						AllowList: []string{"c*"},
+						DenyList:  []string{"*b"},
+					},
+				}
+			}(),
+			"no checks to run",
+		},
 	}
 	for i := range data {
 		t.Run(data[i].name, func(t *testing.T) {
@@ -924,6 +959,28 @@ func TestRun_Filtering(t *testing.T) {
 			},
 			want: "[//shac.star:4] formatter running\n",
 		},
+		{
+			name: "allowlist glob",
+			filter: CheckFilter{
+				AllowList: []string{"non_*"},
+			},
+			want: "[//shac.star:2] non-formatter running\n",
+		},
+		{
+			name: "denylist glob",
+			filter: CheckFilter{
+				DenyList: []string{"non_*"},
+			},
+			want: "[//shac.star:4] formatter running\n",
+		},
+		{
+			name: "allowlist glob with denylist override",
+			filter: CheckFilter{
+				AllowList: []string{"*formatter"},
+				DenyList:  []string{"non_*"},
+			},
+			want: "[//shac.star:4] formatter running\n",
+		},
 	}
 	for i := range data {
 		t.Run(data[i].name, func(t *testing.T) {
@@ -940,6 +997,54 @@ func TestRun_Filtering(t *testing.T) {
 				t.Fatalf("mismatch (-want +got):\n%s", diff)
 			}
 		})
+	}
+}
+
+func TestMatchPattern(t *testing.T) {
+	t.Parallel()
+
+	data := []struct {
+		pattern string
+		name    string
+		want    bool
+	}{
+		{"foo", "foo", true},
+		{"foo", "bar", false},
+		{"foo", "foobar", false},
+		{"*", "", true},
+		{"*", "foo", true},
+		{"foo*", "foo", true},
+		{"foo*", "foobar", true},
+		{"foo*", "barfoo", false},
+		{"*foo", "foo", true},
+		{"*foo", "barfoo", true},
+		{"*foo", "foobar", false},
+		{"*foo*", "foo", true},
+		{"*foo*", "barfoobaz", true},
+		{"*foo*", "barbaz", false},
+		{"foo*foo", "foo", false},
+		{"foo*foo", "foofoo", true},
+		{"foo*foo", "foobarfoo", true},
+		{"a*b*c", "abc", true},
+		{"a*b*c", "abbc", true},
+		{"a*b*c", "axbyc", true},
+		{"a*b*c", "axbycz", false},
+		{"a*ba*a", "aba", false},
+		{"a*ba*a", "abaa", true},
+		{"a**b", "ab", true},
+		{"a**b", "axb", true},
+		// Regexp metacharacters are literal.
+		{"a.b*", "a.bc", true},
+		{"a.b*", "axbc", false},
+		{"(a|b)*", "(a|b)c", true},
+		{"(a|b)*", "ac", false},
+		// '*' crosses '/', unlike path.Match.
+		{"*bazel*", "scripts/shac/bazel_test.star:test_x", true},
+	}
+	for _, d := range data {
+		if got := matchPattern(d.pattern, d.name); got != d.want {
+			t.Errorf("matchPattern(%q, %q) = %v, want %v", d.pattern, d.name, got, d.want)
+		}
 	}
 }
 

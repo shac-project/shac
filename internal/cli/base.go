@@ -41,8 +41,8 @@ func (c *commandBase) SetFlags(f *flag.FlagSet) {
 	f.BoolVar(&c.allFiles, "all", false, "checks all files instead of only affected files")
 	f.BoolVar(&c.noRecurse, "no-recurse", false, "do not look for shac.star files recursively")
 	f.StringVar(&c.entryPoint, "entrypoint", engine.DefaultEntryPoint, "basename of Starlark files to run")
-	f.StringSliceVar(&c.allowList, "only", nil, "comma-separated allowlist of checks to run; by default all checks are run")
-	f.StringSliceVar(&c.denyList, "skip", nil, "comma-separated denylist of checks to skip; by default all checks are run")
+	f.StringSliceVar(&c.allowList, "only", nil, "comma-separated allowlist of checks to run (supports '*' globs); by default all checks are run")
+	f.StringSliceVar(&c.denyList, "skip", nil, "comma-separated denylist of checks to skip (supports '*' globs); by default all checks are run")
 	c.vars = stringMapFlag{}
 	f.Var(&c.vars, "var", "runtime variables to set, of the form key=value")
 	f.BoolVar(&c.quiet, "quiet", false, "suppress non-actionable output, such as the completion line of checks that passed")

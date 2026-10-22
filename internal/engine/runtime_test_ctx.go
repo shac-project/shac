@@ -1658,29 +1658,9 @@ func runTestsInner(ctx context.Context, tmpdir string, o *Options) error {
 
 	subprocessSem := semaphore.NewWeighted(int64(maxConcurrency))
 
-	allowSet := make(map[string]bool, len(o.Filter.AllowList))
-	for _, name := range o.Filter.AllowList {
-		allowSet[name] = true
-	}
-	denySet := make(map[string]bool, len(o.Filter.DenyList))
-	var allowedAndDenied []string
-	for _, name := range o.Filter.DenyList {
-		denySet[name] = true
-		if allowSet[name] {
-			allowedAndDenied = append(allowedAndDenied, name)
-		}
-	}
-	if len(allowedAndDenied) > 0 {
-		return fmt.Errorf("tests cannot be both allowed and denied: %s", strings.Join(allowedAndDenied, ", "))
-	}
-	// Filter entries that match no test are most likely typos, which would
-	// otherwise silently run (or skip) the wrong set of tests.
-	unmatchedFilters := make(map[string]bool, len(allowSet)+len(denySet))
-	for name := range allowSet {
-		unmatchedFilters[name] = true
-	}
-	for name := range denySet {
-		unmatchedFilters[name] = true
+	validator, err := o.Filter.newValidator("test", "tests")
+	if err != nil {
+		return err
 	}
 
 	type testCase struct {
@@ -1760,12 +1740,8 @@ func runTestsInner(ctx context.Context, tmpdir string, o *Options) error {
 			if len(testFiles) > 1 {
 				displayName = fullName
 			}
-			delete(unmatchedFilters, fullName)
-			delete(unmatchedFilters, fnName)
-			if len(allowSet) > 0 && !allowSet[fullName] && !allowSet[fnName] {
-				continue
-			}
-			if denySet[fullName] || denySet[fnName] {
+			validator.record(fullName, fnName)
+			if !o.Filter.matches(fullName, fnName) {
 				continue
 			}
 			allTests = append(allTests, testCase{
@@ -1777,13 +1753,8 @@ func runTestsInner(ctx context.Context, tmpdir string, o *Options) error {
 		}
 	}
 
-	if len(unmatchedFilters) > 0 {
-		names := slices.Sorted(maps.Keys(unmatchedFilters))
-		msg := "test does not exist"
-		if len(names) > 1 {
-			msg = "tests do not exist"
-		}
-		return fmt.Errorf("%s: %s", msg, strings.Join(names, ", "))
+	if err := validator.err(); err != nil {
+		return err
 	}
 	if len(allTests) == 0 {
 		return errors.New("no tests matched filter")

@@ -28,6 +28,7 @@ import (
 	"os/exec"
 	"path"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"slices"
 	"strconv"
@@ -107,10 +108,43 @@ const (
 type CheckFilter struct {
 	FormatterFiltering FormatterFiltering
 	// AllowList specifies checks to run. If non-empty, all other checks will be
-	// skipped.
+	// skipped. Each entry may be an exact check name or a glob pattern using
+	// '*' wildcards.
 	AllowList []string
-	// DenyList specifies checks to skip.
+	// DenyList specifies checks to skip. Each entry may be an exact check name
+	// or a glob pattern using '*' wildcards.
 	DenyList []string
+}
+
+// matchPattern reports whether name matches pattern, where '*' matches any
+// sequence of zero or more characters, including '/' (unlike path.Match),
+// since shac test names contain the test file's path.
+func matchPattern(pattern, name string) bool {
+	if !strings.Contains(pattern, "*") {
+		return pattern == name
+	}
+	// The pattern is quoted, so it always compiles. Recompiling on every call
+	// is fine since there are only a few patterns and checks or tests.
+	re := regexp.MustCompile("^" + strings.ReplaceAll(regexp.QuoteMeta(pattern), `\*`, ".*") + "$")
+	return re.MatchString(name)
+}
+
+func matchesAny(patterns []string, names ...string) bool {
+	for _, p := range patterns {
+		for _, name := range names {
+			if matchPattern(p, name) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func (f *CheckFilter) matches(names ...string) bool {
+	if len(f.AllowList) != 0 && !matchesAny(f.AllowList, names...) {
+		return false
+	}
+	return !matchesAny(f.DenyList, names...)
 }
 
 func (f *CheckFilter) filter(checks []*registeredCheck) ([]*registeredCheck, error) {
@@ -118,23 +152,9 @@ func (f *CheckFilter) filter(checks []*registeredCheck) ([]*registeredCheck, err
 		return checks, nil
 	}
 
-	allowList := make(map[string]struct{})
-	for _, name := range f.AllowList {
-		allowList[name] = struct{}{}
-	}
-	denyList := make(map[string]struct{})
-	for _, name := range f.DenyList {
-		denyList[name] = struct{}{}
-	}
-
 	var filtered []*registeredCheck
 	for _, check := range checks {
-		if len(f.AllowList) != 0 {
-			if _, ok := allowList[check.name]; !ok {
-				continue
-			}
-		}
-		if _, ok := denyList[check.name]; ok {
+		if !f.matches(check.name) {
 			continue
 		}
 		switch f.FormatterFiltering {
@@ -159,46 +179,80 @@ func (f *CheckFilter) filter(checks []*registeredCheck) ([]*registeredCheck, err
 // validate validates the filter configuration against the set of discovered
 // checks.
 func (f *CheckFilter) validate(shacStates []*shacState) error {
-	allowList := make(map[string]struct{})
+	v, err := f.newValidator("check", "checks")
+	if err != nil {
+		return err
+	}
+	for _, s := range shacStates {
+		for _, check := range s.checks {
+			v.record(check.name)
+		}
+	}
+	return v.err()
+}
+
+type filterValidator struct {
+	unmatched map[string]struct{}
+	singular  string
+	plural    string
+}
+
+func (f *CheckFilter) newValidator(singular, plural string) (*filterValidator, error) {
+	allowList := make(map[string]struct{}, len(f.AllowList))
+	// Filter entries that match no check/test are most likely typos, which
+	// would otherwise silently run (or skip) the wrong set.
+	unmatched := make(map[string]struct{}, len(f.AllowList)+len(f.DenyList))
 	for _, name := range f.AllowList {
 		allowList[name] = struct{}{}
+		unmatched[name] = struct{}{}
 	}
 	var allowedAndDenied []string
-	denyList := make(map[string]struct{})
 	for _, name := range f.DenyList {
-		denyList[name] = struct{}{}
+		unmatched[name] = struct{}{}
 		if _, ok := allowList[name]; ok {
 			allowedAndDenied = append(allowedAndDenied, name)
 		}
 	}
 	if len(allowedAndDenied) > 0 {
-		return fmt.Errorf(
-			"checks cannot be both allowed and denied: %s",
+		return nil, fmt.Errorf(
+			"%s cannot be both allowed and denied: %s",
+			plural,
 			strings.Join(allowedAndDenied, ", "))
 	}
+	return &filterValidator{
+		unmatched: unmatched,
+		singular:  singular,
+		plural:    plural,
+	}, nil
+}
 
-	// Remove all known checks from the allowlist and denylist to validate that
-	// there are no invalid checks in either list.
-	for _, s := range shacStates {
-		for _, check := range s.checks {
-			delete(allowList, check.name)
-			delete(denyList, check.name)
+func (v *filterValidator) record(names ...string) {
+	for pattern := range v.unmatched {
+		for _, name := range names {
+			if matchPattern(pattern, name) {
+				delete(v.unmatched, pattern)
+				break
+			}
 		}
 	}
-	if len(allowList) > 0 || len(denyList) > 0 {
-		var invalidChecks []string
-		invalidChecks = slices.AppendSeq(invalidChecks, maps.Keys(allowList))
-		invalidChecks = slices.AppendSeq(invalidChecks, maps.Keys(denyList))
-		var msg string
-		if len(invalidChecks) == 1 {
-			msg = "check does not exist"
-		} else {
-			msg = "checks do not exist"
-		}
-		slices.Sort(invalidChecks)
-		return fmt.Errorf("%s: %s", msg, strings.Join(invalidChecks, ", "))
+}
+
+func (v *filterValidator) err() error {
+	if len(v.unmatched) == 0 {
+		return nil
 	}
-	return nil
+	invalid := slices.Sorted(maps.Keys(v.unmatched))
+	var msg string
+	if slices.ContainsFunc(invalid, func(p string) bool { return strings.Contains(p, "*") }) {
+		// "check does not exist: foo*" would suggest that "foo*" is meant as
+		// a literal name.
+		msg = "no " + v.plural + " match"
+	} else if len(invalid) > 1 {
+		msg = v.plural + " do not exist"
+	} else {
+		msg = v.singular + " does not exist"
+	}
+	return fmt.Errorf("%s: %s", msg, strings.Join(invalid, ", "))
 }
 
 // Level is one of "notice", "warning" or "error".

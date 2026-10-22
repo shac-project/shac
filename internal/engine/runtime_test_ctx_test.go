@@ -376,24 +376,49 @@ func TestRunTests_Filtering(t *testing.T) {
 		"def test_three():\n"+
 		"    pass\n")
 
-	rep := &capturingTestReporter{}
-	err := RunTests(t.Context(), &Options{
-		Dir:          root,
-		TestReporter: rep,
-		Filter: CheckFilter{
-			AllowList: []string{"a_test.star:test_two", "test_three"},
-			DenyList:  []string{"b_test.star:test_two"},
+	data := []struct {
+		name   string
+		filter CheckFilter
+		want   []testResultRecord
+	}{
+		{
+			name: "exact names",
+			filter: CheckFilter{
+				AllowList: []string{"a_test.star:test_two", "test_three"},
+				DenyList:  []string{"b_test.star:test_two"},
+			},
+			want: []testResultRecord{
+				{name: "a_test.star:test_two"},
+				{name: "b_test.star:test_three"},
+			},
 		},
-	})
-	if err != nil {
-		t.Fatalf("Unexpected error: %v", err)
+		{
+			name: "globs",
+			filter: CheckFilter{
+				AllowList: []string{"test_t*"},
+				DenyList:  []string{"b_test.star:*"},
+			},
+			want: []testResultRecord{
+				{name: "a_test.star:test_two"},
+			},
+		},
 	}
-	want := []testResultRecord{
-		{name: "a_test.star:test_two"},
-		{name: "b_test.star:test_three"},
-	}
-	if diff := cmp.Diff(want, rep.results, cmp.AllowUnexported(testResultRecord{})); diff != "" {
-		t.Fatalf("Unexpected test results (-want +got):\n%s", diff)
+	for _, d := range data {
+		t.Run(d.name, func(t *testing.T) {
+			t.Parallel()
+			rep := &capturingTestReporter{}
+			err := RunTests(t.Context(), &Options{
+				Dir:          root,
+				TestReporter: rep,
+				Filter:       d.filter,
+			})
+			if err != nil {
+				t.Fatalf("Unexpected error: %s", err)
+			}
+			if diff := cmp.Diff(d.want, rep.results, cmp.AllowUnexported(testResultRecord{})); diff != "" {
+				t.Fatalf("Unexpected test results (-want +got):\n%s", diff)
+			}
+		})
 	}
 }
 
@@ -448,6 +473,21 @@ func TestRunTests_InvalidFilter(t *testing.T) {
 			name:    "nonexistent tests in both lists",
 			filter:  CheckFilter{AllowList: []string{"test_alice", "a_test.star:test_nope"}, DenyList: []string{"test_typo"}},
 			wantErr: "tests do not exist: a_test.star:test_nope, test_typo",
+		},
+		{
+			name:    "unmatched glob",
+			filter:  CheckFilter{AllowList: []string{"test_c*"}},
+			wantErr: "no tests match: test_c*",
+		},
+		{
+			name:    "unmatched glob alongside nonexistent test",
+			filter:  CheckFilter{AllowList: []string{"test_c*", "test_typo"}},
+			wantErr: "no tests match: test_c*, test_typo",
+		},
+		{
+			name:    "all allowed tests excluded by denylist",
+			filter:  CheckFilter{AllowList: []string{"test_a*"}, DenyList: []string{"*alice"}},
+			wantErr: "no tests matched filter",
 		},
 	}
 	for _, d := range data {

@@ -49,8 +49,8 @@ func (*testCmd) Description() string {
 
 func (c *testCmd) SetFlags(f *flag.FlagSet) {
 	f.StringVarP(&c.cwd, "cwd", "C", ".", "directory in which to run shac")
-	f.StringSliceVar(&c.allowList, "only", nil, "comma-separated allowlist of tests to run; by default all tests are run")
-	f.StringSliceVar(&c.denyList, "skip", nil, "comma-separated denylist of tests to skip; by default all tests are run")
+	f.StringSliceVar(&c.allowList, "only", nil, "comma-separated allowlist of tests to run (supports '*' globs); by default all tests are run")
+	f.StringSliceVar(&c.denyList, "skip", nil, "comma-separated denylist of tests to skip (supports '*' globs); by default all tests are run")
 	c.vars = stringMapFlag{}
 	f.Var(&c.vars, "var", "runtime variables to set, of the form key=value")
 	f.BoolVar(&c.quiet, "quiet", false, "suppress non-actionable output, such as the completion line of tests that passed")
