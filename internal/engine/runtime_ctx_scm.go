@@ -648,28 +648,81 @@ func (g *gitCheckout) init(ctx context.Context) error {
 		// Not worth continuing.
 		return g.err
 	}
-	// Determine pristine status but ignoring untracked files. We do not
-	// distinguish between indexed or not.
-	isPristine := g.run(ctx, "status", "--porcelain", "--untracked-files=no") == ""
-	g.upstream.hash = g.run(ctx, "rev-parse", "@{u}")
-	if g.err != nil {
-		const noUpstream = "no upstream configured for branch"
-		const noBranch = "HEAD does not point to a branch"
-		if s := g.err.Error(); strings.Contains(s, noUpstream) || strings.Contains(s, noBranch) {
-			g.err = nil
-			// If @{u} is undefined, silently default to use HEAD~1 if pristine, HEAD otherwise.
-			if isPristine {
-				// If HEAD~1 doesn't exist, this will fail.
-				g.upstream.ref = "HEAD~1"
+	isNonDefaultBranch := g.head.ref != "HEAD" && !g.isDefaultBranch(ctx, g.head.ref)
+	if upstreamRef, err := runGitCmd(ctx, g.checkoutRoot, "rev-parse", "--abbrev-ref=strict", "--symbolic-full-name", "@{u}"); err == nil {
+		// If a non-default branch tracks a remote branch of the same name
+		// (e.g. after `git push -u origin <branch>` for a GitHub/GitLab PR),
+		// @{u} points to the pushed PR branch rather than the base branch it
+		// was forked from; ignore @{u} and resolve against other remote refs.
+		if !isNonDefaultBranch || !strings.HasSuffix(upstreamRef, "/"+g.head.ref) {
+			g.upstream.ref = upstreamRef
+			// Compare against the merge-base with @{u} rather than @{u}
+			// directly so upstream commits that landed after the branch
+			// diverged are not treated as local changes.
+			if mergeBase, mergeBaseErr := runGitCmd(ctx, g.checkoutRoot, "merge-base", "@{u}", "HEAD"); mergeBaseErr == nil {
+				g.upstream.hash = mergeBase
 			} else {
-				g.upstream.ref = "HEAD"
+				g.upstream.hash = g.run(ctx, "rev-parse", "@{u}")
 			}
-			g.upstream.hash = g.run(ctx, "rev-parse", g.upstream.ref)
+			return g.err
 		}
 	} else {
-		g.upstream.ref = g.run(ctx, "rev-parse", "--abbrev-ref=strict", "--symbolic-full-name", "@{u}")
+		const noUpstream = "no upstream configured for branch"
+		const noBranch = "HEAD does not point to a branch"
+		if s := err.Error(); !strings.Contains(s, noUpstream) && !strings.Contains(s, noBranch) {
+			g.err = err
+			return g.err
+		}
+	}
+
+	// Exclude GitHub Actions pull_request refs (refs/remotes/origin/pull/*) and
+	// any remote branch matching the current non-default branch name so PR
+	// branches are not treated as already-submitted upstream refs. Note that
+	// `git rev-list --remotes` strips the `refs/remotes/` prefix before
+	// matching `--exclude` patterns.
+	revListArgs := []string{"rev-list", "--parents", "--first-parent", "HEAD", "--not", "--exclude=*/pull/*"}
+	if isNonDefaultBranch {
+		revListArgs = append(revListArgs, "--exclude=*/"+g.head.ref)
+	}
+	revListArgs = append(revListArgs, "--remotes")
+	if revList, err := runGitCmd(ctx, g.checkoutRoot, revListArgs...); err == nil {
+		if revList == "" {
+			// HEAD is already reachable from a remote-tracking branch, so
+			// there are no unsubmitted commits to check.
+			g.upstream.ref = "HEAD"
+			g.upstream.hash = g.head.hash
+		} else {
+			lines := strings.Split(revList, "\n")
+			// If the walk stopped before the root commit because it hit an
+			// ancestor reachable from --remotes, the oldest unsubmitted
+			// commit's first parent is the fork point on that remote branch.
+			if fields := strings.Fields(lines[len(lines)-1]); len(fields) >= 2 {
+				g.upstream.ref = fields[1]
+				g.upstream.hash = fields[1]
+			}
+		}
+	}
+	if g.upstream.hash == "" {
+		// No remote-tracking ancestor exists (e.g. a local-only repository
+		// with no remotes); fall back to HEAD~1 if pristine, HEAD otherwise.
+		isPristine := g.run(ctx, "status", "--porcelain", "--untracked-files=no") == ""
+		if isPristine {
+			// If HEAD~1 doesn't exist, this will fail.
+			g.upstream.ref = "HEAD~1"
+		} else {
+			g.upstream.ref = "HEAD"
+		}
+		g.upstream.hash = g.run(ctx, "rev-parse", g.upstream.ref)
 	}
 	return g.err
+}
+
+func (g *gitCheckout) isDefaultBranch(ctx context.Context, branch string) bool {
+	if branch == "main" || branch == "master" {
+		return true
+	}
+	originHead, err := runGitCmd(ctx, g.checkoutRoot, "rev-parse", "--abbrev-ref=strict", "--symbolic-full-name", "refs/remotes/origin/HEAD")
+	return err == nil && strings.HasSuffix(originHead, "/"+branch)
 }
 
 // run runs a git command in the check. After init() is called, the mu lock is

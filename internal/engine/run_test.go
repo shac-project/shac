@@ -2424,6 +2424,139 @@ func TestRun_CommitMessageFindings(t *testing.T) {
 	}
 }
 
+func TestRun_SCM_Git_RemoteBranches(t *testing.T) {
+	t.Parallel()
+
+	t.Run("at_or_behind_remote_branch", func(t *testing.T) {
+		t.Parallel()
+		root := resolvedTempDir(t)
+		initGit(t, root)
+
+		writeFile(t, root, "base.txt", "base content")
+		writeFile(t, root, "shac.star",
+			"def cb(ctx):",
+			"  commits = ctx.scm.commits()",
+			"  if len(commits) != 0:",
+			"    fail('expected 0 commits, got %d' % len(commits))",
+			"  affected = [p for p in ctx.scm.affected_files()]",
+			"  if len(affected) != 0:",
+			"    fail('expected 0 affected files, got %s' % affected)",
+			"",
+			"shac.register_check(cb)",
+		)
+		runGit(t, root, "add", ".")
+		runGit(t, root, "commit", "-m", "commit 1")
+		runGit(t, root, "update-ref", "refs/remotes/origin/main", "HEAD")
+
+		// Detached HEAD at refs/remotes/origin/main.
+		runGit(t, root, "checkout", "--detach", "HEAD")
+		o := Options{Report: &reportNoPrint{t: t}, Dir: root, EntryPoint: "shac.star"}
+		if err := Run(t.Context(), &o); err != nil {
+			t.Fatalf("unexpected error when HEAD is at origin/main: %s", err)
+		}
+
+		// Advance refs/remotes/origin/main ahead of HEAD (e.g. JIRI_HEAD lagging
+		// behind origin/main).
+		writeFile(t, root, "ahead.txt", "ahead content")
+		runGit(t, root, "add", "ahead.txt")
+		runGit(t, root, "commit", "-m", "origin ahead commit")
+		runGit(t, root, "update-ref", "refs/remotes/origin/main", "HEAD")
+		runGit(t, root, "checkout", "--detach", "HEAD~1")
+		if err := Run(t.Context(), &o); err != nil {
+			t.Fatalf("unexpected error when HEAD is behind origin/main: %s", err)
+		}
+
+		// Divergent release branch in refs/remotes/origin/releases/f1.
+		writeFile(t, root, "release.txt", "release content")
+		runGit(t, root, "add", "release.txt")
+		runGit(t, root, "commit", "-m", "release commit")
+		runGit(t, root, "update-ref", "refs/remotes/origin/releases/f1", "HEAD")
+		if err := Run(t.Context(), &o); err != nil {
+			t.Fatalf("unexpected error when HEAD is at a release branch: %s", err)
+		}
+
+		// Custom default branch pointed to by refs/remotes/origin/HEAD, checked
+		// out as a local branch tracking refs/remotes/origin/trunk.
+		runGit(t, root, "remote", "add", "origin", "https://example.com/repo.git")
+		runGit(t, root, "checkout", "-b", "trunk")
+		runGit(t, root, "update-ref", "refs/remotes/origin/trunk", "HEAD")
+		runGit(t, root, "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/trunk")
+		runGit(t, root, "branch", "--set-upstream-to", "refs/remotes/origin/trunk")
+		if err := Run(t.Context(), &o); err != nil {
+			t.Fatalf("unexpected error when HEAD is on custom default branch: %s", err)
+		}
+	})
+
+	t.Run("unsubmitted_commits_on_remote_branch", func(t *testing.T) {
+		t.Parallel()
+		root := resolvedTempDir(t)
+		initGit(t, root)
+		runGit(t, root, "remote", "add", "origin", "https://example.com/repo.git")
+
+		writeFile(t, root, "base.txt", "base content")
+		writeFile(t, root, "shac.star",
+			"def cb(ctx):",
+			"  commits = ctx.scm.commits()",
+			"  if len(commits) != 2:",
+			"    fail('expected 2 commits, got %d' % len(commits))",
+			"  if not commits[0].message.startswith('local commit 2') or not commits[1].message.startswith('local commit 1'):",
+			"    fail('unexpected commit messages: %s' % [c.message for c in commits])",
+			"  affected = sorted([p for p in ctx.scm.affected_files()])",
+			"  if affected != ['local1.txt', 'local2.txt']:",
+			"    fail('expected [local1.txt, local2.txt], got %s' % affected)",
+			"",
+			"shac.register_check(cb)",
+		)
+		runGit(t, root, "add", ".")
+		runGit(t, root, "commit", "-m", "fork point commit")
+
+		// Advance refs/remotes/origin/main past the fork point.
+		writeFile(t, root, "origin_only.txt", "origin only content")
+		runGit(t, root, "add", "origin_only.txt")
+		runGit(t, root, "commit", "-m", "origin commit")
+		runGit(t, root, "update-ref", "refs/remotes/origin/main", "HEAD")
+
+		// Create a local branch from the fork point without @{u}.
+		runGit(t, root, "checkout", "-b", "local-feature", "HEAD~1")
+		writeFile(t, root, "local1.txt", "local 1 content")
+		runGit(t, root, "add", "local1.txt")
+		runGit(t, root, "commit", "-m", "local commit 1")
+
+		writeFile(t, root, "local2.txt", "local 2 content")
+		runGit(t, root, "add", "local2.txt")
+		runGit(t, root, "commit", "-m", "local commit 2")
+
+		o := Options{Report: &reportNoPrint{t: t}, Dir: root, EntryPoint: "shac.star"}
+		if err := Run(t.Context(), &o); err != nil {
+			t.Fatalf("unexpected error on diverged branch without @{u}: %s", err)
+		}
+
+		// Verify when @{u} is set to origin/main (which has advanced past the
+		// fork point).
+		runGit(t, root, "branch", "--set-upstream-to", "refs/remotes/origin/main")
+		if err := Run(t.Context(), &o); err != nil {
+			t.Fatalf("unexpected error on diverged branch with @{u}: %s", err)
+		}
+
+		// Verify when the feature branch has been pushed to a remote branch of
+		// the same name (e.g. `git push -u origin local-feature` for a PR).
+		runGit(t, root, "update-ref", "refs/remotes/origin/local-feature", "HEAD")
+		runGit(t, root, "branch", "--set-upstream-to", "refs/remotes/origin/local-feature")
+		if err := Run(t.Context(), &o); err != nil {
+			t.Fatalf("unexpected error on pushed PR branch tracking origin/local-feature: %s", err)
+		}
+
+		// Verify detached HEAD at refs/remotes/origin/pull/42/merge (e.g.
+		// GitHub Actions pull_request checkout).
+		runGit(t, root, "update-ref", "-d", "refs/remotes/origin/local-feature")
+		runGit(t, root, "update-ref", "refs/remotes/origin/pull/42/merge", "HEAD")
+		runGit(t, root, "checkout", "--detach", "HEAD")
+		if err := Run(t.Context(), &o); err != nil {
+			t.Fatalf("unexpected error at refs/remotes/origin/pull/42/merge: %s", err)
+		}
+	})
+}
+
 // TestTestDataFailOrThrow runs all the files under testdata/fail_or_throw/.
 //
 // These test cases call fail() or throw an exception.
