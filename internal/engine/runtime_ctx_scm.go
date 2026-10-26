@@ -636,6 +636,9 @@ type gitCheckout struct {
 	checkoutRoot string
 	head         commitRef
 	upstream     commitRef
+	// upstreamIsEmptyTree is set if HEAD is a root commit, in which case
+	// upstream.hash is git's empty tree rather than a commit.
+	upstreamIsEmptyTree bool
 
 	mu  sync.Mutex
 	err error // save error.
@@ -675,46 +678,113 @@ func (g *gitCheckout) init(ctx context.Context) error {
 		}
 	}
 
-	// Exclude GitHub Actions pull_request refs (refs/remotes/origin/pull/*) and
-	// any remote branch matching the current non-default branch name so PR
-	// branches are not treated as already-submitted upstream refs. Note that
-	// `git rev-list --remotes` strips the `refs/remotes/` prefix before
-	// matching `--exclude` patterns.
-	revListArgs := []string{"rev-list", "--parents", "--first-parent", "HEAD", "--not", "--exclude=*/pull/*"}
+	// Exclude GitHub Actions pull_request refs (refs/remotes/pull/* and
+	// refs/remotes/origin/pull/*) and any remote branch matching the current
+	// non-default branch name so PR branches are not treated as
+	// already-submitted upstream refs. Note that `git rev-list --remotes`
+	// strips the `refs/remotes/` prefix before matching `--exclude` patterns.
+	notRemotes := []string{"--not", "--exclude=pull/*", "--exclude=*/pull/*"}
 	if isNonDefaultBranch {
-		revListArgs = append(revListArgs, "--exclude=*/"+g.head.ref)
+		notRemotes = append(notRemotes, "--exclude=*/"+g.head.ref)
 	}
-	revListArgs = append(revListArgs, "--remotes")
-	if revList, err := runGitCmd(ctx, g.checkoutRoot, revListArgs...); err == nil {
+	notRemotes = append(notRemotes, "--remotes")
+	if revList, err := runGitCmd(ctx, g.checkoutRoot, append([]string{"rev-list", "--boundary", "HEAD"}, notRemotes...)...); err == nil {
 		if revList == "" {
 			// HEAD is already reachable from a remote-tracking branch, so
 			// there are no unsubmitted commits to check.
 			g.upstream.ref = "HEAD"
 			g.upstream.hash = g.head.hash
-		} else {
-			lines := strings.Split(revList, "\n")
-			// If the walk stopped before the root commit because it hit an
-			// ancestor reachable from --remotes, the oldest unsubmitted
-			// commit's first parent is the fork point on that remote branch.
-			if fields := strings.Fields(lines[len(lines)-1]); len(fields) >= 2 {
-				g.upstream.ref = fields[1]
-				g.upstream.hash = fields[1]
-			}
+		} else if base := g.remoteBase(ctx, revList, notRemotes); base != "" {
+			g.upstream.ref = base
+			g.upstream.hash = base
 		}
 	}
 	if g.upstream.hash == "" {
 		// No remote-tracking ancestor exists (e.g. a local-only repository
-		// with no remotes); fall back to HEAD~1 if pristine, HEAD otherwise.
+		// with no remotes), so compare against HEAD's parent if the checkout
+		// is pristine, or HEAD itself otherwise.
 		isPristine := g.run(ctx, "status", "--porcelain", "--untracked-files=no") == ""
-		if isPristine {
-			// If HEAD~1 doesn't exist, this will fail.
-			g.upstream.ref = "HEAD~1"
-		} else {
+		if !isPristine {
 			g.upstream.ref = "HEAD"
+			g.upstream.hash = g.head.hash
+		} else if parent, err := runGitCmd(ctx, g.checkoutRoot, "rev-parse", "--verify", "--quiet", "HEAD~1"); err == nil {
+			g.upstream.ref = "HEAD~1"
+			g.upstream.hash = parent
+		} else if g.headHasParent(ctx) {
+			// HEAD's commit object names a parent that wasn't fetched (e.g.
+			// GitHub Actions' actions/checkout defaults to fetch-depth: 1).
+			// Guessing would either check nothing or report every pre-existing
+			// issue as new.
+			if !g.returnAll {
+				g.err = errors.New("HEAD's parent commit is missing from this shallow clone, so shac can't tell which files changed. To fix, either:\n" +
+					"  - fetch at least one parent commit (e.g. actions/checkout's fetch-depth: 2)\n" +
+					"  - pass --all to check all files")
+				return g.err
+			}
+			g.upstream.ref = "HEAD"
+			g.upstream.hash = g.head.hash
+		} else {
+			// HEAD is a root commit, so every file in it was added. Diff
+			// against the empty tree, whose hash depends on the repository's
+			// object format; git reads empty stdin since Cmd.Stdin is nil.
+			g.upstreamIsEmptyTree = true
+			g.upstream.hash = g.run(ctx, "hash-object", "-t", "tree", "--stdin")
 		}
-		g.upstream.hash = g.run(ctx, "rev-parse", g.upstream.ref)
 	}
 	return g.err
+}
+
+// headHasParent reports whether HEAD's commit object names a parent, even if
+// the parent isn't present locally (in which case git reports HEAD as a root
+// commit in a shallow clone).
+func (g *gitCheckout) headHasParent(ctx context.Context) bool {
+	header, _, _ := strings.Cut(g.run(ctx, "cat-file", "commit", "HEAD"), "\n\n")
+	for line := range strings.SplitSeq(header, "\n") {
+		if strings.HasPrefix(line, "parent ") {
+			return true
+		}
+	}
+	return false
+}
+
+// remoteBase returns the remote commit that HEAD's unsubmitted commits are
+// based on, given the output of `git rev-list --boundary HEAD <notRemotes>`.
+// It returns "" if HEAD has no remote ancestor.
+//
+// The boundary commits are all the remote commits that the unsubmitted
+// commits are directly based on. git doesn't list them in a useful order (the
+// first one is generally the oldest fork point), so if a local branch merged
+// in an updated remote branch, collapse them to the newest one. If several
+// remain (e.g. a local branch merged two different remote branches), no
+// single commit is correct, so fall back to the commit that the first-parent
+// history forked from.
+func (g *gitCheckout) remoteBase(ctx context.Context, revList string, notRemotes []string) string {
+	var boundaries []string
+	for line := range strings.SplitSeq(revList, "\n") {
+		if boundary, ok := strings.CutPrefix(line, "-"); ok {
+			boundaries = append(boundaries, boundary)
+		}
+	}
+	switch len(boundaries) {
+	case 0:
+		return ""
+	case 1:
+		return boundaries[0]
+	}
+	if tips, err := runGitCmd(ctx, g.checkoutRoot, append([]string{"merge-base", "--independent"}, boundaries...)...); err == nil {
+		if fields := strings.Fields(tips); len(fields) == 1 {
+			return fields[0]
+		}
+	}
+	firstParent, err := runGitCmd(ctx, g.checkoutRoot, append([]string{"rev-list", "--first-parent", "--parents", "HEAD"}, notRemotes...)...)
+	if err != nil {
+		return ""
+	}
+	lines := strings.Split(firstParent, "\n")
+	if fields := strings.Fields(lines[len(lines)-1]); len(fields) >= 2 {
+		return fields[1]
+	}
+	return ""
 }
 
 func (g *gitCheckout) isDefaultBranch(ctx context.Context, branch string) bool {
@@ -1066,7 +1136,12 @@ func (g *gitCheckout) commits(ctx context.Context) ([]scmCommit, error) {
 	if g.err != nil {
 		return nil, g.err
 	}
-	o := g.run(ctx, "log", "--format=%H%n%B", "-z", g.upstream.hash+".."+g.head.hash)
+	revisions := g.upstream.hash + ".." + g.head.hash
+	if g.upstreamIsEmptyTree {
+		// A tree can't be used as a range endpoint; HEAD is the only commit.
+		revisions = g.head.hash
+	}
+	o := g.run(ctx, "log", "--format=%H%n%B", "-z", revisions)
 	if g.err != nil {
 		return nil, g.err
 	}

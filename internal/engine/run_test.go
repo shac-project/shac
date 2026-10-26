@@ -2546,13 +2546,133 @@ func TestRun_SCM_Git_RemoteBranches(t *testing.T) {
 			t.Fatalf("unexpected error on pushed PR branch tracking origin/local-feature: %s", err)
 		}
 
-		// Verify detached HEAD at refs/remotes/origin/pull/42/merge (e.g.
-		// GitHub Actions pull_request checkout).
+		// Verify detached HEAD at refs/remotes/origin/pull/42/merge and
+		// refs/remotes/pull/42/merge (e.g. GitHub Actions actions/checkout
+		// pull_request checkout).
 		runGit(t, root, "update-ref", "-d", "refs/remotes/origin/local-feature")
 		runGit(t, root, "update-ref", "refs/remotes/origin/pull/42/merge", "HEAD")
+		runGit(t, root, "update-ref", "refs/remotes/pull/42/merge", "HEAD")
 		runGit(t, root, "checkout", "--detach", "HEAD")
 		if err := Run(t.Context(), &o); err != nil {
-			t.Fatalf("unexpected error at refs/remotes/origin/pull/42/merge: %s", err)
+			t.Fatalf("unexpected error at pull/42/merge refs: %s", err)
+		}
+
+		// Verify a feature branch that merges upstream changes from origin/main
+		// only reports changes relative to the merged origin/main commit, not
+		// upstream commits that landed on origin/main since the initial fork
+		// point. origin/main must be at least two commits ahead of the fork
+		// point, because git lists the fork point as the first boundary commit
+		// unless the merged commit is its direct child.
+		runGit(t, root, "update-ref", "-d", "refs/remotes/origin/pull/42/merge")
+		runGit(t, root, "update-ref", "-d", "refs/remotes/pull/42/merge")
+		runGit(t, root, "checkout", "--detach", "refs/remotes/origin/main")
+		writeFile(t, root, "origin_only2.txt", "origin only 2 content")
+		runGit(t, root, "add", "origin_only2.txt")
+		runGit(t, root, "commit", "-m", "origin commit 2")
+		runGit(t, root, "update-ref", "refs/remotes/origin/main", "HEAD")
+		runGit(t, root, "checkout", "local-feature")
+		runGit(t, root, "branch", "--unset-upstream")
+		runGit(t, root, "merge", "--no-ff", "-m", "merge origin/main", "refs/remotes/origin/main")
+		writeFile(t, root, "shac.star",
+			"def cb(ctx):",
+			"  commits = ctx.scm.commits()",
+			"  if len(commits) != 3:",
+			"    fail('expected 3 commits, got %d: %s' % (len(commits), [c.message for c in commits]))",
+			"  affected = sorted([p for p in ctx.scm.affected_files()])",
+			"  if affected != ['local1.txt', 'local2.txt', 'shac.star']:",
+			"    fail('expected [local1.txt, local2.txt, shac.star], got %s' % affected)",
+			"",
+			"shac.register_check(cb)",
+		)
+		if err := Run(t.Context(), &o); err != nil {
+			t.Fatalf("unexpected error after merging origin/main into feature branch: %s", err)
+		}
+	})
+}
+
+func TestRun_SCM_Git_NoParent(t *testing.T) {
+	t.Parallel()
+
+	// The empty tree's hash differs between object formats.
+	for _, objectFormat := range []string{"sha1", "sha256"} {
+		t.Run("root_commit_"+objectFormat, func(t *testing.T) {
+			t.Parallel()
+			root := resolvedTempDir(t)
+			if out, err := exec.Command("git", "init", "--object-format="+objectFormat, root).CombinedOutput(); err != nil {
+				t.Skipf("git doesn't support --object-format=%s: %s\n%s", objectFormat, err, out)
+			}
+			initGit(t, root)
+			writeFile(t, root, "base.txt", "line 1", "line 2", "")
+			writeFile(t, root, "shac.star",
+				"def cb(ctx):",
+				"  commits = [c.message for c in ctx.scm.commits()]",
+				"  if commits != ['initial commit\\n']:",
+				"    fail('unexpected commits: %s' % commits)",
+				"  affected = ctx.scm.affected_files()",
+				"  if sorted(affected) != ['base.txt', 'shac.star']:",
+				"    fail('unexpected affected files: %s' % sorted(affected))",
+				"  meta = affected['base.txt']",
+				"  if meta.action != 'A':",
+				"    fail('expected action A, got %s' % meta.action)",
+				"  lines = [n for n, _ in meta.affected_lines(changed_only = True)]",
+				"  if lines != [1, 2]:",
+				"    fail('expected lines [1, 2], got %s' % lines)",
+				"",
+				"shac.register_check(cb)",
+			)
+			runGit(t, root, "add", ".")
+			runGit(t, root, "commit", "-m", "initial commit")
+
+			o := Options{Report: &reportNoPrint{t: t}, Dir: root, EntryPoint: "shac.star"}
+			if err := Run(t.Context(), &o); err != nil {
+				t.Fatalf("unexpected error on root commit: %s", err)
+			}
+		})
+	}
+
+	t.Run("shallow_clone", func(t *testing.T) {
+		t.Parallel()
+		src := resolvedTempDir(t)
+		initGit(t, src)
+		writeFile(t, src, "base.txt", "base content")
+		writeFile(t, src, "shac.star",
+			"def cb(ctx):",
+			"  pass",
+			"",
+			"shac.register_check(cb)",
+		)
+		runGit(t, src, "add", ".")
+		runGit(t, src, "commit", "-m", "base commit")
+		writeFile(t, src, "pr.txt", "pr content")
+		runGit(t, src, "add", "pr.txt")
+		runGit(t, src, "commit", "-m", "pr commit")
+
+		// Mimic GitHub Actions' actions/checkout for a pull_request event,
+		// which by default fetches only the PR merge commit with depth 1.
+		root := resolvedTempDir(t)
+		initGit(t, root)
+		srcURL := "file:///" + strings.TrimPrefix(filepath.ToSlash(src), "/")
+		runGit(t, root, "fetch", "--depth=1", srcURL, "+HEAD:refs/remotes/pull/1/merge")
+		runGit(t, root, "checkout", "--detach", "refs/remotes/pull/1/merge")
+
+		o := Options{Report: &reportNoPrint{t: t}, Dir: root, EntryPoint: "shac.star"}
+		err := Run(t.Context(), &o)
+		if err == nil || !strings.Contains(err.Error(), "shallow clone") {
+			t.Fatalf("expected shallow clone error, got: %s", err)
+		}
+
+		o.AllFiles = true
+		if err := Run(t.Context(), &o); err != nil {
+			t.Fatalf("unexpected error with AllFiles in shallow clone: %s", err)
+		}
+
+		// A genuine root commit in a shallow clone is diffed against the empty
+		// tree rather than treated as missing its parent.
+		runGit(t, root, "checkout", "--orphan", "orphan")
+		runGit(t, root, "commit", "-m", "orphan commit")
+		o.AllFiles = false
+		if err := Run(t.Context(), &o); err != nil {
+			t.Fatalf("unexpected error on orphan commit in shallow clone: %s", err)
 		}
 	})
 }
