@@ -301,3 +301,97 @@ func TestNsjailSandbox_DevShm(t *testing.T) {
 		t.Fatalf("expected %s not to exist on host /dev/shm, got err=%v", shmFile, err)
 	}
 }
+
+// TestNsjailSandbox_RelativeSymlinkExe verifies that nsjail can execute a
+// binary via a relative symlink inside a mounted directory whose target lives
+// in a sibling directory that sorts later alphabetically (such as
+// /usr/bin/echo -> ../lib/cargo/bin/coreutils/echo on Ubuntu 26.04).
+func TestNsjailSandbox_RelativeSymlinkExe(t *testing.T) {
+	if runtime.GOOS != "linux" || (runtime.GOARCH != "amd64" && runtime.GOARCH != "arm64") {
+		t.Skip("nsjail is only supported on linux/amd64 and linux/arm64")
+	}
+	t.Parallel()
+
+	if os.Getenv("SHAC_TEST_SYMLINK_EXE_INNER") == "1" {
+		return
+	}
+
+	tmpDir, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	sb, err := New(tmpDir)
+	if err != nil {
+		t.Fatalf("New() failed: %s", err)
+	}
+	if _, ok := sb.(nsjailSandbox); !ok {
+		t.Skipf("host environment uses %T, skipping nsjail symlink exe test", sb)
+	}
+
+	exe, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	usrBin := filepath.Join(tmpDir, "usr", "bin")
+	usrLib := filepath.Join(tmpDir, "usr", "lib")
+	coreutilsDir := filepath.Join(usrLib, "cargo", "bin", "coreutils")
+	if err := os.MkdirAll(usrBin, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(coreutilsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	realExe := filepath.Join(coreutilsDir, "test-bin")
+	if err := os.Link(exe, realExe); err != nil {
+		data, err := os.ReadFile(exe)
+		if err != nil {
+			t.Fatal(err)
+		}
+		execsupport.Mu.Lock()
+		err = os.WriteFile(realExe, data, 0o755)
+		execsupport.Mu.Unlock()
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	linkExe := filepath.Join(usrBin, "test-bin")
+	if err := os.Symlink("../lib/cargo/bin/coreutils/test-bin", linkExe); err != nil {
+		t.Fatal(err)
+	}
+	binLink := filepath.Join(tmpDir, "bin")
+	if err := os.Symlink("usr/bin", binLink); err != nil {
+		t.Fatal(err)
+	}
+	libLink := filepath.Join(tmpDir, "lib")
+	if err := os.Symlink("usr/lib", libLink); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, cmdPath := range []string{linkExe, filepath.Join(binLink, "test-bin")} {
+		workDir := t.TempDir()
+		cmd := sb.Command(t.Context(), &Config{
+			Cmd: []string{cmdPath, "-test.run=^TestNsjailSandbox_RelativeSymlinkExe$"},
+			Cwd: workDir,
+			Env: map[string]string{
+				"SHAC_TEST_SYMLINK_EXE_INNER": "1",
+				"TMPDIR":                      workDir,
+			},
+			Mounts: []Mount{
+				{Path: "/lib"},
+				{Path: "/lib64"},
+				{Path: "/usr/lib"},
+				{Path: binLink},
+				{Path: usrBin},
+				{Path: libLink},
+				{Path: usrLib},
+				{Path: workDir, Writable: true},
+			},
+		})
+		var out bytes.Buffer
+		cmd.Stdout = &out
+		cmd.Stderr = &out
+		if err := execsupport.Run(t.Context(), cmd); err != nil {
+			t.Fatalf("executing %s in nsjail failed: %s\noutput:\n%s", cmdPath, err, out.String())
+		}
+	}
+}

@@ -16,6 +16,7 @@
 package sandbox
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -24,7 +25,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
-	"sort"
+	"slices"
 	"strings"
 	"syscall"
 
@@ -44,6 +45,10 @@ type Mount struct {
 	// Writable controls whether the mount is writable by processes within the
 	// nsjail.
 	Writable bool
+}
+
+func (m Mount) dest() string {
+	return cmp.Or(m.Dest, m.Path)
 }
 
 // Config represents the configuration for a sandboxed subprocess.
@@ -142,20 +147,34 @@ func (s nsjailSandbox) Command(ctx context.Context, config *Config) *exec.Cmd {
 	// nsjail is strict about ordering of --bindmount flags. If /a and /a/b are
 	// both to be mounted (/a might be read-only while /a/b is writable), then
 	// /a must precede /a/b in the arguments.
-	// We sort by the *destination* path in the sandbox to ensure that parent
-	// directories are mounted before their children. This is critical for
-	// "overlays" where we mount a specific subdirectory (e.g. from a resolved
-	// symlink) on top of a broader root mount.
-	sort.Slice(config.Mounts, func(i, j int) bool {
-		destI := config.Mounts[i].Dest
-		if destI == "" {
-			destI = config.Mounts[i].Path
+	//
+	// Additionally, nsjail creates each mount point by opening its destination
+	// with O_CREAT, which follows any symlink already visible through a parent
+	// mount. So if a symlink inside a mounted directory is overlaid with its
+	// resolved target (e.g. /usr/bin/echo -> ../lib/cargo/bin/coreutils/echo on
+	// Ubuntu 26.04), the mount containing the target (/usr/lib) must come first
+	// even though it sorts after /usr/bin/echo lexicographically.
+	//
+	// Sorting by the number of other mounts that are strict ancestors of each
+	// destination satisfies both: a parent always has fewer ancestor mounts
+	// than its children, and the outermost mount containing a symlink target
+	// has no ancestor mounts, while an overlaid symlink is only visible (and
+	// thus only followed) if it has at least one.
+	ancestorCount := make(map[string]int, len(config.Mounts))
+	for _, m := range config.Mounts {
+		dest := m.dest()
+		for _, other := range config.Mounts {
+			otherDest := other.dest()
+			if otherDest != dest && (otherDest == "/" || strings.HasPrefix(dest, otherDest+"/")) {
+				ancestorCount[dest]++
+			}
 		}
-		destJ := config.Mounts[j].Dest
-		if destJ == "" {
-			destJ = config.Mounts[j].Path
-		}
-		return destI < destJ
+	}
+	slices.SortFunc(config.Mounts, func(a, b Mount) int {
+		return cmp.Or(
+			cmp.Compare(ancestorCount[a.dest()], ancestorCount[b.dest()]),
+			cmp.Compare(a.dest(), b.dest()),
+		)
 	})
 	for _, mnt := range config.Mounts {
 		flag := "--bindmount_ro"
