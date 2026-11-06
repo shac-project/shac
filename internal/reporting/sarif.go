@@ -79,17 +79,9 @@ func (sr *SarifReport) EmitFinding(ctx context.Context, check string, level engi
 		})
 	}
 
-	var propsProto *structpb.Struct
-	if props != nil {
-		p := make(map[string]any, len(props))
-		for k, v := range props {
-			p[k] = v
-		}
-		var err error
-		propsProto, err = structpb.NewStruct(p)
-		if err != nil {
-			return err
-		}
+	propsProto, err := propsToStructProto(props)
+	if err != nil {
+		return err
 	}
 
 	result := &sarif.Result{
@@ -132,15 +124,16 @@ func (sr *SarifReport) EmitCommitMessageFinding(ctx context.Context, check strin
 		EndColumn:   int32(s.End.Col),    // #nosec G115
 	}
 
+	propsProto, err := propsToStructProto(props)
+	if err != nil {
+		return err
+	}
+
 	// Attach the commit hash so downstream processors can attribute this finding to the
 	// correct commit in a stack.
-	p := map[string]any{
+	locPropsProto, err := structpb.NewStruct(map[string]any{
 		"commit": commitHash,
-	}
-	for k, v := range props {
-		p[k] = v
-	}
-	propsProto, err := structpb.NewStruct(p)
+	})
 	if err != nil {
 		return err
 	}
@@ -155,12 +148,13 @@ func (sr *SarifReport) EmitCommitMessageFinding(ctx context.Context, check strin
 						// Use a placeholder URI recognizable by downstream tools (like Gerrit) as
 						// representing the commit message.
 						Uri:        "/COMMIT_MSG",
-						Properties: propsProto,
+						Properties: locPropsProto,
 					},
 					Region: region,
 				},
 			},
 		},
+		Properties: propsProto,
 	}
 
 	sr.mu.Lock()
@@ -171,6 +165,17 @@ func (sr *SarifReport) EmitCommitMessageFinding(ctx context.Context, check strin
 	sr.mu.Unlock()
 
 	return nil
+}
+
+func propsToStructProto(props map[string]string) (*structpb.Struct, error) {
+	if len(props) == 0 {
+		return nil, nil
+	}
+	p := make(map[string]any, len(props))
+	for k, v := range props {
+		p[k] = v
+	}
+	return structpb.NewStruct(p)
 }
 
 // splitReplacement splits a whole-file replacement into more readable chunks

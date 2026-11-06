@@ -177,7 +177,7 @@ func (b *basic) EmitFinding(ctx context.Context, check string, level engine.Leve
 func (b *basic) EmitCommitMessageFinding(ctx context.Context, check string, level engine.Level, message string, commitHash string, commitMessage string, s engine.Span, props map[string]string) error {
 	// Use "Commit <hash>" as the file name to reuse standard formatting.
 	hashLen := min(len(commitHash), 8)
-	_, err := fmt.Fprintln(b.out, overviewString(false, unknownAnsi, check, level, message, "", "Commit "+commitHash[:hashLen], s, nil, nil))
+	_, err := fmt.Fprintln(b.out, overviewString(false, unknownAnsi, check, level, message, "", "Commit "+commitHash[:hashLen], s, nil, props))
 	return err
 }
 
@@ -405,7 +405,7 @@ func (i *interactive) EmitCommitMessageFinding(ctx context.Context, check string
 	c := levelColor[level]
 	// Use "Commit <hash>" as the file name to reuse standard formatting.
 	hashLen := min(len(commitHash), 8)
-	_, err := fmt.Fprintln(i.out, overviewString(true, c, check, level, message, "", "Commit "+commitHash[:hashLen], s, nil, nil))
+	_, err := fmt.Fprintln(i.out, overviewString(true, c, check, level, message, "", "Commit "+commitHash[:hashLen], s, nil, props))
 	if err != nil {
 		return err
 	}

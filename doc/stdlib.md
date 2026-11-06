@@ -307,6 +307,7 @@ shac.register_check(cb)
 * **col**: (optional) Column where the finding should start. 1 based.
 * **end_line**: (optional) Line where the finding should end if it represents a span, inclusive. 1 based.
 * **end_col**: (optional) Column where the finding should end if it represents a span, exclusive. 1 based.
+* **properties**: (optional) A dictionary with str keys, additional key-value metadata that may be interpreted by downstream tooling.
 
 ## ctx.emit.artifact
 

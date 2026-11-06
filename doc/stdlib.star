@@ -262,7 +262,7 @@ def _ctx_emit_finding(level, message, filepath = None, line = None, col = None, 
     """
     pass
 
-def _ctx_emit_commit_message_finding(level, message, commit, line = None, col = None, end_line = None, end_col = None):
+def _ctx_emit_commit_message_finding(level, message, commit, line = None, col = None, end_line = None, end_col = None, properties = None):
     """Emits a finding related to a commit message.
 
     Example:
@@ -289,6 +289,8 @@ def _ctx_emit_commit_message_finding(level, message, commit, line = None, col = 
         span, inclusive. 1 based.
       end_col: (optional) Column where the finding should end if it represents a
         span, exclusive. 1 based.
+      properties: (optional) A dictionary with str keys, additional key-value
+        metadata that may be interpreted by downstream tooling.
     """
     pass
 

@@ -539,6 +539,22 @@ func TestSARIF(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	if err := r.EmitCommitMessageFinding(
+		ctx,
+		"check2",
+		engine.Warning,
+		"Commit message issue",
+		"deadbeef",
+		"commit msg",
+		engine.Span{
+			Start: engine.Cursor{Line: 4, Col: 1},
+			End:   engine.Cursor{Line: 4, Col: 10},
+		},
+		props,
+	); err != nil {
+		t.Fatal(err)
+	}
+
 	if err := r.Close(); err != nil {
 		t.Fatal(err)
 	}
@@ -551,6 +567,10 @@ func TestSARIF(t *testing.T) {
 	wantProperties, err := structpb.NewStruct(propsForProto)
 	if err != nil {
 		t.Fatalf("invalid test configuration for wantProperties: %s", err)
+	}
+	wantCommitLocProperties, err := structpb.NewStruct(map[string]any{"commit": "deadbeef"})
+	if err != nil {
+		t.Fatalf("invalid test configuration for wantCommitLocProperties: %s", err)
 	}
 
 	want := sarif.Document{
@@ -663,6 +683,27 @@ func TestSARIF(t *testing.T) {
 								},
 							},
 						},
+					},
+					{
+						Level:   sarif.Warning,
+						Message: &sarif.Message{Text: "Commit message issue"},
+						Locations: []*sarif.Location{
+							{
+								PhysicalLocation: &sarif.PhysicalLocation{
+									ArtifactLocation: &sarif.ArtifactLocation{
+										Uri:        "/COMMIT_MSG",
+										Properties: wantCommitLocProperties,
+									},
+									Region: &sarif.Region{
+										StartLine:   4,
+										StartColumn: 1,
+										EndLine:     4,
+										EndColumn:   10,
+									},
+								},
+							},
+						},
+						Properties: wantProperties,
 					},
 				},
 			},

@@ -136,18 +136,7 @@ func (l *luci) EmitFinding(ctx context.Context, check string, level engine.Level
 	overview := overviewString(false, unknownAnsi, check, level, message, root, file, s, replacements, nil)
 
 	r.SummaryHtml += html.EscapeString(overview) + "<br>"
-
-	if props != nil {
-		keys := slices.Collect(maps.Keys(props))
-		slices.Sort(keys)
-
-		for _, k := range keys {
-			r.Tags = append(r.Tags, &resultpb.StringPair{
-				Key:   k,
-				Value: fmt.Sprintf("%v", props[k]),
-			})
-		}
-	}
+	appendPropsTags(r, props)
 
 	return nil
 }
@@ -165,8 +154,23 @@ func (l *luci) EmitCommitMessageFinding(ctx context.Context, check string, level
 		Key:   "commit",
 		Value: commitHash,
 	})
+	appendPropsTags(r, props)
 
 	return nil
+}
+
+func appendPropsTags(r *sinkpb.TestResult, props map[string]string) {
+	if len(props) == 0 {
+		return
+	}
+	keys := slices.Collect(maps.Keys(props))
+	slices.Sort(keys)
+	for _, k := range keys {
+		r.Tags = append(r.Tags, &resultpb.StringPair{
+			Key:   k,
+			Value: props[k],
+		})
+	}
 }
 
 func (l *luci) EmitArtifact(ctx context.Context, check, root, file string, content []byte) error {
