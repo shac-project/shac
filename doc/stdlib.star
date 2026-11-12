@@ -247,11 +247,12 @@ def _ctx_emit_finding(level, message, filepath = None, line = None, col = None, 
         replacements has a length of 1.
       filepath: (optional) Path to the source file to annotate.
       line: (optional) Line where the finding should start. 1 based.
-      col: (optional) Column where the finding should start. 1 based.
+      col: (optional) Column where the finding should start, as a 1-based byte
+        offset.
       end_line: (optional) Line where the finding should end if it represents a
         span, inclusive. 1 based.
       end_col: (optional) Column where the finding should end if it represents a
-        span, exclusive. 1 based.
+        span, as a 1-based exclusive byte offset.
       replacements: (optional) A sequence of str, representing possible
         replacement suggestions. The sequence can be a list or a tuple. The
         replacements apply to the entire file if no span is specified for the
@@ -284,11 +285,12 @@ def _ctx_emit_commit_message_finding(level, message, commit, line = None, col = 
       message: Message of the finding.
       commit: The commit object (from `ctx.scm.commits()`) this finding applies to.
       line: (optional) Line where the finding should start. 1 based.
-      col: (optional) Column where the finding should start. 1 based.
+      col: (optional) Column where the finding should start, as a 1-based byte
+        offset.
       end_line: (optional) Line where the finding should end if it represents a
         span, inclusive. 1 based.
       end_col: (optional) Column where the finding should end if it represents a
-        span, exclusive. 1 based.
+        span, as a 1-based exclusive byte offset.
       properties: (optional) A dictionary with str keys, additional key-value
         metadata that may be interpreted by downstream tooling.
     """
@@ -1370,9 +1372,9 @@ def _testing_finding(
         Defaults to "error".
       filepath: (optional) Relative file path.
       line: (optional) 1-based start line.
-      col: (optional) 1-based start column.
+      col: (optional) 1-based start column, as a byte offset.
       end_line: (optional) 1-based end line.
-      end_col: (optional) 1-based end column.
+      end_col: (optional) 1-based exclusive end column, as a byte offset.
       replacements: (optional) Sequence of replacement strings.
       properties: (optional) Dict of finding properties.
       commit_hash: (optional) Commit hash for commit message findings.

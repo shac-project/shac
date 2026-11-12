@@ -15,7 +15,10 @@
 package reporting
 
 import (
+	"bytes"
 	"errors"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -24,6 +27,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"go.fuchsia.dev/shac-project/shac/internal/engine"
 	"go.fuchsia.dev/shac-project/shac/internal/sarif"
+	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/testing/protocmp"
 )
 
@@ -150,5 +154,97 @@ func TestSarifReportCheckCompletedException(t *testing.T) {
 	res2 := sr.resultsByCheck["my-check2"][0]
 	if res2.Message.Text != "regular error" {
 		t.Errorf("expected message text %q, got %q", "regular error", res2.Message.Text)
+	}
+}
+
+func TestSarifReportMultibyteColumns(t *testing.T) {
+	t.Parallel()
+
+	// Each emoji is 4 bytes in UTF-8 and 2 UTF-16 code units (a surrogate
+	// pair).
+	const fileContent = "hi 🚨 there\n🚨🔥 x\n"
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "foo.md"), []byte(fileContent), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	tests := []struct {
+		name string
+		// If set, the finding is emitted on this commit message rather than on
+		// fileContent.
+		commitMessage string
+		span          engine.Span
+		want          *sarif.Region
+	}{
+		{
+			// "🚨" starts after the 3 ASCII bytes of "hi ".
+			name: "emoji",
+			span: engine.Span{
+				Start: engine.Cursor{Line: 1, Col: 4},
+				End:   engine.Cursor{Line: 1, Col: 8},
+			},
+			want: &sarif.Region{StartLine: 1, EndLine: 1, StartColumn: 4, EndColumn: 6},
+		},
+		{
+			// "🔥" starts after "🚨", which is 4 bytes but 2 UTF-16 code units.
+			name: "emoji after another emoji",
+			span: engine.Span{
+				Start: engine.Cursor{Line: 2, Col: 5},
+				End:   engine.Cursor{Line: 2, Col: 9},
+			},
+			want: &sarif.Region{StartLine: 2, EndLine: 2, StartColumn: 3, EndColumn: 5},
+		},
+		{
+			// "x" starts after "🚨🔥 ", which is 9 bytes but 5 UTF-16 code units.
+			name: "ASCII after emojis",
+			span: engine.Span{
+				Start: engine.Cursor{Line: 2, Col: 10},
+				End:   engine.Cursor{Line: 2, Col: 11},
+			},
+			want: &sarif.Region{StartLine: 2, EndLine: 2, StartColumn: 6, EndColumn: 7},
+		},
+		{
+			// "x" starts after "Body 🚨 ", which is 10 bytes but 8 UTF-16 code
+			// units.
+			name:          "commit message",
+			commitMessage: "Subject\n\nBody 🚨 x\n",
+			span: engine.Span{
+				Start: engine.Cursor{Line: 3, Col: 11},
+				End:   engine.Cursor{Line: 3, Col: 12},
+			},
+			want: &sarif.Region{StartLine: 3, EndLine: 3, StartColumn: 9, EndColumn: 10},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ctx := t.Context()
+			var buf bytes.Buffer
+			sr := &SarifReport{Out: &buf}
+			if tc.commitMessage != "" {
+				if err := sr.EmitCommitMessageFinding(ctx, "my-check", engine.Warning, "msg", "deadbeef", tc.commitMessage, tc.span, nil); err != nil {
+					t.Fatal(err)
+				}
+			} else if err := sr.EmitFinding(ctx, "my-check", engine.Warning, "msg", root, "foo.md", tc.span, []string{"!"}, nil); err != nil {
+				t.Fatal(err)
+			}
+			if err := sr.Close(); err != nil {
+				t.Fatal(err)
+			}
+
+			var doc sarif.Document
+			if err := protojson.Unmarshal(buf.Bytes(), &doc); err != nil {
+				t.Fatal(err)
+			}
+			got := doc.Runs[0].Results[0]
+			if d := cmp.Diff(tc.want, got.Locations[0].PhysicalLocation.Region, protocmp.Transform()); d != "" {
+				t.Errorf("location region diff (-want +got):\n%s", d)
+			}
+			for _, fix := range got.Fixes {
+				if d := cmp.Diff(tc.want, fix.ArtifactChanges[0].Replacements[0].DeletedRegion, protocmp.Transform()); d != "" {
+					t.Errorf("fix region diff (-want +got):\n%s", d)
+				}
+			}
+		})
 	}
 }

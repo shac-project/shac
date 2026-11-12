@@ -15,16 +15,22 @@
 package reporting
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"io"
+	"io/fs"
 	"log"
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf16"
+	"unicode/utf8"
 
 	"github.com/pmezard/go-difflib/difflib"
 	"go.fuchsia.dev/shac-project/shac/internal/engine"
@@ -40,6 +46,12 @@ type SarifReport struct {
 
 	mu             sync.Mutex
 	resultsByCheck map[string][]*sarif.Result
+	// regionsWithColumnsByFile holds the regions of file findings that specify
+	// columns (which need converting from byte offsets to UTF-16 code units),
+	// keyed by absolute file path. Conversion is deferred until Close() so
+	// that each file is read only once, and only one file is held in memory
+	// at a time.
+	regionsWithColumnsByFile map[string][]*sarif.Region
 }
 
 var levelMap = map[engine.Level]string{
@@ -49,12 +61,7 @@ var levelMap = map[engine.Level]string{
 }
 
 func (sr *SarifReport) EmitFinding(ctx context.Context, check string, level engine.Level, message, root, file string, s engine.Span, replacements []string, props map[string]string) error {
-	region := &sarif.Region{
-		StartLine:   int32(s.Start.Line), // #nosec G115
-		EndLine:     int32(s.End.Line),   // #nosec G115
-		StartColumn: int32(s.Start.Col),  // #nosec G115
-		EndColumn:   int32(s.End.Col),    // #nosec G115
-	}
+	region := spanToRegion(s)
 
 	var fixes []*sarif.Fix
 	for _, repl := range replacements {
@@ -111,17 +118,24 @@ func (sr *SarifReport) EmitFinding(ctx context.Context, check string, level engi
 		sr.resultsByCheck = make(map[string][]*sarif.Result)
 	}
 	sr.resultsByCheck[check] = append(sr.resultsByCheck[check], result)
+	if root != "" && file != "" && hasColumns(region) {
+		if sr.regionsWithColumnsByFile == nil {
+			sr.regionsWithColumnsByFile = make(map[string][]*sarif.Region)
+		}
+		path := filepath.Join(root, file)
+		// Fixes share the location's region, so converting it once covers
+		// both.
+		sr.regionsWithColumnsByFile[path] = append(sr.regionsWithColumnsByFile[path], region)
+	}
 	sr.mu.Unlock()
 
 	return nil
 }
 
 func (sr *SarifReport) EmitCommitMessageFinding(ctx context.Context, check string, level engine.Level, message string, commitHash string, commitMessage string, s engine.Span, props map[string]string) error {
-	region := &sarif.Region{
-		StartLine:   int32(s.Start.Line), // #nosec G115
-		EndLine:     int32(s.End.Line),   // #nosec G115
-		StartColumn: int32(s.Start.Col),  // #nosec G115
-		EndColumn:   int32(s.End.Col),    // #nosec G115
+	region := spanToRegion(s)
+	if hasColumns(region) {
+		convertColumns(region, bytes.Split([]byte(commitMessage), []byte("\n")))
 	}
 
 	propsProto, err := propsToStructProto(props)
@@ -178,6 +192,50 @@ func propsToStructProto(props map[string]string) (*structpb.Struct, error) {
 	return structpb.NewStruct(p)
 }
 
+// spanToRegion converts an engine.Span into a sarif.Region. The region's
+// columns are still 1-based UTF-8 byte offsets, as in the engine.Span, until
+// convertColumns is called on it.
+func spanToRegion(s engine.Span) *sarif.Region {
+	return &sarif.Region{
+		StartLine:   int32(s.Start.Line), // #nosec G115
+		EndLine:     int32(s.End.Line),   // #nosec G115
+		StartColumn: int32(s.Start.Col),  // #nosec G115
+		EndColumn:   int32(s.End.Col),    // #nosec G115
+	}
+}
+
+// hasColumns reports whether r has columns that may change when converted
+// from byte offsets to UTF-16 code units. Column 1 is the same in both.
+func hasColumns(r *sarif.Region) bool {
+	return r.StartColumn > 1 || r.EndColumn > 1
+}
+
+// convertColumns converts r's columns from 1-based UTF-8 byte offsets into
+// lines to 1-based UTF-16 code unit offsets, matching SARIF's default
+// columnKind = "utf16CodeUnits" and downstream consumers like Gerrit.
+func convertColumns(r *sarif.Region, lines [][]byte) {
+	endLine := r.EndLine
+	if endLine == 0 {
+		endLine = r.StartLine
+	}
+	if r.StartColumn > 1 && r.StartLine > 0 && int(r.StartLine) <= len(lines) {
+		r.StartColumn = byteColToUTF16Col(lines[r.StartLine-1], r.StartColumn)
+	}
+	if r.EndColumn > 1 && endLine > 0 && int(endLine) <= len(lines) {
+		r.EndColumn = byteColToUTF16Col(lines[endLine-1], r.EndColumn)
+	}
+}
+
+func byteColToUTF16Col(line []byte, byteCol int32) int32 {
+	col := int32(1)
+	for b := line[:min(int(byteCol)-1, len(line))]; len(b) > 0; {
+		r, size := utf8.DecodeRune(b)
+		b = b[size:]
+		col += int32(utf16.RuneLen(r)) // #nosec G115
+	}
+	return col
+}
+
 // splitReplacement splits a whole-file replacement into more readable chunks
 // using a diffing library.
 func (sr *SarifReport) splitReplacement(repl *sarif.Replacement, root, file string) ([]*sarif.Replacement, error) {
@@ -228,6 +286,29 @@ func (sr *SarifReport) CheckCompleted(ctx context.Context, check string, start t
 func (sr *SarifReport) Print(context.Context, string, string, int, string) {}
 
 func (sr *SarifReport) Close() error {
+	// Findings store columns as UTF-8 byte offsets, but SARIF consumers like
+	// Gerrit expect UTF-16 code units, and converting requires the text of
+	// each finding's line. Do the conversion here rather than as findings are
+	// emitted, so each file is read once no matter how many findings it has,
+	// and only one file's contents are held in memory at a time. Sort the
+	// paths so that read errors are deterministic.
+	paths := slices.Sorted(maps.Keys(sr.regionsWithColumnsByFile))
+	for _, path := range paths {
+		b, err := os.ReadFile(path)
+		if errors.Is(err, fs.ErrNotExist) {
+			// The file may have been deleted from the checkout (e.g. by the
+			// user) since the finding was emitted. Leave the columns
+			// unconverted, which are still correct for ASCII lines.
+			continue
+		} else if err != nil {
+			return err
+		}
+		lines := bytes.Split(b, []byte("\n"))
+		for _, r := range sr.regionsWithColumnsByFile[path] {
+			convertColumns(r, lines)
+		}
+	}
+
 	doc := &sarif.Document{Version: sarif.Version}
 	// Sort for determinism.
 	var sortedChecks []string
