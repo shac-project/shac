@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -109,7 +110,6 @@ func ctxEmitFinding(ctx context.Context, s *shacState, name string, args starlar
 	}
 	root := ""
 	if file != "" {
-		root = filepath.Join(s.root, s.subdir)
 		// The file must be tracked by scm.
 		f, err := s.scm.allFiles(ctx, fileFilter{includeSymlinks: true})
 		if err != nil {
@@ -118,6 +118,12 @@ func ctxEmitFinding(ctx context.Context, s *shacState, name string, args starlar
 		if _, found := sort.Find(len(f), func(i int) int { return strings.Compare(file, f[i].relpath()) }); !found {
 			return fmt.Errorf("for parameter \"filepath\": %s is not tracked", argfilepath)
 		}
+		// Checks in a nested shac.star file see paths relative to that file's
+		// directory, but reporters need paths relative to the project root.
+		// Otherwise consumers like SARIF readers and GitHub annotations can't
+		// find the file.
+		root = filepath.FromSlash(s.root)
+		file = path.Join(s.subdir, file)
 	}
 	if err := s.r.EmitFinding(ctx, c.name, level, message, root, file, span, replacements, props); err != nil {
 		return fmt.Errorf("failed to emit: %w", err)

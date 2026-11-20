@@ -326,6 +326,10 @@ func (l Level) isValid() bool {
 type Report interface {
 	// EmitFinding emits a finding by a check for a specific file. This is not a
 	// failure by itself, unless its level is at or above Options.FailLevel.
+	//
+	// If file is set, it's a POSIX style path relative to root, which is the
+	// project root in native path style, even for checks registered by a
+	// nested shac.star file. Otherwise root is empty.
 	EmitFinding(ctx context.Context, check string, level Level, message, root, file string, s Span, replacements []string, props map[string]string) error
 	// EmitCommitMessageFinding emits a finding related to a commit message.
 	EmitCommitMessageFinding(ctx context.Context, check string, level Level, message string, commitHash string, commitMessage string, s Span, props map[string]string) error
@@ -959,8 +963,8 @@ type shacConfig struct {
 	// files lists the positional file or directory arguments passed to shac.
 	files      []string
 	entryPoint string
-	// root is the root for the root shac.star that was executed. Native path
-	// style.
+	// root is the root for the root shac.star that was executed. Usually uses
+	// "/" separators, even on Windows (see resolveRoot).
 	root string
 	// realRoot is the underlying repository root on disk when running a test
 	// against a virtualized root directory. Native path style.

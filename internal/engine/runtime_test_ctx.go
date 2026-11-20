@@ -813,20 +813,29 @@ func (v *virtualSCM) commits(ctx context.Context) ([]scmCommit, error) {
 }
 
 type testReport struct {
+	// subdir is the testing.run() subdir.
+	subdir string
+
 	mu             sync.Mutex
 	findings       []starlark.Value
 	findingsByFile map[string][]findingToFix
 	artifacts      map[string]string
 }
 
-func newTestReport() *testReport {
+func newTestReport(subdir string) *testReport {
 	return &testReport{
+		subdir:         subdir,
 		findingsByFile: make(map[string][]findingToFix),
 		artifacts:      make(map[string]string),
 	}
 }
 
 func (r *testReport) EmitFinding(ctx context.Context, check string, level Level, message, root, file string, s Span, replacements []string, props map[string]string) error {
+	// The engine reports finding paths relative to the project root, but
+	// tests assert on paths relative to the check's own directory.
+	if r.subdir != "" {
+		file = strings.TrimPrefix(file, r.subdir+"/")
+	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.findings = append(r.findings, newFindingStruct(
@@ -1104,7 +1113,7 @@ func testingRun(th *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, 
 		}
 		mocksMu.Unlock()
 
-		rep := newTestReport()
+		rep := newTestReport(subdir)
 		vscm := &virtualSCM{
 			files:      files,
 			scmCommits: scmCommits,

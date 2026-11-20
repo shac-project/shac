@@ -2180,8 +2180,8 @@ func TestRun_SCM_Git_Recursive(t *testing.T) {
 			Check:   "cb",
 			Level:   "notice",
 			Message: "b",
-			Root:    filepath.Join(root, "b"),
-			File:    "b.txt",
+			Root:    root,
+			File:    "b/b.txt",
 		},
 		{
 			Check:   "cb",
@@ -2192,7 +2192,7 @@ func TestRun_SCM_Git_Recursive(t *testing.T) {
 		},
 	}
 	// With parallel execution, the output will not be deterministic. Sort it manually.
-	sort.Slice(r.findings, func(i, j int) bool { return r.findings[i].File < r.findings[j].File })
+	sort.Slice(r.findings, func(i, j int) bool { return r.findings[i].Message < r.findings[j].Message })
 	if diff := cmp.Diff(findings, r.findings); diff != "" {
 		t.Errorf("mismatch (-want +got):\n%s", diff)
 	}
@@ -2336,8 +2336,8 @@ func TestRun_SCM_Git_Recursive_Shared(t *testing.T) {
 			Check:   "cb",
 			Level:   "notice",
 			Message: "internal",
-			Root:    filepath.Join(root, "a"),
-			File:    "b.txt",
+			Root:    root,
+			File:    "a/b.txt",
 		},
 	}
 	// With parallel execution, the output will not be deterministic. Sort it manually.

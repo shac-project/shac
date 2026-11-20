@@ -28,6 +28,8 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"go.fuchsia.dev/shac-project/shac/internal/engine"
+	"go.fuchsia.dev/shac-project/shac/internal/sarif"
+	"google.golang.org/protobuf/encoding/protojson"
 )
 
 func TestMainHelp(t *testing.T) {
@@ -242,6 +244,59 @@ func TestMainTest_JSONOutput(t *testing.T) {
 	}
 	if diff := cmp.Diff(want, got, cmpopts.IgnoreFields(testCaseResult{}, "Duration")); diff != "" {
 		t.Fatalf("Unexpected json results (-want +got):\n%s", diff)
+	}
+}
+
+func TestMainCheck_JSONOutputNestedShacStar(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	writeFile(t, root, "shac.star", "def cb(ctx):\n    pass\nshac.register_check(cb)\n")
+	if err := os.Mkdir(filepath.Join(root, "sub"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, root, "sub/file.txt", "old\n")
+	writeFile(t, root, "sub/shac.star", ""+
+		"def nested(ctx):\n"+
+		"    ctx.emit.finding(\n"+
+		"        level = \"error\",\n"+
+		"        message = \"bad\",\n"+
+		"        filepath = \"file.txt\",\n"+
+		"        replacements = [\"new\\n\"],\n"+
+		"    )\n"+
+		"shac.register_check(nested)\n")
+
+	jsonPath := filepath.Join(t.TempDir(), "results.json")
+	err := Main(t.Context(), []string{"shac", "check", "--all", "--quiet", "--json-output", jsonPath, "-C", root})
+	if !errors.Is(err, engine.ErrCheckFailed) {
+		t.Fatalf("Expected ErrCheckFailed, got %v", err)
+	}
+
+	b, err := os.ReadFile(jsonPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var doc sarif.Document
+	if err := protojson.Unmarshal(b, &doc); err != nil {
+		t.Fatalf("Failed to unmarshal SARIF output: %v\n%s", err, b)
+	}
+	var gotURIs []string
+	for _, run := range doc.GetRuns() {
+		for _, res := range run.GetResults() {
+			for _, loc := range res.GetLocations() {
+				gotURIs = append(gotURIs, loc.GetPhysicalLocation().GetArtifactLocation().GetUri())
+			}
+			for _, fix := range res.GetFixes() {
+				for _, change := range fix.GetArtifactChanges() {
+					gotURIs = append(gotURIs, change.GetArtifactLocation().GetUri())
+				}
+			}
+		}
+	}
+	// Paths must be relative to the project root, not to sub/, so that
+	// consumers of the SARIF output can find the file.
+	want := []string{"sub/file.txt", "sub/file.txt"}
+	if diff := cmp.Diff(want, gotURIs); diff != "" {
+		t.Fatalf("Unexpected SARIF URIs (-want +got):\n%s\n%s", diff, b)
 	}
 }
 
