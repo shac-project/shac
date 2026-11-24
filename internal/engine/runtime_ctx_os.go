@@ -412,11 +412,17 @@ func ctxOsExec(ctx context.Context, s *shacState, name string, args starlark.Tup
 			config.Mounts = append(config.Mounts, sandbox.Mount{Path: runtime.GOROOT()})
 		}
 
-		// Mount all directories listed in $PATH.
+		// Mount all directories listed in $PATH, skipping broad root,
+		// configuration, prefix, and home directories that should not be
+		// exposed wholesale in the sandbox.
+		homeDir := os.Getenv("HOME")
 		for p := range strings.SplitSeq(env["PATH"], string(os.PathListSeparator)) {
 			// $PATH may contain invalid elements. Filter them out.
 			if !filepath.IsAbs(p) {
 				// Relative paths in $PATH are not allowed.
+				continue
+			}
+			if isSkippedPATHMount(p, homeDir) {
 				continue
 			}
 			var fi os.FileInfo
@@ -473,6 +479,17 @@ func ctxOsExec(ctx context.Context, s *shacState, name string, args starlark.Tup
 	chk := ctxCheck(ctx)
 	chk.subprocesses = append(chk.subprocesses, proc)
 	return proc, nil
+}
+
+// isSkippedPATHMount reports whether absolute $PATH entry p should be omitted
+// from nsjail's automatic read-only $PATH bind mounts.
+func isSkippedPATHMount(p, homeDir string) bool {
+	p = filepath.Clean(p)
+	switch p {
+	case "/", "/etc", "/usr/local":
+		return true
+	}
+	return filepath.IsAbs(homeDir) && p == filepath.Clean(homeDir)
 }
 
 // sequenceToInts converts a starlark sequence (list, tuple) into a slice of

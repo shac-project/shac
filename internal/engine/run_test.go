@@ -1414,6 +1414,106 @@ func TestRun_Exec_InvalidPATHElements(t *testing.T) {
 	testStarlarkPrint(t, root, "shac.star", false, false, want)
 }
 
+func TestIsSkippedPATHMount(t *testing.T) {
+	t.Parallel()
+	if runtime.GOOS == "windows" {
+		t.Skip("nsjail PATH mount skipping only applies on Linux")
+	}
+
+	home := "/home/user"
+	cases := []struct {
+		name string
+		path string
+		home string
+		want bool
+	}{
+		{name: "root", path: "/", home: home, want: true},
+		{name: "root_slashes", path: "///", home: home, want: true},
+		{name: "etc", path: "/etc", home: home, want: true},
+		{name: "etc_trailing", path: "/etc/", home: home, want: true},
+		{name: "usr_local", path: "/usr/local", home: home, want: true},
+		{name: "usr_local_trailing", path: "/usr/local/", home: home, want: true},
+		{name: "home", path: "/home/user", home: home, want: true},
+		{name: "home_trailing", path: "/home/user/", home: home, want: true},
+		{name: "home_env_trailing", path: "/home/user", home: "/home/user/", want: true},
+		{name: "usr_bin", path: "/usr/bin", home: home, want: false},
+		{name: "usr_local_bin", path: "/usr/local/bin", home: home, want: false},
+		{name: "home_bin", path: "/home/user/bin", home: home, want: false},
+		{name: "empty_home", path: "/home/user", home: "", want: false},
+		{name: "relative_home", path: "/home/user", home: "home/user", want: false},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got := isSkippedPATHMount(tc.path, tc.home)
+			if got != tc.want {
+				t.Fatalf("isSkippedPATHMount(%q, %q) = %v, want %v", tc.path, tc.home, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestRun_Exec_SkippedPATHMounts(t *testing.T) {
+	if runtime.GOOS != "linux" || (runtime.GOARCH != "amd64" && runtime.GOARCH != "arm64") {
+		t.Skip("sandboxing is only supported on linux-{arm64,amd64}")
+	}
+
+	fakeHome := t.TempDir()
+	homeSecret := filepath.Join(fakeHome, "secret.txt")
+	if err := os.WriteFile(homeSecret, []byte("secret"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	homeBin := filepath.Join(fakeHome, "bin")
+	if err := os.Mkdir(homeBin, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	homeBinMarker := filepath.Join(homeBin, "tool_marker")
+	if err := os.WriteFile(homeBinMarker, []byte("ok"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	unmountedDir := t.TempDir()
+	unmountedProbe := filepath.Join(unmountedDir, "probe")
+	if err := os.WriteFile(unmountedProbe, []byte("probe"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Setenv("HOME", fakeHome)
+	t.Setenv("PATH", strings.Join([]string{
+		"/",
+		"/etc",
+		"/usr/local",
+		fakeHome,
+		homeBin,
+		os.Getenv("PATH"),
+	}, string(os.PathListSeparator)))
+
+	root := t.TempDir()
+	writeFile(t, root, "shac.star",
+		"def cb(ctx):",
+		"    res = ctx.os.exec(['bash', '-c', "+
+			"'if [ -e \"$1\" ]; then echo ROOT_EXPOSED >&2; exit 1; fi; "+
+			"if [ -e \"$2\" ]; then echo HOME_EXPOSED >&2; exit 1; fi; "+
+			"if [ -e /etc/passwd ]; then echo ETC_EXPOSED >&2; exit 1; fi; "+
+			"if [ ! -e \"$3\" ]; then echo HOME_BIN_MISSING >&2; exit 1; fi; "+
+			"echo OK', 'bash', "+
+			fmt.Sprintf("%q, %q, %q", unmountedProbe, homeSecret, homeBinMarker)+
+			"]).wait()",
+		"    print(res.stdout.strip())",
+		"shac.register_check(cb)",
+	)
+
+	r := reportPrint{t: t}
+	o := Options{Report: &r, Dir: root, EntryPoint: "shac.star"}
+	if err := Run(t.Context(), &o); err != nil {
+		t.Fatal(err)
+	}
+	if diff := cmp.Diff("[//shac.star:3] OK\n", r.b.String()); diff != "" {
+		t.Fatalf("mismatch (-want +got):\n%s", diff)
+	}
+}
+
 func TestRun_SCM_Raw(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
