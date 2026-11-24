@@ -395,3 +395,84 @@ func TestNsjailSandbox_RelativeSymlinkExe(t *testing.T) {
 		}
 	}
 }
+
+// TestNsjailSandbox_OverlaidRelativeSymlinkFile verifies that mounting both a
+// directory and a file inside it that is a relative symlink into an unmounted
+// sibling directory sorting later alphabetically (such as mounting /etc
+// alongside /etc/resolv.conf -> ../run/resolvconf/resolv.conf) mounts the
+// resolved target before nsjail opens the overlaid symlink destination.
+func TestNsjailSandbox_OverlaidRelativeSymlinkFile(t *testing.T) {
+	if runtime.GOOS != "linux" || (runtime.GOARCH != "amd64" && runtime.GOARCH != "arm64") {
+		t.Skip("nsjail is only supported on linux/amd64 and linux/arm64")
+	}
+	t.Parallel()
+
+	const wantContent = "nameserver 127.0.0.1\n"
+	if target := os.Getenv("SHAC_TEST_OVERLAID_SYMLINK_FILE"); target != "" {
+		got, err := os.ReadFile(target)
+		if err != nil {
+			t.Fatalf("failed to read %s inside nsjail: %s", target, err)
+		}
+		if string(got) != wantContent {
+			t.Fatalf("unexpected content in %s: got %q, want %q", target, string(got), wantContent)
+		}
+		return
+	}
+
+	tmpDir, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	sb, err := New(tmpDir)
+	if err != nil {
+		t.Fatalf("New() failed: %s", err)
+	}
+	if _, ok := sb.(nsjailSandbox); !ok {
+		t.Skipf("host environment uses %T, skipping nsjail overlaid symlink file test", sb)
+	}
+
+	exe, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	etcDir := filepath.Join(tmpDir, "etc")
+	resolvconfDir := filepath.Join(tmpDir, "run", "resolvconf")
+	if err := os.MkdirAll(etcDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(resolvconfDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	realResolv := filepath.Join(resolvconfDir, "resolv.conf")
+	if err := os.WriteFile(realResolv, []byte(wantContent), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	linkResolv := filepath.Join(etcDir, "resolv.conf")
+	if err := os.Symlink("../run/resolvconf/resolv.conf", linkResolv); err != nil {
+		t.Fatal(err)
+	}
+
+	workDir := t.TempDir()
+	cmd := sb.Command(t.Context(), &Config{
+		Cmd: []string{exe, "-test.run=^TestNsjailSandbox_OverlaidRelativeSymlinkFile$"},
+		Cwd: workDir,
+		Env: map[string]string{
+			"SHAC_TEST_OVERLAID_SYMLINK_FILE": linkResolv,
+			"TMPDIR":                          workDir,
+		},
+		Mounts: []Mount{
+			{Path: "/lib"},
+			{Path: "/lib64"},
+			{Path: "/usr/lib"},
+			{Path: linkResolv},
+			{Path: etcDir},
+			{Path: workDir, Writable: true},
+		},
+	})
+	var out bytes.Buffer
+	cmd.Stdout = &out
+	cmd.Stderr = &out
+	if err := execsupport.Run(t.Context(), cmd); err != nil {
+		t.Fatalf("executing in nsjail failed: %s\noutput:\n%s", err, out.String())
+	}
+}
