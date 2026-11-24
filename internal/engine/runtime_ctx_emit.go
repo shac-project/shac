@@ -141,6 +141,9 @@ func (s *shacState) fmtCommand() string {
 	if s.allFiles {
 		args = append(args, "--all")
 	}
+	if s.ignoreUntracked {
+		args = append(args, "--no-untracked")
+	}
 	args = append(args, s.files...)
 	return strings.Join(args, " ")
 }

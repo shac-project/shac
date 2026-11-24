@@ -1817,6 +1817,232 @@ func TestRun_SCM_Git_Untracked(t *testing.T) {
 	}
 }
 
+func TestRun_SCM_Git_IgnoreUntracked(t *testing.T) {
+	t.Parallel()
+
+	data := []struct {
+		name     string
+		script   string
+		allFiles bool
+		files    []string
+		want     string
+	}{
+		{
+			name:   "affected_files",
+			script: "ctx-scm-affected_files.star",
+			want: "[//shac.star:19] \n" +
+				"a.txt: M\n" +
+				"staged.txt: A\n" +
+				"subdir/tracked.txt: M\n" +
+				"\n",
+		},
+		{
+			name:   "all_files",
+			script: "ctx-scm-all_files.star",
+			want: "[//shac.star:19] \n" +
+				"a.txt: M\n" +
+				"shac.star: \n" +
+				"staged.txt: A\n" +
+				"subdir/tracked.txt: M\n" +
+				"z.txt: \n" +
+				"\n",
+		},
+		{
+			name:     "all_flag_affected_files",
+			script:   "ctx-scm-affected_files.star",
+			allFiles: true,
+			want: "[//shac.star:19] \n" +
+				"a.txt: M\n" +
+				"shac.star: \n" +
+				"staged.txt: A\n" +
+				"subdir/tracked.txt: M\n" +
+				"z.txt: \n" +
+				"\n",
+		},
+		{
+			name:   "directory_arg_excludes_untracked",
+			script: "ctx-scm-affected_files.star",
+			files:  []string{"subdir"},
+			want: "[//shac.star:19] \n" +
+				"subdir/tracked.txt: M\n" +
+				"\n",
+		},
+		{
+			name:   "file_arg_excludes_untracked_ancestor_shac_star",
+			script: "ctx-scm-affected_files.star",
+			files:  []string{filepath.Join("subdir", "tracked.txt")},
+			want: "[//shac.star:19] \n" +
+				"subdir/tracked.txt: M\n" +
+				"\n",
+		},
+		{
+			name:   "explicit_untracked_file_still_included",
+			script: "ctx-scm-affected_files.star",
+			files:  []string{"untracked.txt"},
+			want: "[//shac.star:19] \n" +
+				"untracked.txt: \n" +
+				"\n",
+		},
+	}
+
+	for _, tc := range data {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			root := makeGit(t)
+			mkdirAll(t, filepath.Join(root, "subdir"))
+			writeFile(t, root, filepath.Join("subdir", "tracked.txt"), "initial\n")
+			d, err := os.ReadFile(filepath.Join("testdata", "scm", tc.script))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err = os.WriteFile(filepath.Join(root, "shac.star"), d, 0o600); err != nil {
+				t.Fatal(err)
+			}
+			runGit(t, root, "add", "shac.star", filepath.Join("subdir", "tracked.txt"))
+			runGit(t, root, "commit", "-m", "Add shac.star and subdir/tracked.txt")
+
+			// Modify tracked files, stage a new file, and leave untracked files
+			// including untracked nested shac.star files inside both subdir/ and nested/.
+			writeFile(t, root, "a.txt", "modified\n")
+			writeFile(t, root, filepath.Join("subdir", "tracked.txt"), "modified\n")
+			writeFile(t, root, "staged.txt", "staged\n")
+			runGit(t, root, "add", "staged.txt")
+			writeFile(t, root, "untracked.txt", "untracked\n")
+			writeFile(t, root, filepath.Join("subdir", "untracked.txt"), "untracked\n")
+			writeFile(t, root, filepath.Join("subdir", "shac.star"), "def cb(ctx): fail('untracked subdir/shac.star should not run')\nshac.register_check(cb)\n")
+			mkdirAll(t, filepath.Join(root, "nested"))
+			writeFile(t, root, filepath.Join("nested", "shac.star"), "def cb(ctx): fail('untracked nested/shac.star should not run')\nshac.register_check(cb)\n")
+
+			var files []string
+			for _, f := range tc.files {
+				files = append(files, filepath.Join(root, f))
+			}
+
+			r := reportPrint{t: t}
+			o := Options{
+				Report:          &r,
+				Dir:             root,
+				AllFiles:        tc.allFiles,
+				IgnoreUntracked: true,
+				Files:           files,
+				Recurse:         true,
+			}
+			if err = Run(t.Context(), &o); err != nil {
+				t.Fatal(err)
+			}
+			if diff := cmp.Diff(tc.want, r.b.String()); diff != "" {
+				t.Fatalf("mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestRun_SCM_Git_IgnoreUntracked_EmptyTrackedRepo(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	runGit(t, root, "init")
+	runGit(t, root, "config", "user.email", "test@example.com")
+	runGit(t, root, "config", "user.name", "Test")
+	runGit(t, root, "commit", "--allow-empty", "-m", "Empty root commit")
+	writeFile(t, root, "untracked.txt", "untracked\n")
+	writeFile(t, root, "shac.star", "def cb(ctx):\n    print(len(ctx.scm.all_files()))\nshac.register_check(cb)\n")
+
+	// Recurse=true calls allFiles() via shacFileDirsFromAllFiles on an
+	// empty git index; must return a clean error rather than panicking.
+	r := reportPrint{t: t}
+	o := Options{
+		Report:          &r,
+		Dir:             root,
+		IgnoreUntracked: true,
+		Recurse:         true,
+	}
+	if err := Run(t.Context(), &o); err == nil || !strings.Contains(err.Error(), "no shac.star files found") {
+		t.Fatalf("Run() error = %v, want error containing %q", err, "no shac.star files found")
+	}
+
+	// Passing the untracked shac.star explicitly also exercises
+	// base.allFiles() inside specifiedFilesOnly.allFiles() when empty.
+	oExplicit := Options{
+		Report:          &r,
+		Dir:             root,
+		Files:           []string{filepath.Join(root, "shac.star")},
+		IgnoreUntracked: true,
+		Recurse:         false,
+	}
+	if err := Run(t.Context(), &oExplicit); err != nil {
+		t.Fatal(err)
+	}
+	if diff := cmp.Diff("[//shac.star:2] 1\n", r.b.String()); diff != "" {
+		t.Fatalf("mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestRun_SCM_Git_IgnoreUntracked_DotDirIgnoresUntrackedRootShacStar(t *testing.T) {
+	t.Parallel()
+	root := makeGit(t)
+	writeFile(t, root, "shac.star", "def cb(ctx): fail('untracked root shac.star should not run')\nshac.register_check(cb)\n")
+
+	r := reportPrint{t: t}
+	o := Options{
+		Report:          &r,
+		Dir:             root,
+		Files:           []string{root},
+		IgnoreUntracked: true,
+		Recurse:         true,
+	}
+	if err := Run(t.Context(), &o); err == nil || !strings.Contains(err.Error(), "no shac.star files found") {
+		t.Fatalf("Run() error = %v, want error containing %q", err, "no shac.star files found")
+	}
+}
+
+func TestRun_SCM_Git_IgnoreUntracked_NoRecurseIgnoresUntrackedRootShacStar(t *testing.T) {
+	t.Parallel()
+	root := makeGit(t)
+	writeFile(t, root, "shac.star", "def cb(ctx): fail('untracked root shac.star should not run')\nshac.register_check(cb)\n")
+
+	r := reportPrint{t: t}
+	o := Options{
+		Report:          &r,
+		Dir:             root,
+		IgnoreUntracked: true,
+		Recurse:         false,
+	}
+	if err := Run(t.Context(), &o); err == nil || !strings.Contains(err.Error(), "no shac.star file in repository root") {
+		t.Fatalf("Run() error = %v, want error containing %q", err, "no shac.star file in repository root")
+	}
+}
+
+func TestRun_SCM_Git_IgnoreUntracked_LeadingColonDir(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("colons are not valid in Windows paths")
+	}
+	t.Parallel()
+	root := makeGit(t)
+	mkdirAll(t, filepath.Join(root, ":colon"))
+	writeFile(t, root, "shac.star", "def root_cb(ctx): print('ROOT')\nshac.register_check(root_cb)\n")
+	writeFile(t, root, filepath.Join(":colon", "shac.star"), "def colon_cb(ctx): print('COLON')\nshac.register_check(colon_cb)\n")
+	writeFile(t, root, filepath.Join(":colon", "tracked.txt"), "initial\n")
+	runGit(t, root, "--literal-pathspecs", "add", "shac.star", filepath.Join(":colon", "shac.star"), filepath.Join(":colon", "tracked.txt"))
+	runGit(t, root, "commit", "-m", "Add leading-colon dir")
+	writeFile(t, root, filepath.Join(":colon", "tracked.txt"), "modified\n")
+
+	r := reportPrint{t: t}
+	o := Options{
+		Report:          &r,
+		Dir:             root,
+		Files:           []string{filepath.Join(root, ":colon", "tracked.txt")},
+		IgnoreUntracked: true,
+		Recurse:         true,
+	}
+	if err := Run(t.Context(), &o); err != nil {
+		t.Fatal(err)
+	}
+	got := r.b.String()
+	if !strings.Contains(got, "ROOT") || !strings.Contains(got, "COLON") {
+		t.Fatalf("Run() output = %q, want output containing both %q and %q", got, "ROOT", "COLON")
+	}
+}
+
 func TestRun_SCM_Git_Submodule(t *testing.T) {
 	t.Parallel()
 	root := makeGit(t)
@@ -3496,19 +3722,31 @@ func TestTestDataEmit(t *testing.T) {
 func TestRun_FormatterDefaultMessage(t *testing.T) {
 	t.Parallel()
 	data := []struct {
-		name     string
-		allFiles bool
-		files    []string
-		want     string
+		name            string
+		allFiles        bool
+		ignoreUntracked bool
+		files           []string
+		want            string
 	}{
 		{
 			name: "affected files",
 			want: "File not formatted. Run `shac fmt` to fix.",
 		},
 		{
+			name:            "no untracked",
+			ignoreUntracked: true,
+			want:            "File not formatted. Run `shac fmt --no-untracked` to fix.",
+		},
+		{
 			name:     "all files",
 			allFiles: true,
 			want:     "File not formatted. Run `shac fmt --all` to fix.",
+		},
+		{
+			name:            "all files and no untracked",
+			allFiles:        true,
+			ignoreUntracked: true,
+			want:            "File not formatted. Run `shac fmt --all --no-untracked` to fix.",
 		},
 		{
 			name:  "positional files",
@@ -3542,7 +3780,14 @@ func TestRun_FormatterDefaultMessage(t *testing.T) {
 				files = append(files, filepath.Join(root, f))
 			}
 			r := reportEmitNoPrint{t: t}
-			o := Options{Report: &r, Dir: root, AllFiles: data[i].allFiles, Files: files, EntryPoint: "shac.star"}
+			o := Options{
+				Report:          &r,
+				Dir:             root,
+				AllFiles:        data[i].allFiles,
+				IgnoreUntracked: data[i].ignoreUntracked,
+				Files:           files,
+				EntryPoint:      "shac.star",
+			}
 			want := []finding{
 				{
 					Check:        "cb",

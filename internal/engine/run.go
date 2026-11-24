@@ -378,6 +378,10 @@ type Options struct {
 	Files []string
 	// AllFiles tells to consider all files as affected.
 	AllFiles bool
+	// IgnoreUntracked tells to exclude untracked files from SCM discovery
+	// (both affected_files() and all_files()). Explicitly passed file
+	// arguments are still analyzed.
+	IgnoreUntracked bool
 	// Recurse tells the engine to run all Main files found in subdirectories.
 	Recurse bool
 	// Filter controls which checks run.
@@ -542,11 +546,11 @@ func runInner(ctx context.Context, o *Options, tmpdir string) error {
 		return err
 	}
 
-	scm, err := getSCM(ctx, root, o.AllFiles)
+	rawSCM, err := getSCM(ctx, root, o.AllFiles, o.IgnoreUntracked)
 	if err != nil {
 		return err
 	}
-	scm = &cachingSCM{scm: scm}
+	var scm scmCheckout = &cachingSCM{scm: rawSCM}
 	if len(o.Files) > 0 {
 		scm = &specifiedFilesOnly{
 			paths: resolvedPaths,
@@ -638,6 +642,7 @@ func runInner(ctx context.Context, o *Options, tmpdir string) error {
 		}
 		return &shacState{
 			allFiles:                  o.AllFiles,
+			ignoreUntracked:           o.IgnoreUntracked,
 			files:                     o.Files,
 			allowNetwork:              doc.AllowNetwork,
 			env:                       &env,
@@ -682,6 +687,15 @@ func runInner(ctx context.Context, o *Options, tmpdir string) error {
 				return fmt.Errorf("no %s file in repository root: %s", entryPoint, root)
 			}
 			return err
+		}
+		if tf, ok := rawSCM.(trackedPathFilter); ok && tf.ignoresUntracked() && !slices.Contains(resolvedPaths, entryPoint) {
+			tracked, err := tf.filterTrackedPaths(ctx, []string{entryPoint})
+			if err != nil {
+				return err
+			}
+			if tracked != nil && !tracked[entryPoint] {
+				return fmt.Errorf("no %s file in repository root: %s", entryPoint, root)
+			}
 		}
 		state, err := newState(scm, "", 0)
 		if err != nil {
@@ -960,6 +974,8 @@ type shacConfig struct {
 	// allFiles is whether shac was run with --all, in which case all files are
 	// considered affected.
 	allFiles bool
+	// ignoreUntracked is whether shac was run with --no-untracked.
+	ignoreUntracked bool
 	// files lists the positional file or directory arguments passed to shac.
 	files      []string
 	entryPoint string

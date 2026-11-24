@@ -25,20 +25,22 @@ import (
 )
 
 type commandBase struct {
-	cwd        string
-	allFiles   bool
-	entryPoint string
-	noRecurse  bool
-	allowList  []string
-	denyList   []string
-	vars       stringMapFlag
-	quiet      bool
-	failLevel  engine.Level
+	cwd         string
+	allFiles    bool
+	noUntracked bool
+	entryPoint  string
+	noRecurse   bool
+	allowList   []string
+	denyList    []string
+	vars        stringMapFlag
+	quiet       bool
+	failLevel   engine.Level
 }
 
 func (c *commandBase) SetFlags(f *flag.FlagSet) {
 	f.StringVarP(&c.cwd, "cwd", "C", ".", "directory in which to run shac")
 	f.BoolVar(&c.allFiles, "all", false, "checks all files instead of only affected files")
+	f.BoolVar(&c.noUntracked, "no-untracked", false, "ignore untracked files in git checkouts (explicit file arguments are still analyzed)")
 	f.BoolVar(&c.noRecurse, "no-recurse", false, "do not look for shac.star files recursively")
 	f.StringVar(&c.entryPoint, "entrypoint", engine.DefaultEntryPoint, "basename of Starlark files to run")
 	f.StringSliceVar(&c.allowList, "only", nil, "comma-separated allowlist of checks to run (supports '*' globs); by default all checks are run")
@@ -50,13 +52,14 @@ func (c *commandBase) SetFlags(f *flag.FlagSet) {
 
 func (c *commandBase) options(files []string) engine.Options {
 	return engine.Options{
-		Dir:        c.cwd,
-		AllFiles:   c.allFiles,
-		Files:      files,
-		Recurse:    !c.noRecurse,
-		Vars:       c.vars,
-		EntryPoint: c.entryPoint,
-		FailLevel:  c.failLevel,
+		Dir:             c.cwd,
+		AllFiles:        c.allFiles,
+		IgnoreUntracked: c.noUntracked,
+		Files:           files,
+		Recurse:         !c.noRecurse,
+		Vars:            c.vars,
+		EntryPoint:      c.entryPoint,
+		FailLevel:       c.failLevel,
 		Filter: engine.CheckFilter{
 			AllowList: c.allowList,
 			DenyList:  c.denyList,

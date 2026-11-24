@@ -428,11 +428,41 @@ func (s *specifiedFilesOnly) shacFileDirs(ctx context.Context, basename string) 
 		}
 	}
 
+	tf, hasTrackedFilter := s.base.(trackedPathFilter)
+	ignoresUntracked := hasTrackedFilter && tf.ignoresUntracked()
+
 	dirs := make(map[string]bool)
+	if hasDirSpecs {
+		// When any directory is specified, discover both ancestor and
+		// descendant shac.star files via the SCM rather than walking the
+		// filesystem directly, so git-ignored directories, submodules, and
+		// (when untracked files are excluded) untracked shac.star files are
+		// not loaded.
+		allDirs, err := shacFileDirsFromAllFiles(ctx, s, basename)
+		if err != nil {
+			return nil, err
+		}
+		for _, d := range allDirs {
+			if ancestorDirs[d] || matchesPathSpecs(s.paths, path.Join(d, basename)) {
+				dirs[d] = true
+			}
+		}
+		return slices.Sorted(maps.Keys(dirs)), nil
+	}
+
+	var explicitFiles map[string]bool
+	if ignoresUntracked {
+		explicitFiles = make(map[string]bool, len(s.paths))
+		for _, spec := range s.paths {
+			explicitFiles[spec] = true
+		}
+	}
+
+	var candidateDirs, candidatePaths []string
 	for d := range ancestorDirs {
 		// Check whether the shac.star file exists on disk for ancestor
-		// directories so that when only explicit files are specified we avoid a
-		// full `git ls-files` call.
+		// directories so that when only explicit files are specified we
+		// avoid a full `git ls-files` call.
 		fi, err := os.Stat(filepath.Join(s.root, filepath.FromSlash(d), basename))
 		if errors.Is(err, fs.ErrNotExist) {
 			continue
@@ -440,27 +470,42 @@ func (s *specifiedFilesOnly) shacFileDirs(ctx context.Context, basename string) 
 		if err != nil {
 			return nil, err
 		}
-		if !fi.IsDir() {
+		if fi.IsDir() {
+			continue
+		}
+		relPath := path.Join(d, basename)
+		if ignoresUntracked && !explicitFiles[relPath] {
+			candidateDirs = append(candidateDirs, d)
+			candidatePaths = append(candidatePaths, relPath)
+		} else {
 			dirs[d] = true
 		}
 	}
 
-	if hasDirSpecs {
-		// Discover descendant shac.star files via the SCM rather than walking
-		// the filesystem directly, so git-ignored directories and submodules
-		// are not traversed.
-		allDirs, err := shacFileDirsFromAllFiles(ctx, s, basename)
+	if len(candidatePaths) > 0 {
+		tracked, err := tf.filterTrackedPaths(ctx, candidatePaths)
 		if err != nil {
 			return nil, err
 		}
-		for _, d := range allDirs {
-			if matchesPathSpecs(s.paths, path.Join(d, basename)) {
+		for i, d := range candidateDirs {
+			if tracked == nil || tracked[candidatePaths[i]] {
 				dirs[d] = true
 			}
 		}
 	}
 
 	return slices.Sorted(maps.Keys(dirs)), nil
+}
+
+// trackedPathFilter may be implemented by scm implementations that can
+// efficiently filter a small set of candidate relative paths to only those
+// tracked by the SCM when untracked files are excluded.
+type trackedPathFilter interface {
+	ignoresUntracked() bool
+	// filterTrackedPaths returns the subset of POSIX relative paths in
+	// candidates that are tracked by the SCM, or nil if untracked files are
+	// not excluded.
+	filterTrackedPaths(ctx context.Context, candidates []string) (map[string]bool, error)
 }
 
 // subdirSCM is a scmCheckout that only reports files from a subdirectory.
@@ -515,10 +560,10 @@ func (s *subdirSCM) commits(ctx context.Context) ([]scmCommit, error) {
 // getSCM returns the scmCheckout implementation relevant for directory root.
 //
 // root is must be a clean path.
-func getSCM(ctx context.Context, root string, allFiles bool) (scmCheckout, error) {
+func getSCM(ctx context.Context, root string, allFiles bool, ignoreUntracked bool) (scmCheckout, error) {
 	// Flip to POSIX style path.
 	root = strings.ReplaceAll(root, string(os.PathSeparator), "/")
-	g := &gitCheckout{returnAll: allFiles, checkoutRoot: root}
+	g := &gitCheckout{returnAll: allFiles, ignoreUntracked: ignoreUntracked, checkoutRoot: root}
 	err := g.init(ctx)
 	if err == nil {
 		if g.checkoutRoot != root {
@@ -617,6 +662,18 @@ func (c *cachingSCM) shacFileDirs(ctx context.Context, basename string) ([]strin
 	return shacFileDirsFromAllFiles(ctx, c, basename)
 }
 
+func (c *cachingSCM) ignoresUntracked() bool {
+	tf, ok := c.scm.(trackedPathFilter)
+	return ok && tf.ignoresUntracked()
+}
+
+func (c *cachingSCM) filterTrackedPaths(ctx context.Context, candidates []string) (map[string]bool, error) {
+	if tf, ok := c.scm.(trackedPathFilter); ok {
+		return tf.filterTrackedPaths(ctx, candidates)
+	}
+	return nil, nil
+}
+
 const (
 	// gitModeSymlink is the object mode string that git uses to represent a
 	// symlink.
@@ -629,7 +686,8 @@ const (
 // gitCheckout represents a git checkout.
 type gitCheckout struct {
 	// Configuration.
-	returnAll bool
+	returnAll       bool
+	ignoreUntracked bool
 
 	// Detected environment at initialization.
 	// checkoutRoot is a POSIX path.
@@ -822,16 +880,42 @@ func (g *gitCheckout) affectedFiles(ctx context.Context, filter fileFilter) ([]f
 		return nil, g.err
 	}
 
-	// Untracked files are always considered affected (as long as they're not
-	// ignored).
-	untracked, err := g.untrackedFiles(ctx, filter)
-	if err != nil {
-		return nil, err
+	if !g.ignoreUntracked {
+		// Untracked files are always considered affected (as long as they're not
+		// ignored).
+		untracked, err := g.untrackedFiles(ctx, filter)
+		if err != nil {
+			return nil, err
+		}
+		modified = append(modified, untracked...)
 	}
-	modified = append(modified, untracked...)
 
 	sort.Slice(modified, func(i, j int) bool { return modified[i].rootedpath() < modified[j].rootedpath() })
 	return modified, g.err
+}
+
+func (g *gitCheckout) ignoresUntracked() bool {
+	return g.ignoreUntracked
+}
+
+func (g *gitCheckout) filterTrackedPaths(ctx context.Context, candidates []string) (map[string]bool, error) {
+	if !g.ignoreUntracked || len(candidates) == 0 {
+		return nil, nil
+	}
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	args := append([]string{"--literal-pathspecs", "ls-files", "-z", "--cached", "--"}, candidates...)
+	o := g.run(ctx, args...)
+	if g.err != nil {
+		return nil, g.err
+	}
+	tracked := make(map[string]bool)
+	if len(o) > 0 {
+		for item := range strings.SplitSeq(o[:len(o)-1], "\x00") {
+			tracked[filepath.ToSlash(item)] = true
+		}
+	}
+	return tracked, nil
 }
 
 func (g *gitCheckout) untrackedFiles(ctx context.Context, filter fileFilter) ([]file, error) {
@@ -969,7 +1053,11 @@ func (g *gitCheckout) allFiles(ctx context.Context, filter fileFilter) ([]file, 
 	defer g.mu.Unlock()
 	// Paths are returned in POSIX style even on Windows.
 	// TODO(maruel): Extract more information.
-	o := g.run(ctx, "ls-files", "-z", "--stage", "--cached", "--others", "--exclude-standard")
+	lsArgs := []string{"ls-files", "-z", "--stage", "--cached"}
+	if !g.ignoreUntracked {
+		lsArgs = append(lsArgs, "--others", "--exclude-standard")
+	}
+	o := g.run(ctx, lsArgs...)
 	if g.err != nil {
 		// If an error occurred on this command or an earlier one, then the
 		// ls-files output may not be parseable and we should exit early.
@@ -986,7 +1074,10 @@ func (g *gitCheckout) allFiles(ctx context.Context, filter fileFilter) ([]file, 
 	for _, f := range affected {
 		affectedByPath[f.rootedpath()] = f.(*fileImpl)
 	}
-	items := strings.Split(o[:len(o)-1], "\x00")
+	var items []string
+	if len(o) > 0 {
+		items = strings.Split(o[:len(o)-1], "\x00")
+	}
 	all := make([]file, 0, len(items))
 	for _, item := range items {
 		if meta, path, ok := strings.Cut(item, "\t"); ok {

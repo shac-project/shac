@@ -20,6 +20,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -28,6 +29,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"go.fuchsia.dev/shac-project/shac/internal/engine"
+	"go.fuchsia.dev/shac-project/shac/internal/execsupport"
 	"go.fuchsia.dev/shac-project/shac/internal/sarif"
 	"google.golang.org/protobuf/encoding/protojson"
 )
@@ -297,6 +299,80 @@ func TestMainCheck_JSONOutputNestedShacStar(t *testing.T) {
 	want := []string{"sub/file.txt", "sub/file.txt"}
 	if diff := cmp.Diff(want, gotURIs); diff != "" {
 		t.Fatalf("Unexpected SARIF URIs (-want +got):\n%s\n%s", diff, b)
+	}
+}
+
+func TestMain_NoUntracked(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	runGit := func(args ...string) {
+		t.Helper()
+		cmd := exec.CommandContext(t.Context(), "git", args...)
+		cmd.Dir = root
+		cmd.Env = append(
+			os.Environ(),
+			"GIT_CONFIG_NOGLOBAL=true",
+			"GIT_CONFIG_NOSYSTEM=true",
+			"GIT_CONFIG_GLOBAL=",
+			"GIT_CONFIG_SYSTEM=",
+			"HOME=",
+			"XDG_CONFIG_HOME=",
+			"LANG=C",
+		)
+		var buf bytes.Buffer
+		cmd.Stdout = &buf
+		cmd.Stderr = &buf
+		if err := execsupport.Run(t.Context(), cmd); err != nil {
+			t.Fatalf("git %v failed: %v\n%s", args, err, buf.String())
+		}
+	}
+	runGit("init")
+	runGit("config", "user.email", "test@example.com")
+	runGit("config", "user.name", "Test")
+	writeFile(t, root, "tracked.txt", "initial\n")
+	writeFile(t, root, "shac.star", ""+
+		"def fmt_txt(ctx):\n"+
+		"    for f in ctx.scm.affected_files(glob = \"*.txt\"):\n"+
+		"        if f == \"untracked.txt\":\n"+
+		"            fail(\"untracked.txt should have been ignored\")\n"+
+		"        content = str(ctx.io.read_file(f))\n"+
+		"        if content != \"good\\n\":\n"+
+		"            ctx.emit.finding(\n"+
+		"                level = \"error\",\n"+
+		"                message = \"needs format\",\n"+
+		"                filepath = f,\n"+
+		"                replacements = [\"good\\n\"],\n"+
+		"            )\n"+
+		"shac.register_check(shac.check(fmt_txt, formatter = True))\n")
+	runGit("add", "shac.star", "tracked.txt")
+	runGit("commit", "-m", "Initial commit")
+
+	writeFile(t, root, "tracked.txt", "bad\n")
+	writeFile(t, root, "untracked.txt", "bad\n")
+
+	if err := Main(t.Context(), []string{"shac", "fmt", "--quiet", "--no-untracked", "-C", root}); err != nil {
+		t.Fatalf("shac fmt --no-untracked failed: %v", err)
+	}
+	gotTracked, err := os.ReadFile(filepath.Join(root, "tracked.txt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(gotTracked) != "good\n" {
+		t.Errorf("tracked.txt = %q, want %q", gotTracked, "good\n")
+	}
+	gotUntracked, err := os.ReadFile(filepath.Join(root, "untracked.txt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(gotUntracked) != "bad\n" {
+		t.Errorf("untracked.txt was modified to %q, want %q", gotUntracked, "bad\n")
+	}
+
+	if err := Main(t.Context(), []string{"shac", "check", "--quiet", "--no-untracked", "-C", root}); err != nil {
+		t.Fatalf("shac check --no-untracked failed: %v", err)
+	}
+	if err := Main(t.Context(), []string{"shac", "check", "--quiet", "-C", root}); err == nil {
+		t.Fatal("shac check without --no-untracked unexpectedly succeeded; expected failure on untracked.txt")
 	}
 }
 
