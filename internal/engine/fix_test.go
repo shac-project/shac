@@ -917,3 +917,45 @@ func TestApplyReplacements_Bounds(t *testing.T) {
 		})
 	}
 }
+
+func TestFindingCollector_Logging(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	var buf strings.Builder
+	fc := newFindingCollector(Notice, false, false)
+	fc.out = &buf
+
+	fc.Print(ctx, "my_check", "shac.star", 10, "hello from check")
+	fc.Print(ctx, "", "common.star", 5, "hello from load")
+
+	start := time.Now()
+	fc.CheckCompleted(ctx, "clean_check", start, 12300*time.Microsecond, Nothing, nil)
+
+	if err := fc.EmitFinding(ctx, "one_fix", Error, "msg", "", "a.txt", Span{Start: Cursor{Line: 1}}, []string{"x"}, nil); err != nil {
+		t.Fatal(err)
+	}
+	fc.CheckCompleted(ctx, "one_fix", start, 45*time.Millisecond, Error, nil)
+
+	if err := fc.EmitFinding(ctx, "two_fixes", Warning, "msg1", "", "a.txt", Span{Start: Cursor{Line: 1}}, []string{"x"}, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := fc.EmitFinding(ctx, "two_fixes", Warning, "msg2", "", "a.txt", Span{Start: Cursor{Line: 2}}, []string{"y"}, nil); err != nil {
+		t.Fatal(err)
+	}
+	fc.CheckCompleted(ctx, "two_fixes", start, 120*time.Millisecond, Warning, nil)
+
+	fc.CheckCompleted(ctx, "broken_check", start, 5*time.Millisecond, Error, errors.New("boom"))
+
+	want := strings.Join([]string{
+		"- my_check [shac.star:10] hello from check",
+		"[common.star:5] hello from load",
+		"- clean_check (all good in 12ms)",
+		"- one_fix (1 finding to fix in 45ms)",
+		"- two_fixes (2 findings to fix in 120ms)",
+		"- broken_check (error in 5ms): boom",
+		"",
+	}, "\n")
+	if diff := cmp.Diff(want, buf.String()); diff != "" {
+		t.Errorf("findingCollector output mismatch (-want +got):\n%s", diff)
+	}
+}

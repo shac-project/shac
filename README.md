@@ -248,7 +248,7 @@ Now run `shac fmt` to apply the fixes emitted by Black:
 
 ```shell
 $ shac fmt
-- black (1 finding to fix)
+- black (1 finding to fix in 615ms)
 Fixed 1 issue in main.py
 $ cat main.py
 print("foo")
@@ -297,7 +297,7 @@ Now `no_trailing_whitespace` will run in `shac fmt`:
 
 ```shell
 $ shac fmt
-- no_trailing_whitespace (all good!)
+- no_trailing_whitespace (all good in 12ms)
 ```
 
 `shac fmt` only runs formatters. To apply the fixes from all checks, formatters

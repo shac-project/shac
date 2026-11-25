@@ -587,6 +587,7 @@ type findingCollector struct {
 	// responsible for showing the checks' output, so the collector doesn't
 	// log check results or print() output itself.
 	tee Report
+	out io.Writer
 }
 
 func newFindingCollector(minLevel Level, quiet, rerun bool) *findingCollector {
@@ -596,6 +597,7 @@ func newFindingCollector(minLevel Level, quiet, rerun bool) *findingCollector {
 		minLevel:       minLevel,
 		quiet:          quiet,
 		rerun:          rerun,
+		out:            os.Stderr,
 	}
 }
 
@@ -647,20 +649,20 @@ func (c *findingCollector) CheckCompleted(ctx context.Context, check string, sta
 	count := c.countsByCheck[check]
 	c.mu.Unlock()
 
-	// TODO(olivernewman): Make this output colorful and more consistent with
-	// the output of `shac check`.
+	// TODO(olivernewman): Make this output colorful.
+	d = d.Round(time.Millisecond)
 	if err != nil {
-		c.logf("- %s: %s", check, err)
+		c.logf("- %s (error in %s): %s", check, d, err)
 	} else if count == 0 {
 		if !c.rerun {
-			c.logf("- %s (all good!)", check)
+			c.logf("- %s (all good in %s)", check, d)
 		}
 	} else {
 		noun := "finding"
 		if count > 1 {
 			noun += "s"
 		}
-		c.logf("- %s (%d %s to fix)", check, count, noun)
+		c.logf("- %s (%d %s to fix in %s)", check, count, noun, d)
 	}
 }
 
@@ -669,12 +671,16 @@ func (c *findingCollector) Print(ctx context.Context, check, file string, line i
 		c.tee.Print(ctx, check, file, line, message)
 		return
 	}
-	c.logf("[%s:%d] %s", file, line, message)
+	if check != "" {
+		c.logf("- %s [%s:%d] %s", check, file, line, message)
+	} else {
+		c.logf("[%s:%d] %s", file, line, message)
+	}
 }
 
 func (c *findingCollector) logf(s string, a ...any) {
 	if !c.quiet {
-		fmt.Fprintf(os.Stderr, s+"\n", a...)
+		fmt.Fprintf(c.out, s+"\n", a...)
 	}
 }
 
