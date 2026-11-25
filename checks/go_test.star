@@ -666,3 +666,93 @@ def test_gofix_analyzer_error():
         ),
         "`go fix` analyzer any failed: boom",
     )
+
+def test_windows_paths():
+    win_file = testing.root + "\\pkg\\main.go"
+    files = {"pkg/main.go": "package pkg\n"}
+
+    res = testing.run(
+        gosec,
+        files = files,
+        exec_mocks = [
+            _GO_INSTALL_MOCK,
+            testing.exec_mock(
+                cmd = [
+                    ".tools/gobin/gosec",
+                    "-fmt=json",
+                    "-quiet",
+                    "-exclude=G204,G304,G703",
+                    "-exclude-dir=.tools",
+                    "-exclude-dir=internal/engine/testdata",
+                    "./...",
+                ],
+                retcode = 1,
+                stdout = json.encode({
+                    "Golang errors": {win_file: [{"line": "2", "column": "3", "error": "err"}]},
+                    "Issues": [{"file": win_file, "line": "4", "column": "5", "rule_id": "G101", "details": "sec"}],
+                }),
+            ),
+        ],
+    )
+    asserts.eq([f.filepath for f in res.findings], ["pkg/main.go", "pkg/main.go"])
+
+    res = testing.run(
+        ineffassign,
+        files = files,
+        exec_mocks = [
+            _GO_INSTALL_MOCK,
+            testing.exec_mock(
+                cmd = [".tools/gobin/ineffassign", "./..."],
+                retcode = 3,
+                stderr = win_file + ":10:5: ineffectual assignment: x\n",
+            ),
+        ],
+    )
+    asserts.eq([(f.filepath, f.message) for f in res.findings], [("pkg/main.go", "ineffectual assignment: x")])
+
+    res = testing.run(
+        staticcheck,
+        files = files,
+        exec_mocks = [
+            _GO_INSTALL_MOCK,
+            testing.exec_mock(
+                cmd = [".tools/gobin/staticcheck", "-f=json", "./..."],
+                retcode = 1,
+                stdout = json.encode({
+                    "severity": "warning",
+                    "message": "SA1000: bad regex",
+                    "location": {"file": win_file, "line": 8, "column": 3},
+                    "end": {"line": 0, "column": 0},
+                }) + "\n",
+            ),
+        ],
+    )
+    asserts.eq([f.filepath for f in res.findings], ["pkg/main.go"])
+
+    res = testing.run(
+        shadow,
+        files = files,
+        exec_mocks = [
+            _GO_INSTALL_MOCK,
+            testing.exec_mock(
+                cmd = [".tools/gobin/shadow", "-test=false", "-json", "./..."],
+                stdout = json.encode({"pkg": {"shadow": [{"posn": win_file + ":15:6", "message": "shadowed"}]}}),
+            ),
+        ],
+    )
+    asserts.eq([f.filepath for f in res.findings], ["pkg/main.go"])
+
+    res = testing.run(
+        no_fork_without_lock,
+        files = files,
+        exec_mocks = [
+            testing.exec_mock(
+                cmd = ["go", "run", "./internal/go_checks/fork_check", "-test=false", "-json", "./..."],
+                stdout = json.encode({
+                    "go.fuchsia.dev/shac-project/shac/internal/execsupport": {"fork_check": [{"posn": win_file + ":1:1", "message": "ok"}]},
+                    "go.fuchsia.dev/shac-project/shac/internal/other": {"fork_check": [{"posn": win_file + ":22:9", "message": "bad"}]},
+                }),
+            ),
+        ],
+    )
+    asserts.eq([f.filepath for f in res.findings], ["pkg/main.go"])

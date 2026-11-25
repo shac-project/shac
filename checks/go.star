@@ -75,10 +75,9 @@ def _gosec(ctx, version = "v2.29.0", level = "error", exclude = [
 
     # Schema is https://pkg.go.dev/github.com/securego/gosec/v2#ReportInfo
     d = json.decode(res.stdout)
-    o = len(ctx.scm.root) + 1
     for file, errs in d["Golang errors"].items():
-        filepath = file[o:]
-        if filepath not in affected_files:
+        filepath = _relpath(ctx, file)
+        if not filepath or filepath not in affected_files:
             continue
         for e in errs:
             ctx.emit.finding(
@@ -90,8 +89,8 @@ def _gosec(ctx, version = "v2.29.0", level = "error", exclude = [
             )
     for i in d["Issues"]:
         line = i["line"].split("-")[0]
-        filepath = i["file"][o:]
-        if filepath not in affected_files:
+        filepath = _relpath(ctx, i["file"])
+        if not filepath or filepath not in affected_files:
             continue
         ctx.emit.finding(
             level = level,
@@ -125,13 +124,16 @@ def _ineffassign(ctx, version = "v0.0.0-20230107090616-13ace0543b28"):
 
     # ineffassign emits some duplicate lines.
     for line in sorted(set(res.stderr.splitlines())):
-        match = ctx.re.match(r"^%s/(.+):(\d+):(\d+): (.+)$" % ctx.scm.root, line)
+        match = ctx.re.match(r"^(.+?:\d+:\d+): (.+)$", line)
+        if not match:
+            fail("unrecognized line %r in `ineffassign` output" % line)
+        filepath, line_num, col = _parse_posn(ctx, match.groups[1], "ineffassign")
         ctx.emit.finding(
             level = "error",
-            filepath = match.groups[1],
-            line = int(match.groups[2]),
-            col = int(match.groups[3]),
-            message = match.groups[4],
+            filepath = filepath,
+            line = line_num,
+            col = col,
+            message = match.groups[2],
         )
 
 ineffassign = shac.check(_ineffassign)
@@ -164,13 +166,15 @@ def _staticcheck(ctx, version = "v0.4.3"):
             end_kwargs["end_line"] = f["end"]["line"]
             end_kwargs["end_col"] = f["end"]["column"]
 
+        filepath = _relpath(ctx, f["location"]["file"])
+        if not filepath:
+            fail("unrecognized file %r in `staticcheck` output" % f["location"]["file"])
+
         ctx.emit.finding(
             # Either "error" or "warning".
             level = f["severity"],
             message = f["message"],
-            # TODO(olivernewman): Add a relpath method for converting abs paths to
-            # relative.
-            filepath = f["location"]["file"][len(ctx.scm.root) + 1:],
+            filepath = filepath,
             line = f["location"]["line"],
             col = f["location"]["column"],
             **end_kwargs
@@ -216,14 +220,7 @@ def _shadow(ctx, version = "v0.52.0"):
         findings.extend(pkg_findings["shadow"])
 
     for finding in findings:
-        match = ctx.re.match(r"^%s/(.+):(\d+):(\d+)$" % ctx.scm.root, finding["posn"])
-        ctx.emit.finding(
-            level = "error",
-            filepath = match.groups[1],
-            line = int(match.groups[2]),
-            col = int(match.groups[3]),
-            message = finding["message"],
-        )
+        _emit_analyzer_finding(ctx, finding, "shadow")
 
 shadow = shac.check(_shadow)
 
@@ -258,14 +255,7 @@ def no_fork_without_lock(ctx):
     for checks in output.values():
         for findings in checks.values():
             for finding in findings:
-                match = ctx.re.match(r"^%s/(.+):(\d+):(\d+)$" % ctx.scm.root, finding["posn"])
-                ctx.emit.finding(
-                    level = "error",
-                    filepath = match.groups[1],
-                    line = int(match.groups[2]),
-                    col = int(match.groups[3]),
-                    message = finding["message"],
-                )
+                _emit_analyzer_finding(ctx, finding, "fork_check")
 
 def govet(
         ctx,
