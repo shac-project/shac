@@ -25,7 +25,6 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -445,12 +444,27 @@ func applyReplacements(content string, findings []findingToFix) (string, fileFix
 	}
 
 	// Sort findings by start position in order to skip findings that overlap
-	// with previous ones.
-	// TODO(erahm): Break ties deterministically (e.g. by check name or
-	// registration order) so that overlapping findings from different checks
-	// are applied in a stable order rather than goroutine completion order.
-	sort.Slice(findings, func(i, j int) bool {
-		return findings[i].span.Start.Line < findings[j].span.Start.Line
+	// with previous ones, breaking ties deterministically so that overlapping
+	// findings from different checks are applied in a stable order rather than
+	// goroutine completion order. Whole-file findings (Start.Line == 0) sort
+	// first so full-file replacements take precedence over single-line edits.
+	effectiveEndCol := func(f findingToFix, endLine int) int {
+		if f.span.End.Col != 0 || endLine < 1 || endLine > len(lines) {
+			return f.span.End.Col
+		}
+		return len(lines[endLine-1]) + 1
+	}
+	slices.SortStableFunc(findings, func(a, b findingToFix) int {
+		aEndLine := max(a.span.End.Line, a.span.Start.Line)
+		bEndLine := max(b.span.End.Line, b.span.Start.Line)
+		return cmp.Or(
+			cmp.Compare(a.span.Start.Line, b.span.Start.Line),
+			cmp.Compare(max(a.span.Start.Col, 1), max(b.span.Start.Col, 1)),
+			cmp.Compare(aEndLine, bEndLine),
+			cmp.Compare(effectiveEndCol(a, aEndLine), effectiveEndCol(b, bEndLine)),
+			cmp.Compare(a.check, b.check),
+			cmp.Compare(a.replacement, b.replacement),
+		)
 	})
 
 	var normalized []findingToFix

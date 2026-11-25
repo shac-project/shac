@@ -781,6 +781,91 @@ func TestFixWithWriter_Overlap(t *testing.T) {
 	}
 }
 
+func TestApplyReplacements_TieBreaking(t *testing.T) {
+	t.Parallel()
+	content := "one\ntwo\n"
+	tests := []struct {
+		name        string
+		a, b        findingToFix
+		wantContent string
+		wantSkipped []string
+	}{
+		{
+			name:        "by start col",
+			a:           findingToFix{check: "z", span: Span{Start: Cursor{Line: 1, Col: 1}, End: Cursor{Line: 1, Col: 4}}, replacement: "ONE"},
+			b:           findingToFix{check: "a", span: Span{Start: Cursor{Line: 1, Col: 2}, End: Cursor{Line: 1, Col: 4}}, replacement: "NE"},
+			wantContent: "ONE\ntwo\n",
+			wantSkipped: []string{"a"},
+		},
+		{
+			name:        "by end line",
+			a:           findingToFix{check: "z", span: Span{Start: Cursor{Line: 1}, End: Cursor{Line: 1}}, replacement: "ONE\n"},
+			b:           findingToFix{check: "a", span: Span{Start: Cursor{Line: 1}, End: Cursor{Line: 2}}, replacement: "BOTH\n"},
+			wantContent: "ONE\ntwo\n",
+			wantSkipped: []string{"a"},
+		},
+		{
+			name:        "whole-file finding beats single line",
+			a:           findingToFix{check: "z", span: Span{}, replacement: "WHOLE\n"},
+			b:           findingToFix{check: "a", span: Span{Start: Cursor{Line: 1}}, replacement: "ONE\n"},
+			wantContent: "WHOLE\n",
+			wantSkipped: []string{"a"},
+		},
+		{
+			name:        "by end col against implicit end of line",
+			a:           findingToFix{check: "z", span: Span{Start: Cursor{Line: 1, Col: 1}, End: Cursor{Line: 1, Col: 2}}, replacement: "O"},
+			b:           findingToFix{check: "a", span: Span{Start: Cursor{Line: 1, Col: 1}, End: Cursor{Line: 1}}, replacement: "ONE\n"},
+			wantContent: "One\ntwo\n",
+			wantSkipped: []string{"a"},
+		},
+		{
+			name:        "by check name",
+			a:           findingToFix{check: "alpha", span: Span{Start: Cursor{Line: 1}}, replacement: "ALPHA\n"},
+			b:           findingToFix{check: "beta", span: Span{Start: Cursor{Line: 1}}, replacement: "BETA\n"},
+			wantContent: "ALPHA\ntwo\n",
+			wantSkipped: []string{"beta"},
+		},
+		{
+			name:        "by check name with implicit vs explicit end line",
+			a:           findingToFix{check: "alpha", span: Span{Start: Cursor{Line: 1}, End: Cursor{Line: 1}}, replacement: "ALPHA\n"},
+			b:           findingToFix{check: "beta", span: Span{Start: Cursor{Line: 1}}, replacement: "BETA\n"},
+			wantContent: "ALPHA\ntwo\n",
+			wantSkipped: []string{"beta"},
+		},
+		{
+			name:        "by check name with implicit vs explicit end col",
+			a:           findingToFix{check: "alpha", span: Span{Start: Cursor{Line: 1, Col: 1}, End: Cursor{Line: 1, Col: 5}}, replacement: "ALPHA\n"},
+			b:           findingToFix{check: "beta", span: Span{Start: Cursor{Line: 1, Col: 1}, End: Cursor{Line: 1}}, replacement: "BETA\n"},
+			wantContent: "ALPHA\ntwo\n",
+			wantSkipped: []string{"beta"},
+		},
+		{
+			name:        "by replacement",
+			a:           findingToFix{check: "same", span: Span{Start: Cursor{Line: 1}}, replacement: "FIRST\n"},
+			b:           findingToFix{check: "same", span: Span{Start: Cursor{Line: 1}}, replacement: "SECOND\n"},
+			wantContent: "FIRST\ntwo\n",
+			wantSkipped: []string{"same"},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			for _, order := range [][]findingToFix{{tc.a, tc.b}, {tc.b, tc.a}} {
+				got, res, err := applyReplacements(content, slices.Clone(order))
+				if err != nil {
+					t.Fatalf("applyReplacements() error = %v", err)
+				}
+				if got != tc.wantContent {
+					t.Errorf("applyReplacements(%v) = %q, want %q", order, got, tc.wantContent)
+				}
+				if diff := cmp.Diff(tc.wantSkipped, res.skippedChecks); diff != "" {
+					t.Errorf("skippedChecks mismatch (-want +got):\n%s", diff)
+				}
+			}
+		})
+	}
+}
+
 func TestApplyReplacements_Bounds(t *testing.T) {
 	t.Parallel()
 	content := "one\ntwo\n"
