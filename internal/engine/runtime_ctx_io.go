@@ -60,8 +60,7 @@ func ctxIoReadFile(ctx context.Context, s *shacState, name string, args starlark
 		// Something other than a file not found error, return it as is.
 		return nil, fmt.Errorf("for parameter \"filepath\": %s %w", argfilepath, err)
 	}
-	// TODO(maruel): Use unsafe conversion to save a memory copy.
-	return starlark.Bytes(b), nil
+	return starlark.Bytes(unsafeString(b)), nil
 }
 
 // ctxIoStat implements native function ctx.io.stat().
