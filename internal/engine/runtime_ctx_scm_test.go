@@ -15,6 +15,7 @@
 package engine
 
 import (
+	"strings"
 	"sync"
 	"testing"
 
@@ -257,5 +258,78 @@ func TestCtxScmFilesCaching(t *testing.T) {
 		if results[i] != results[i%2] {
 			t.Errorf("worker %d got dict %p, want %p", i, results[i], results[i%2])
 		}
+	}
+}
+
+func TestParseDiffAffectedLines(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		diff    string
+		want    string
+		wantErr string
+	}{
+		{
+			name: "multi-line hunk and single-line hunk",
+			diff: strings.Join([]string{
+				"diff --git a/foo.txt b/foo.txt",
+				"--- a/foo.txt",
+				"+++ b/foo.txt",
+				"@@ -1,2 +1,2 @@",
+				"-old1",
+				"+new1",
+				"+new2",
+				"@@ -10 +12 @@ func bar()",
+				"+single",
+				`\ No newline at end of file`,
+				"",
+			}, "\n"),
+			want: `((1, "new1"), (2, "new2"), (12, "single"))`,
+		},
+		{
+			name: "binary diff without +++ header",
+			diff: "diff --git a/bin b/bin\nBinary files a/bin and b/bin differ",
+			want: "()",
+		},
+		{
+			name:    "malformed hunk missing plus section",
+			diff:    "+++ b/foo.txt\n@@ -1,2 @@\n+line\n",
+			wantErr: `malformed diff hunk header "@@ -1,2 @@"`,
+		},
+		{
+			name:    "malformed hunk missing trailing space",
+			diff:    "+++ b/foo.txt\n@@ -1,2 +3,4\n+line\n",
+			wantErr: `malformed diff hunk header "@@ -1,2 +3,4"`,
+		},
+		{
+			name:    "malformed hunk non-integer line",
+			diff:    "+++ b/foo.txt\n@@ -1,2 +abc,4 @@\n+line\n",
+			wantErr: `malformed diff hunk header "@@ -1,2 +abc,4 @@"`,
+		},
+		{
+			name:    "unexpected diff line",
+			diff:    "+++ b/foo.txt\n@@ -1 +1 @@\n context line not expected with -U0\n",
+			wantErr: `unexpected diff line " context line not expected with -U0"`,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got, err := parseDiffAffectedLines(tc.diff)
+			if tc.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+					t.Fatalf("parseDiffAffectedLines() err = %v, want substring %q", err, tc.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("parseDiffAffectedLines() unexpected error: %v", err)
+			}
+			if got.String() != tc.want {
+				t.Errorf("parseDiffAffectedLines() = %s, want %s", got.String(), tc.want)
+			}
+		})
 	}
 }

@@ -1176,11 +1176,15 @@ func (g *gitCheckout) affectedLines(ctx context.Context, f file, changedOnly boo
 		}
 		return v, nil
 	}
+	return parseDiffAffectedLines(o)
+}
+
+func parseDiffAffectedLines(o string) (starlark.Value, error) {
 	// Skip the header.
 	for len(o) != 0 {
 		done := strings.HasPrefix(o, "+++ ")
-		if i := strings.Index(o, "\n"); i >= 0 {
-			o = o[i+1:]
+		if _, rest, ok := strings.Cut(o, "\n"); ok {
+			o = rest
 		} else {
 			// Reached the end of the diff header without finding any
 			// changed lines. This is probably because the file is binary,
@@ -1191,31 +1195,30 @@ func (g *gitCheckout) affectedLines(ctx context.Context, f file, changedOnly boo
 			break
 		}
 	}
-	// TODO(maruel): Perf-optimize by using Index() and going on the fly
-	// without creating a []string.
-	items := strings.Split(o, "\n")
-	res := make([]starlark.Value, 0, len(items))
+	res := make([]starlark.Value, 0, strings.Count(o, "\n")+1)
 	curr := 0
-	for _, l := range items {
-		if strings.HasPrefix(l, "@@ ") {
-			// TODO(maruel): This code can panic at multiple places. Odds of this
-			// happening is relatively low unless git diff goes off track.
+	for l := range strings.SplitSeq(o, "\n") {
+		if after, ok := strings.CutPrefix(l, "@@ "); ok {
 			// @@ -171,0 +176,28 @@
-			l = l[3+strings.Index(l[3:], " "):][1:]
-			l = l[:strings.Index(l, " ")][1:]
-			if i := strings.Index(l, ","); i > 0 {
-				l = l[:i]
+			_, plusPart, ok := strings.Cut(after, " +")
+			if !ok {
+				return nil, fmt.Errorf("malformed diff hunk header %q", l)
 			}
+			rangeStr, _, ok := strings.Cut(plusPart, " ")
+			if !ok {
+				return nil, fmt.Errorf("malformed diff hunk header %q", l)
+			}
+			lineStr, _, _ := strings.Cut(rangeStr, ",")
 			var err error
-			if curr, err = strconv.Atoi(l); err != nil {
-				panic(fmt.Sprintf("%q: %v", l, err))
+			if curr, err = strconv.Atoi(lineStr); err != nil {
+				return nil, fmt.Errorf("malformed diff hunk header %q: %w", l, err)
 			}
-		} else if strings.HasPrefix(l, "+") {
+		} else if after, ok := strings.CutPrefix(l, "+"); ok {
 			// Track the current line number.
-			res = append(res, starlark.Tuple{starlark.MakeInt(curr), starlark.String(l[1:])})
+			res = append(res, starlark.Tuple{starlark.MakeInt(curr), starlark.String(after)})
 			curr++
 		} else if !strings.HasPrefix(l, "-") && l != "\\ No newline at end of file" && l != "" {
-			panic(fmt.Sprintf("unexpected line %q", l))
+			return nil, fmt.Errorf("unexpected diff line %q", l)
 		}
 	}
 	return starlark.Tuple(res), nil
