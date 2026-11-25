@@ -61,7 +61,6 @@ def _buildifier(ctx):
     for filepath, temp in tempfiles.items():
         formatted = ctx.io.read_file(temp)
         ctx.emit.finding(
-            # TODO(olivernewman): Switch to "error" after fixing formatting.
             level = "error",
             filepath = filepath,
             replacements = [str(formatted)],
